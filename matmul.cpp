@@ -1,6 +1,5 @@
 #include "npu_instruction.hpp"
 
-
 // Note: A, B, C are column-major matrices
 // A[k][lda]
 // B[n][ldb]

@@ -1,22 +1,29 @@
 CFLAGS = -Ofast -std=c11 -march=rv64g
 CXXFLAGS = -Ofast -std=c++11 -march=rv64g
 
+SRCS = $(wildcard *.cpp)
+OBJS = $(SRCS:.cpp=.o)
+ASMS = $(SRCS:.cpp=.S)
+DEPS = $(SRCS:.cpp=.d)
+
 CXX = $(CROSS_COMPILE)g++ $(CXXFLAGS)
-CC = $(CROSS_COMPILE)gcc $(CFLAGS)
 OBJDUMP = $(CROSS_COMPILE)objdump
 
-all: npu_instruction.o npu_instruction.s npu_instruction.S
+all: $(ASMS)
 
 %.s:%.cpp
 	$(CXX) -S $< -o $@
-%.s:%.c
-	$(CC) -S $< -o $@
 %.o:%.cpp
 	$(CXX) -c $<
-%.o:%.c
-	$(CC) -c $<
 %.S:%.o
 	$(OBJDUMP) -S $< > $@
+%.d: %.cpp
+	rm -f $@; \
+	$(CXX) -MM $< >$@.tmp; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.tmp > $@; \
+	rm -f $@.tmp
 
 clean:
-	rm -f *.o *.S *.s
+	rm -f *.o *.S *.s *.d
+
+include $(DEPS)
