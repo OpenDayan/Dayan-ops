@@ -1,5 +1,5 @@
-CFLAGS = -O3 -std=c11
-CXXFLAGS = -O3
+CFLAGS = -Ofast -std=c11 -march=rv64g
+CXXFLAGS = -Ofast -std=c++11 -march=rv64g
 
 CXX = $(CROSS_COMPILE)g++ $(CXXFLAGS)
 CC = $(CROSS_COMPILE)gcc $(CFLAGS)

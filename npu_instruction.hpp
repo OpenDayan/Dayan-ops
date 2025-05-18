@@ -36,6 +36,7 @@ extern RVTEnv* __rvt_env;
 
 namespace NPUInstBuilder {
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3, long& rd) 
     {
         asm volatile (
@@ -48,6 +49,7 @@ namespace NPUInstBuilder {
         );
     }
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3) 
     {
         asm volatile (
@@ -59,6 +61,7 @@ namespace NPUInstBuilder {
         );
     }
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction2r(long rs1, long rs3, long& rd) 
     {
         asm volatile (
@@ -71,6 +74,7 @@ namespace NPUInstBuilder {
         );
     }
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction2r(long rs1, long rs3) 
     {
         asm volatile (
@@ -82,6 +86,7 @@ namespace NPUInstBuilder {
         );
     }
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction1r(long rs3, long& rd) 
     {
         asm volatile (
@@ -94,6 +99,7 @@ namespace NPUInstBuilder {
         );
     }
     template <long encoding>
+    __attribute__((always_inline))
     static inline void __custom_64b_instruction1r(long rs3) 
     {
         asm volatile (
@@ -107,18 +113,20 @@ namespace NPUInstBuilder {
 
 #ifndef __EMULATED_RVT_EXT__
     template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2, long tcfgrs3>
-    static inline void __tx_matmul(long rs1, long rs2, long rs3, long& rd)
+    __attribute__((always_inline))
+    static inline void __tx_matmul(void* rs1, void* rs2, void* rs3, long& rd)
     {
         __custom_64b_instruction3r<
         (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
-        (rs1, rs2, rs3, rd);
+        ((long)rs1, (long)rs2, (long)rs3, rd);
     }
     template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2, long tcfgrs3>
-    static inline void __tx_matmul(long rs1, long rs2, long rs3)
+    __attribute__((always_inline))
+    static inline void __tx_matmul(void* rs1, void* rs2, void* rs3)
     {
         __custom_64b_instruction3r<
         (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
-        (rs1, rs2, rs3);
+        ((long)rs1, (long)rs2, (long)rs3);
     }
 #else
 #include "npu_instruction_emulated.hpp"
@@ -126,14 +134,63 @@ namespace NPUInstBuilder {
 }
 
 // public
+
+const long TCSR_DIM0 = 0;const long TCSR_STRIDE0 = 1;
+const long TCSR_DIM1 = 2;const long TCSR_STRIDE1 = 3;
+const long TCSR_DIM2 = 4;const long TCSR_STRIDE2 = 5;
+const long TCSR_DIM3 = 6;const long TCSR_STRIDE3 = 7;
+
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
-static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(long rs1, long rs2, long rs3, long& rd) {
+__attribute__((always_inline))
+static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
     NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b1, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
-static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(long rs1, long rs2, long rs3)
+__attribute__((always_inline))
+static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3)
 {
-    return NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b1, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+    NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b1, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+
+template <long tcfgrs1, long tcfgrs3, long log2w>
+__attribute__((always_inline))
+static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000110 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
+}
+template <long tcfgrs1, long tcfgrs3, long log2w>
+__attribute__((always_inline))
+static inline void __tx_async_nram_load(void* rs1, void* rs3) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000110 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3);
+}
+
+template <long tcfgrs1, long tcfgrs3, long log2w>
+__attribute__((always_inline))
+static inline void __tx_async_nram_store(void* rs1, void* rs3, long& rd) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
+}
+template <long tcfgrs1, long tcfgrs3, long log2w>
+__attribute__((always_inline))
+static inline void __tx_async_nram_store(void* rs1, void* rs3) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3);
+}
+
+
+template <long tcsrid>
+__attribute__((always_inline))
+static inline void __tx_tcsr_write(long rs1) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000000 << 56ul) | (tcsrid << 32)>(rs1, 0);
+}
+
+__attribute__((always_inline))
+static inline void __tx_fence() {
+    asm volatile (
+        "FENCE iorw, iorw"
+    );
 }
 
 #endif
