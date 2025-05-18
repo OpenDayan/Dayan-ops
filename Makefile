@@ -5,8 +5,12 @@ CXX = $(CROSS_COMPILE)g++ $(CXXFLAGS)
 CC = $(CROSS_COMPILE)gcc $(CFLAGS)
 OBJDUMP = $(CROSS_COMPILE)objdump
 
-all: npu_instruction.o npu_instruction.S
+all: npu_instruction.o npu_instruction.s npu_instruction.S
 
+%.s:%.cpp
+	$(CXX) -S $< -o $@
+%.s:%.c
+	$(CC) -S $< -o $@
 %.o:%.cpp
 	$(CXX) -c $<
 %.o:%.c
@@ -15,4 +19,4 @@ all: npu_instruction.o npu_instruction.S
 	$(OBJDUMP) -S $< > $@
 
 clean:
-	rm -f *.o *.S
+	rm -f *.o *.S *.s
