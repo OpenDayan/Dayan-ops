@@ -1,4 +1,5 @@
-*.S
 *.o
 *.s
 *.d
+*.elf
+*.objdump

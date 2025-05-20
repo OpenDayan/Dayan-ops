@@ -7,7 +7,8 @@
 // C = C + A x B
 // Note: C^T = C^T + B^T x A^T
 template<long mTile, long nTile, long kTile>
-long gmma_e4m3_f32(void* a, void* b, void* c,
+__attribute__((always_inline))
+static inline long gmma_e4m3_f32(void* a, void* b, void* c,
                    int m,   int n,   int k,
                    int lda, int ldb, int ldc) {
     if(m % mTile != 0 || n % nTile != 0 || k % kTile != 0) {
