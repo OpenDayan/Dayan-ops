@@ -44,6 +44,8 @@ extern "C" long test_tcsr_wr() {
 }
 
 extern "C" long test_tx_load_store(char* buffer, long buffer_size, long buffer_size_2d0, long buffer_size_2d1) {
+    __tx_tcsr_write<TCSR_DIM2>(1);
+    __tx_tcsr_write<TCSR_DIM3>(1);
     check(buffer_size_2d0 * buffer_size_2d1, buffer_size);
     printf("test_tx_load_store @%p with %d Bytes size\n", buffer, buffer_size);
     // Update TCSR
@@ -59,10 +61,10 @@ extern "C" long test_tx_load_store(char* buffer, long buffer_size, long buffer_s
     printf("Plain 1D Load/Store begin\n");
     __tx_async_nram_load<0, 0, 0>(buffer, (void*)0);
     __tx_fence();
-    __tx_async_nram_store<0, 0, 0>((void*)0, buffer);
+    __tx_async_nram_store<0, 0, 0>((void*)0, buffer + buffer_size);
     __tx_fence();
     for(int i = 0; i < buffer_size; i++) {
-        check(buffer[i], (char)i);
+        check(buffer[buffer_size + i], (char)i);
     }
 
     // 2D Load/Store
@@ -73,10 +75,10 @@ extern "C" long test_tx_load_store(char* buffer, long buffer_size, long buffer_s
     printf("Plain 2D Load/Store begin\n");
     __tx_async_nram_load<0, 0, 0>(buffer, (void*)0);
     __tx_fence();
-    __tx_async_nram_store<0, 0, 0>((void*)0, buffer);
+    __tx_async_nram_store<0, 0, 0>((void*)0, buffer + buffer_size);
     __tx_fence();
     for(int i = 0; i < buffer_size; i++) {
-        check(buffer[i], (char)i);
+        check(buffer[buffer_size + i], (char)i);
     }
 
     printf("test_tx_load_store passed\n");
