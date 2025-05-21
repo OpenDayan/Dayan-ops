@@ -1,33 +1,14 @@
-
-CFLAGS        +=    -mcmodel=medany \
-                    -std=gnu99 \
-                    -Ofast \
-                    -ffast-math \
-                    -fno-common \
-                    -fno-builtin-printf \
-                    -fno-tree-loop-distribute-patterns \
-                    -march=rv64g -Wa,-march=rv64g \
-                    -ffunction-sections \
-
-CXXFLAGS      +=    -Iinlcude \
-					-mcmodel=medany \
-                    -std=c++11 \
-                    -Ofast \
-                    -ffast-math \
-                    -fno-common \
-                    -fno-builtin-printf \
-                    -fno-tree-loop-distribute-patterns \
-                    -march=rv64g -Wa,-march=rv64g \
-                    -ffunction-sections \
-
 ifeq ($(EMU),1)
-CFLAGS        +=    -D__EMULATED_RVT_EXT__
-CXXFLAGS      +=    -D__EMULATED_RVT_EXT__
+CROSS_COMPILE=
+CFLAGS=-std=gnu99 -Og
+
+CXXFLAGS=-Iinlcude -std=c++11 -Og
+else
+CROSS_COMPILE=riscv64-unknown-elf-
+CFLAGS=-mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
+CXXFLAGS=-Iinlcude -mcmodel=medany -std=c++11 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
+LDFLAGS=-static -nostdlib -ffunction-sections -Wl,-gc-sections
 endif
-
-LDFLAGS += -static -nostdlib -ffunction-sections -Wl,-gc-sections
-
-CROSS_COMPILE ?= riscv64-unknown-elf-
 
 CXX        := $(CROSS_COMPILE)g++
 CC         := $(CROSS_COMPILE)gcc
@@ -38,9 +19,19 @@ export CC CXX LD OBJDUMP CFLAGS CXXFLAGS LDFLAGS
 
 tests       := matmul_test tcsr_xchg_test load_store_test
 tests_elf   := $(tests:=.elf)
-modules     := common kernel
+modules     := kernel
+
+ifeq ($(EMU),1)
+    EMU_DEFINE=-D__EMULATED_RVT_EXT__
+else
+    modules=kernel common
+    link_script=-T common/test.ld
+endif
+
+CFLAGS+=$(EMU_DEFINE)
+CXXFLAGS+=$(EMU_DEFINE)
 objects     := $(addsuffix /*.o, $(modules))
-link_script := common/test.ld
+
 
 .PHONY: all $(modules) clean objdump
 
@@ -55,7 +46,7 @@ $(modules):
 	$(MAKE) --directory=$@
 
 %.elf: testbench/%.c $(modules)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(objects) -T $(link_script)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(objects) $(link_script)
 
 clean:
 	for d in *; do
@@ -63,6 +54,6 @@ clean:
 			$(MAKE) --directory=$$d clean
 		fi
 	done
-	rm -rf *.o *~
+	rm -rf *.o *.elf *.objdump *~
 	find . -name '*.objdump' -exec rm {} ';'
 
