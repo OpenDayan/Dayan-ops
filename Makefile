@@ -1,11 +1,11 @@
 ifeq ($(EMU),1)
 CROSS_COMPILE=
-CFLAGS=-g -std=gnu99
-CXXFLAGS=-g -Iinlcude -std=c++11
+CFLAGS=-Itestdata_gen -g -std=gnu99
+CXXFLAGS=-Itestdata_gen -g -std=c++11
 else
 CROSS_COMPILE=riscv64-unknown-elf-
-CFLAGS=-mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
-CXXFLAGS=-Iinlcude -mcmodel=medany -std=c++11 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
+CFLAGS=-Itestdata_gen -mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
+CXXFLAGS=-Itestdata_gen -mcmodel=medany -std=c++11 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
 LDFLAGS=-static -nostdlib -ffunction-sections -Wl,-gc-sections
 endif
 
@@ -32,7 +32,7 @@ CXXFLAGS+=$(EMU_DEFINE)
 objects     := $(addsuffix /*.o, $(modules))
 
 
-.PHONY: all $(modules) clean objdump
+.PHONY: all $(modules) clean objdump testdata_gen
 
 .ONESHELL:
 all: $(tests_elf) objdump
@@ -41,10 +41,10 @@ objdump: $(tests_elf)
 	@find * \( -name '*.elf' \) -exec sh -c \
 	'$(OBJDUMP) {} -aldS > {}.objdump && echo {}.objdump' ';'
 
-$(modules):
+$(modules) testdata_gen:
 	$(MAKE) --directory=$@
 
-%.elf: testbench/%.c $(modules)
+%.elf: testbench/%.c $(modules) testdata_gen
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(objects) $(link_script)
 
 clean:
