@@ -185,6 +185,12 @@ static inline void __tx_tcsr_write(long rs1) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000000 << 56ul) | (tcsrid << 32)>(rs1, 0);
 }
+template <long tcsrid>
+__attribute__((always_inline))
+static inline void __tx_tcsr_xchg(long rs1, long &rd) {
+    NPUInstBuilder::__custom_64b_instruction2r<
+        ((long)0b10000000 << 56ul) | (tcsrid << 32)>(rs1, 0, rd);
+}
 
 __attribute__((always_inline))
 static inline void __tx_fence() {

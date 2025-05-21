@@ -7,6 +7,7 @@ CFLAGS        +=    -mcmodel=medany \
                     -fno-builtin-printf \
                     -fno-tree-loop-distribute-patterns \
                     -march=rv64g -Wa,-march=rv64g \
+                    -ffunction-sections -fdata-sections \
 
 CXXFLAGS      +=    -Iinlcude \
 					-mcmodel=medany \
@@ -17,8 +18,9 @@ CXXFLAGS      +=    -Iinlcude \
                     -fno-builtin-printf \
                     -fno-tree-loop-distribute-patterns \
                     -march=rv64g -Wa,-march=rv64g \
+                    -ffunction-sections -fdata-sections \
 
-LDFLAGS += -static -nostdlib
+LDFLAGS += -static -nostdlib -ffunction-sections -fdata-sections -Wl,-gc-sections
 
 CROSS_COMPILE ?= riscv64-unknown-elf-
 
@@ -29,13 +31,13 @@ OBJDUMP    := $(CROSS_COMPILE)objdump
 
 export CC CXX LD OBJDUMP CFLAGS CXXFLAGS LDFLAGS
 
-tests       := matmul_test
+tests       := matmul_test tcsr_xchg_test load_store_test
 tests_elf   := $(tests:=.elf)
 modules     := common kernel
 objects     := $(addsuffix /*.o, $(modules))
 link_script := common/test.ld
 
-.PHONY: all $(modules) testbench clean objdump
+.PHONY: all $(modules) clean objdump
 
 .ONESHELL:
 all: $(tests_elf) objdump

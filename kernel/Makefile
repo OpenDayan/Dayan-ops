@@ -1,5 +1,5 @@
 INCLUDES := -I../include/
-target   := matmul.o
+target   := matmul.o instruction_testsuit.o
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $<
