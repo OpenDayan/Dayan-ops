@@ -144,9 +144,9 @@ template <typename T>
 static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgdst, void*(* get_src_ptr)(long), void*(* get_dst_ptr)(long)) {
     ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 <= NRAM_SIZE);
     ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 == tcfgdst->dim0 * tcfgdst->dim1 * tcfgdst->dim2 * tcfgdst->dim3);
+    long src0 = 0, src1 = 0, src2 = 0, src3 = 0;
+    long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
     while(1) {
-        long src0 = 0, src1 = 0, src2 = 0, src3 = 0;
-        long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
         // One Element One Time
         *(T*)get_dst_ptr(dst + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = 
         *(T*)get_src_ptr(src + sizeof(T) * tcfgsrc->get_offset(src0, src1, src2, src3));
