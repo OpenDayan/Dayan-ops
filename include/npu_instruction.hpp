@@ -148,7 +148,7 @@ static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgd
         long src0 = 0, src1 = 0, src2 = 0, src3 = 0;
         long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
         // One Element One Time
-        *(T*)get_dst_ptr(src + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = 
+        *(T*)get_dst_ptr(dst + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = 
         *(T*)get_src_ptr(src + sizeof(T) * tcfgsrc->get_offset(src0, src1, src2, src3));
         src0 += 1;
         dst0 += 1;
