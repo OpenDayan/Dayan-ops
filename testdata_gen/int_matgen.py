@@ -1,6 +1,6 @@
-M = 64
-N = 96
-K = 128
+M = 37
+N = 97
+K = 82
 
 def export_matrix(name, matrix):
     matrix = matrix.flatten()
@@ -10,6 +10,10 @@ def export_matrix(name, matrix):
             if i != len(matrix) - 1:
                 f.write(",")
 
+with open("mat_size.gen", "w") as f:
+    f.write(f"#define M {M}\n")
+    f.write(f"#define N {N}\n")
+    f.write(f"#define K {K}\n")
 
 import numpy as np
 np.random.seed(0)
