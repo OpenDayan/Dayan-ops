@@ -39,6 +39,7 @@ extern "C" long test_tcsr_wr() {
     check(old_val, 11);
     __tx_tcsr_xchg<3>(0, old_val);
     check(old_val, 12);
+    printf("test_tcsr_wr success\n");
     return 0;
 }
 

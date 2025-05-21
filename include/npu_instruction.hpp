@@ -2,9 +2,11 @@
 #define _NPU_INSTRUCTION_HPP_
 
 #define NRAM_SIZE 1024 * 256 // 256KB
+#define TCSR_SIZE 64 // 64
 
 #ifdef __EMULATED_RVT_EXT__
 #include <stdio.h>
+extern "C" void exit(int code);
 #define ASSERT(x) \
     do { \
         if (!(x)) { \
@@ -39,37 +41,23 @@ class RVTEnv {
         char* nram;
         long* tcsr;
         TCFG* tcfg;
-        RVTEnv() {
-            nram = new char[NRAM_SIZE];
-            tcsr = new long[64];
-            tcfg = (TCFG*)tcsr;
-        }
-        ~RVTEnv() {
-            delete[] nram;
-            delete[] tcsr;
-        }
         template <typename T>
         T* get_ptr(void* raw_ptr) {
             long lraw_ptr = (long)raw_ptr;
             ASSERT(lraw_ptr < NRAM_SIZE);
-            return &nram[lraw_ptr];
+            return (T*)(nram + lraw_ptr);
         }
 };
 extern RVTEnv* __rvt_env;
-
-static inline void __tx_init() {
-    __rvt_env = new RVTEnv();
-}
-
 static inline void __tx_fence() {
     // Do nothing
 }
 
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
-static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
-    TCFG* tcfg1 = __rvt_env->tcfg[tcfgrs1];
-    TCFG* tcfg2 = __rvt_env->tcfg[tcfgrs2];
-    TCFG* tcfg3 = __rvt_env->tcfg[tcfgrs3];
+static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3, long& rd) {
+    TCFG* tcfg1 = __rvt_env->tcfg +tcfgrs1;
+    TCFG* tcfg2 = __rvt_env->tcfg +tcfgrs2;
+    TCFG* tcfg3 = __rvt_env->tcfg +tcfgrs3;
     ASSERT(tcfg1->dim1 == tcfg2->dim0);
     ASSERT(tcfg1->dim0 == tcfg3->dim0);
     ASSERT(tcfg2->dim1 == tcfg3->dim1);
@@ -79,19 +67,70 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, voi
                 long offset1 = tcfg1->get_offset(m, k);
                 long offset2 = tcfg2->get_offset(k, n);
                 long offset3 = tcfg3->get_offset(m, n);
-                char rs1_val = *(__rvt_env->get_ptr<char>(rs1) + offset1);
-                char rs2_val = *(__rvt_env->get_ptr<char>(rs2) + offset2);
-                long rs3_val = *(__rvt_env->get_ptr<long>(rs3) + offset3);
-                long result = rs3_val + rs1_val * rs2_val;
-                *(__rvt_env->get_ptr<long>(rs3) + offset3) = result;
+                signed char rs1_val = *(__rvt_env->get_ptr<signed char>(rs1) + offset1);
+                signed char rs2_val = *(__rvt_env->get_ptr<signed char>(rs2) + offset2);
+                int rs3_val  = *(__rvt_env->get_ptr<int>(rs3) + offset3);
+                int result   = rs3_val + (int)rs1_val * (int)rs2_val;
+                *(__rvt_env->get_ptr<int>(rs3) + offset3) = result;
+            }
+        }
+    }
+}
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3) {
+    long rd = 0;
+    __tx_matmul_fix_s8_s8_s32<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
+}
+
+template<long exp, long frac>
+static inline float fp_uncompress(long raw) {
+    static_assert(exp <= 8 && frac <= 23, "exp and frac must be less than or equal to 8 and 23");
+    int lfrac = raw & ((1 << frac) - 1) << (23 - frac);
+    int lexp = ((raw >> frac) & ((1 << exp) - 1)) << (23 - frac + 8 - exp);
+    int result = lfrac | lexp;
+    return *(float*)(&result);
+}
+
+template<long exp, long frac>
+static inline int fp_compress(float raw) {
+    static_assert(exp <= 8 && frac <= 23, "exp and frac must be less than or equal to 8 and 23");
+    int data = *(int*)&raw;
+    int lfrac = (data & ((1 << frac) - 1)) >> (23 - frac);
+    int lexp  = ((data >> 23) & ((1 << exp) - 1)) << frac;
+    int lsign = ((data >> 31) & 1) << (frac + exp);
+    return lfrac | lexp | lsign;
+}
+
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
+    TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
+    TCFG* tcfg2 = __rvt_env->tcfg + tcfgrs2;
+    TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
+    ASSERT(tcfg1->dim1 == tcfg2->dim0);
+    ASSERT(tcfg1->dim0 == tcfg3->dim0);
+    ASSERT(tcfg2->dim1 == tcfg3->dim1);
+    for(int m =0; m < tcfg3->dim0; m+=1) {
+        for(int n = 0 ; n < tcfg3->dim1; n+=1) {
+            for(int k = 0; k < tcfg1->dim1; k += 1) {
+                long offset1 = tcfg1->get_offset(m, k);
+                long offset2 = tcfg2->get_offset(k, n);
+                long offset3 = tcfg3->get_offset(m, n);
+                unsigned char  rs1_rval = *(__rvt_env->get_ptr<unsigned char>(rs1) + offset1);
+                unsigned char  rs2_rval = *(__rvt_env->get_ptr<unsigned char>(rs2) + offset2);
+                unsigned short rs3_rval  = *(__rvt_env->get_ptr<unsigned short>(rs3) + offset3);
+                float rs1_val = fp_uncompress<4, 3>(rs1_rval);
+                float rs2_val = fp_uncompress<4, 3>(rs2_rval);
+                float rs3_val = fp_uncompress<8, 7>(rs3_rval);
+                float result  = rs3_val + rs1_val * rs2_val;
+                *(__rvt_env->get_ptr<unsigned short>(rs3) + offset3) = fp_compress<8, 7>(result);
             }
         }
     }
 }
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3) {
-    int rd = 0;
-    __tx_matmul_subfloat_e4m3_e4m3_bf16<0, 0, 0>(rs1, rs2, rs3, rd);
+    long rd = 0;
+    __tx_matmul_subfloat_e4m3_e4m3_bf16<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 
 static inline void* __emu_get_dram_ptr(long in) {
@@ -102,14 +141,15 @@ static inline void* __emu_get_nram_ptr(long in) {
 }
 
 template <typename T>
-static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgdst, void* get_src_ptr(long), void* get_dst_ptr(long)) {
+static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgdst, void*(* get_src_ptr)(long), void*(* get_dst_ptr)(long)) {
     ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 <= NRAM_SIZE);
     ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 == tcfgdst->dim0 * tcfgdst->dim1 * tcfgdst->dim2 * tcfgdst->dim3);
     while(1) {
         long src0 = 0, src1 = 0, src2 = 0, src3 = 0;
         long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
         // One Element One Time
-        (T*)get_dst_ptr(src + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = (T*)get_src_ptr(src + sizeof(T) * tcfgsrc->get_offset(src0, src1, src2, src3));
+        *(T*)get_dst_ptr(src + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = 
+        *(T*)get_src_ptr(src + sizeof(T) * tcfgsrc->get_offset(src0, src1, src2, src3));
         src0 += 1;
         dst0 += 1;
         if(src0 >= tcfgsrc->dim0) {src0 = 0; src1 += 1;}
@@ -124,43 +164,60 @@ static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgd
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
 static inline void __tx_async_nram_load(void* rs1, void* rs3) {
-    TCFG* tcfg1 = __rvt_env->tcfg[tcfgrs1];
-    TCFG* tcfg3 = __rvt_env->tcfg[tcfgrs3];
+    TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
+    TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
     static_assert(log2w >= 0 && log2w <= 3, "log2w must be between 0 and 3");
-
+    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_nram_ptr);
+    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_dram_ptr, &__emu_get_nram_ptr);
+    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_dram_ptr, &__emu_get_nram_ptr);
+    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_nram_ptr);
 }
 template <long tcfgrs1, long tcfgrs3, long log2w>
 static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
+    __tx_async_nram_load<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
 }
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
-__attribute__((always_inline))
 static inline void __tx_async_nram_store(void* rs1, void* rs3, long& rd) {
-    NPUInstBuilder::__custom_64b_instruction2r<
-        ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
+    TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
+    TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
+    static_assert(log2w >= 0 && log2w <= 3, "log2w must be between 0 and 3");
+    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_nram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_nram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_nram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_nram_ptr, &__emu_get_dram_ptr);
 }
 template <long tcfgrs1, long tcfgrs3, long log2w>
-__attribute__((always_inline))
 static inline void __tx_async_nram_store(void* rs1, void* rs3) {
-    NPUInstBuilder::__custom_64b_instruction2r<
-        ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3);
+    long rd = 0;
+    __tx_async_nram_store<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
 }
 
 
 template <long tcsrid>
-__attribute__((always_inline))
+static inline void __tx_tcsr_xchg_nmask(long rs1, long rs3, long &rd) {
+    rd = __rvt_env->tcsr[tcsrid];
+    __rvt_env->tcsr[tcsrid] = rs1 & ~rs3 | (__rvt_env->tcsr[tcsrid] & rs3);
+}
+
+template <long tcsrid>
+static inline void __tx_tcsr_xchg_mask(long rs1, long rs3, long &rd) {
+    rd = __rvt_env->tcsr[tcsrid];
+    __rvt_env->tcsr[tcsrid] = rs1 & rs3 | (__rvt_env->tcsr[tcsrid] & ~rs3);
+}
+
+template <long tcsrid>
 static inline void __tx_tcsr_write(long rs1) {
-    NPUInstBuilder::__custom_64b_instruction2r<
-        ((long)0b10000000 << 56ul) | (tcsrid << 32)>(rs1, 0);
-}
-template <long tcsrid>
-__attribute__((always_inline))
-static inline void __tx_tcsr_xchg(long rs1, long &rd) {
-    NPUInstBuilder::__custom_64b_instruction2r<
-        ((long)0b10000000 << 56ul) | (tcsrid << 32)>(rs1, 0, rd);
+    long rd = 0;
+    __tx_tcsr_xchg_nmask<tcsrid>(rs1, 0, rd);
 }
 
-#endif
+template <long tcsrid>
+static inline void __tx_tcsr_xchg(long rs1, long &rd) {
+    __tx_tcsr_xchg_nmask<tcsrid>(rs1, 0, rd);
+}
+
+#else
 
 namespace NPUInstBuilder {
     template <long encoding>
@@ -256,6 +313,7 @@ namespace NPUInstBuilder {
         ((long)rs1, (long)rs2, (long)rs3);
     }
 }
+#endif
 
 // public
 
@@ -334,10 +392,6 @@ static inline void __tx_fence() {
     asm volatile (
         "FENCE iorw, iorw"
     );
-}
-
-static inline void __tx_init() {
-    // Do Nothing
 }
 #endif
 

@@ -6,7 +6,7 @@ extern long gmma_e4m3_bf16_32_32_32(void* a, void* b, void* c,
 extern long gmma_s8_s32_32_32_32(void* a, void* b, void* c,
     int m,   int n,   int k,
     int lda, int ldb, int ldc);
-
+extern void __tx_init();
 
 // A mem               DIM0 DIM1
 char  a[512 * 256]; // A[512][256]
@@ -16,6 +16,7 @@ char  b[256 * 512]; // B[256][512]
 int   c[512 * 512]; // C[512][512]
 
 int main() {
+    __tx_init();
     printf("Hello, World!\n");
     gmma_s8_s32_32_32_32(
           a,   b,   c,

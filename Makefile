@@ -7,7 +7,7 @@ CFLAGS        +=    -mcmodel=medany \
                     -fno-builtin-printf \
                     -fno-tree-loop-distribute-patterns \
                     -march=rv64g -Wa,-march=rv64g \
-                    -ffunction-sections -fdata-sections \
+                    -ffunction-sections \
 
 CXXFLAGS      +=    -Iinlcude \
 					-mcmodel=medany \
@@ -18,9 +18,14 @@ CXXFLAGS      +=    -Iinlcude \
                     -fno-builtin-printf \
                     -fno-tree-loop-distribute-patterns \
                     -march=rv64g -Wa,-march=rv64g \
-                    -ffunction-sections -fdata-sections \
+                    -ffunction-sections \
 
-LDFLAGS += -static -nostdlib -ffunction-sections -fdata-sections -Wl,-gc-sections
+ifeq ($(EMU),1)
+CFLAGS        +=    -D__EMULATED_RVT_EXT__
+CXXFLAGS      +=    -D__EMULATED_RVT_EXT__
+endif
+
+LDFLAGS += -static -nostdlib -ffunction-sections -Wl,-gc-sections
 
 CROSS_COMPILE ?= riscv64-unknown-elf-
 
