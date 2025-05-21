@@ -1,8 +1,14 @@
 #ifndef _NPU_INSTRUCTION_HPP_
 #define _NPU_INSTRUCTION_HPP_
 
+// public
 #define NRAM_SIZE 1024 * 256 // 256KB
 #define TCSR_SIZE 64 // 64
+
+const long TCSR_DIM0 = 0;const long TCSR_STRIDE0 = 1;
+const long TCSR_DIM1 = 2;const long TCSR_STRIDE1 = 3;
+const long TCSR_DIM2 = 4;const long TCSR_STRIDE2 = 5;
+const long TCSR_DIM3 = 6;const long TCSR_STRIDE3 = 7;
 
 #ifdef __EMULATED_RVT_EXT__
 #include <stdio.h>
@@ -313,16 +319,7 @@ namespace NPUInstBuilder {
         ((long)rs1, (long)rs2, (long)rs3);
     }
 }
-#endif
 
-// public
-
-const long TCSR_DIM0 = 0;const long TCSR_STRIDE0 = 1;
-const long TCSR_DIM1 = 2;const long TCSR_STRIDE1 = 3;
-const long TCSR_DIM2 = 4;const long TCSR_STRIDE2 = 5;
-const long TCSR_DIM3 = 6;const long TCSR_STRIDE3 = 7;
-
-#ifndef __EMULATED_RVT_EXT__
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 __attribute__((always_inline))
 static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
