@@ -3,7 +3,7 @@ N = 96
 K = 128
 
 def export_matrix(name, matrix):
-    matrix = matrix.T.flatten()
+    matrix = matrix.flatten()
     with open(f"{name}.gen", "w") as f:
         for i in range(len(matrix)):
             f.write(f"{matrix[i]}")
@@ -24,6 +24,9 @@ a = a.astype(np.int32)
 c = a @ b
 c.astype(np.int32)
 print(c.dtype)
-export_matrix("a", a)
-export_matrix("b", b)
-export_matrix("c", c)
+export_matrix("a_col", a.T)
+export_matrix("b_col", b.T)
+export_matrix("c_col", c.T)
+export_matrix("a_row", a)
+export_matrix("b_row", b)
+export_matrix("c_row", c)

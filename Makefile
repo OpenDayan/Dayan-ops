@@ -16,7 +16,7 @@ OBJDUMP    := $(CROSS_COMPILE)objdump
 
 export CC CXX LD OBJDUMP CFLAGS CXXFLAGS LDFLAGS
 
-tests       := matmul_test tcsr_xchg_test load_store_test
+tests       := matmul_test matmul_at_test tcsr_xchg_test load_store_test
 tests_elf   := $(tests:=.elf)
 modules     := kernel
 
