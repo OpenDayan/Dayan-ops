@@ -23,23 +23,23 @@ static inline long gmma_e4m3_bf16(void* a, void* b, void* c,
     const long cTileTCFG = 5;
     // __tx_tcsr_write is alias for __tx_tcsr_xchg_nmask
     // Mem TCFGs
-    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM0>(m);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM0>(mTile);
     __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE0>(1);
-    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM1>(k);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM1>(kTile);
     __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE1>(lda);
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM2>(1);
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM3>(1);
 
-    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM0>(k);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM0>(kTile);
     __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE0>(1);
-    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM1>(n);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM1>(nTile);
     __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE1>(ldb);
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM2>(1);
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM3>(1);
 
-    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM0>(m);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM0>(mTile);
     __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE0>(1);
-    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM1>(n);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM1>(nTile);
     __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE1>(ldc);
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);
