@@ -15,3 +15,10 @@
 **注意：构建不同体系结构下目标前，建议先执行 `make clean`**
 
 参考指令：`make clean && EMU=1 make`
+
+## 测试说明
+
+- tcsr_xchg_test: 针对 tcsr 读写指令 tcsr_xchg_nmask 进行基础测试。
+- load_store_test: 针对 load/store 指令进行 1D / 2D 读写测试。
+- matmul_test: 针对矩阵计算类型 C = C + A x B 进行测试。 A / B / C 均为 column-major。
+- matmul_at_test: 针对矩阵计算类型 C = C + A x B 进行测试。 B / C 为 column-major， A 为 row-major。
