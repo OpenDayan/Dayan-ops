@@ -5,7 +5,7 @@ CXXFLAGS=-Itestdata_gen -g -std=c++17
 else
 CROSS_COMPILE=riscv64-unknown-elf-
 CFLAGS=-Itestdata_gen -mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
-CXXFLAGS=-Itestdata_gen -mcmodel=medany -std=c++11 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
+CXXFLAGS=-Itestdata_gen -mcmodel=medany -std=c++17 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g -ffunction-sections
 LDFLAGS=-static -nostdlib -ffunction-sections -Wl,-gc-sections
 endif
 
