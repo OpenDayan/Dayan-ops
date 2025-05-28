@@ -195,3 +195,15 @@ extern "C" long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
 {
     return gmma_s8_s8_s32<16, 16, 16, true>(a, b, c, m, n, k, lda, ldb, ldc);
 }
+
+extern "C" uint8_t __f32_to_e4m3(float f)
+{
+    return RVT_EMU_FP8::from_float<4>(f);
+}
+
+extern "C" float __e4m3_to_f32(uint8_t e4m3)
+{
+    RVT_EMU_FP8::FP8<4> data;
+    data.bits = e4m3;
+    return RVT_EMU_FP8::to_float(data);
+}

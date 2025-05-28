@@ -1,6 +1,6 @@
-M = 16
-N = 16
-K = 16
+M = 169
+N = 269
+K = 369
 
 def export_matrix(name, matrix):
     matrix = matrix.flatten()
@@ -10,7 +10,7 @@ def export_matrix(name, matrix):
             if i != len(matrix) - 1:
                 f.write(",")
 
-with open("mat_size.gen", "w") as f:
+with open("int_mat_size.gen", "w") as f:
     f.write(f"#define M {M}\n")
     f.write(f"#define N {N}\n")
     f.write(f"#define K {K}\n")
@@ -28,9 +28,9 @@ a = a.astype(np.int32)
 c = a @ b
 c.astype(np.int32)
 print(c.dtype)
-export_matrix("a_col", a.T)
-export_matrix("b_col", b.T)
-export_matrix("c_col", c.T)
-export_matrix("a_row", a)
-export_matrix("b_row", b)
-export_matrix("c_row", c)
+export_matrix("int_a_col", a.T)
+export_matrix("int_b_col", b.T)
+export_matrix("int_c_col", c.T)
+export_matrix("int_a_row", a)
+export_matrix("int_b_row", b)
+export_matrix("int_c_row", c)

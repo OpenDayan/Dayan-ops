@@ -10,9 +10,6 @@ const long TCSR_DIM1 = 2;const long TCSR_STRIDE1 = 3;
 const long TCSR_DIM2 = 4;const long TCSR_STRIDE2 = 5;
 const long TCSR_DIM3 = 6;const long TCSR_STRIDE3 = 7;
 
-
-#ifdef __EMULATED_RVT_EXT__
-extern "C" void exit(int code);
 #include <stdio.h>
 #include <stdint.h>
 namespace RVT_EMU_FP8 {
@@ -75,6 +72,8 @@ namespace RVT_EMU_FP8 {
     }
 }
 
+#ifdef __EMULATED_RVT_EXT__
+extern "C" void exit(int code);
 #define ASSERT(x) \
     do { \
         if (!(x)) { \
