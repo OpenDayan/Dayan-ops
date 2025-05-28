@@ -10,9 +10,71 @@ const long TCSR_DIM1 = 2;const long TCSR_STRIDE1 = 3;
 const long TCSR_DIM2 = 4;const long TCSR_STRIDE2 = 5;
 const long TCSR_DIM3 = 6;const long TCSR_STRIDE3 = 7;
 
+
 #ifdef __EMULATED_RVT_EXT__
-#include <stdio.h>
 extern "C" void exit(int code);
+#include <stdio.h>
+#include <stdint.h>
+namespace RVT_EMU_FP8 {
+    union fp32_int32 {
+        float f;
+        uint32_t bits;
+    };
+
+    template<int N>
+    constexpr int exp_i2() {
+        return 1 << N;
+    }
+
+    template<int N>
+    constexpr float exp_f2() {
+        if constexpr (N>0) return exp_f2<N-1>()*2;
+        if constexpr (N<0) return exp_f2<N+1>()/2;
+        if constexpr (N==0) return 1.;
+        return 0.; // This should never happen, but just in case.
+    }
+
+    template<int _E> //, int M=7-E>  1.7 bits!
+    struct FP8 {
+        uint8_t bits;
+        using type = FP8<_E>;
+        static constexpr int E      = _E;
+        static constexpr int M      = (7-_E);
+        static constexpr int E_BIAS = exp_i2<E-1>()-1;
+        static constexpr float MAX  = (2-exp_f2<-M+1>())*exp_f2<exp_i2<E-1>()>();
+        static constexpr float MIN  = exp_f2<-M>()*exp_f2<2-exp_i2<E-1>()>();
+    };
+
+    template<int E>
+    inline float to_float(const FP8<E>& in) {
+        fp32_int32 out = {0};
+        out.bits = in.bits & 0x80;
+        out.bits <<= 24;
+        uint32_t _bits = in.bits & 0x7F;
+        _bits <<= (23-FP8<E>::M);
+        out.bits |= _bits;
+        out.f *= exp_f2<127-FP8<E>::E_BIAS>();
+        return out.f;
+    }
+    template<int E>
+    inline uint8_t from_float(float value) {
+        FP8<E> out;
+        fp32_int32 in = {value};
+        out.bits = (in.bits >> 24) & 0x80;
+        in.bits &= 0x7fffffff;
+        if (in.f >= FP8<E>::MAX) {
+            out.bits |= 0x7E;
+        } else if (in.f < FP8<E>::MIN) { // => 0.
+        } else {
+            in.f *= exp_f2<FP8<E>::E_BIAS-127>();
+            uint32_t eps = (0x3fffff>>FP8<E>::M) + ((in.bits >> (23-FP8<E>::M)) & 0x1);
+            in.bits += eps;
+            out.bits |= (in.bits >> (23-FP8<E>::M)) & 0x7F;
+        }
+        return out.bits;
+    }
+}
+
 #define ASSERT(x) \
     do { \
         if (!(x)) { \
@@ -69,16 +131,16 @@ static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3, lo
     ASSERT(tcfg2->dim1 == tcfg3->dim1);
     for(int m =0; m < tcfg3->dim0; m+=1) {
         for(int n = 0 ; n < tcfg3->dim1; n+=1) {
+            int result = 0;
             for(int k = 0; k < tcfg1->dim1; k += 1) {
                 long offset1 = tcfg1->get_offset(m, k);
                 long offset2 = tcfg2->get_offset(k, n);
-                long offset3 = tcfg3->get_offset(m, n);
                 signed char rs1_val = *(__rvt_env->get_ptr<signed char>(rs1) + offset1);
                 signed char rs2_val = *(__rvt_env->get_ptr<signed char>(rs2) + offset2);
-                int rs3_val  = *(__rvt_env->get_ptr<int>(rs3) + offset3);
-                int result   = rs3_val + (int)rs1_val * (int)rs2_val;
-                *(__rvt_env->get_ptr<int>(rs3) + offset3) = result;
+                result += (int)rs1_val * (int)rs2_val;
             }
+            long offset3 = tcfg3->get_offset(m, n);
+            *(__rvt_env->get_ptr<int>(rs3) + offset3) += result;
         }
     }
 }
@@ -88,27 +150,18 @@ static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3) {
     __tx_matmul_fix_s8_s8_s32<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 
-template<long exp, long frac>
-static inline float fp_uncompress(long raw) {
-    static_assert(exp <= 8 && frac <= 23, "exp and frac must be less than or equal to 8 and 23");
-    int lfrac = raw & ((1 << frac) - 1) << (23 - frac);
-    int lexp = ((raw >> frac) & ((1 << exp) - 1)) << (23 - frac + 8 - exp);
-    int result = lfrac | lexp;
-    return *(float*)(&result);
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
+    printf("Not Implemented: __tx_matmul_subfloat_e4m3_e4m3_bf16\n");
 }
-
-template<long exp, long frac>
-static inline int fp_compress(float raw) {
-    static_assert(exp <= 8 && frac <= 23, "exp and frac must be less than or equal to 8 and 23");
-    int data = *(int*)&raw;
-    int lfrac = (data & ((1 << frac) - 1)) >> (23 - frac);
-    int lexp  = ((data >> 23) & ((1 << exp) - 1)) << frac;
-    int lsign = ((data >> 31) & 1) << (frac + exp);
-    return lfrac | lexp | lsign;
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3) {
+    long rd = 0;
+    __tx_matmul_subfloat_e4m3_e4m3_bf16<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
-static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3, long& rd) {
+static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void* rs3, long& rd) {
     TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
     TCFG* tcfg2 = __rvt_env->tcfg + tcfgrs2;
     TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
@@ -117,27 +170,27 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, voi
     ASSERT(tcfg2->dim1 == tcfg3->dim1);
     for(int m =0; m < tcfg3->dim0; m+=1) {
         for(int n = 0 ; n < tcfg3->dim1; n+=1) {
+            float result = 0.0f;
             for(int k = 0; k < tcfg1->dim1; k += 1) {
                 long offset1 = tcfg1->get_offset(m, k);
                 long offset2 = tcfg2->get_offset(k, n);
-                long offset3 = tcfg3->get_offset(m, n);
-                unsigned char  rs1_rval = *(__rvt_env->get_ptr<unsigned char>(rs1) + offset1);
-                unsigned char  rs2_rval = *(__rvt_env->get_ptr<unsigned char>(rs2) + offset2);
-                unsigned short rs3_rval  = *(__rvt_env->get_ptr<unsigned short>(rs3) + offset3);
-                float rs1_val = fp_uncompress<4, 3>(rs1_rval);
-                float rs2_val = fp_uncompress<4, 3>(rs2_rval);
-                float rs3_val = fp_uncompress<8, 7>(rs3_rval);
-                float result  = rs3_val + rs1_val * rs2_val;
-                *(__rvt_env->get_ptr<unsigned short>(rs3) + offset3) = fp_compress<8, 7>(result);
+                RVT_EMU_FP8::FP8<4> rs1_rval = *(__rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs1) + offset1);
+                RVT_EMU_FP8::FP8<4> rs2_rval = *(__rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs2) + offset2);
+                float rs1_val = RVT_EMU_FP8::to_float<4>(rs1_rval);
+                float rs2_val = RVT_EMU_FP8::to_float<4>(rs2_rval);
+                result += rs1_val * rs2_val;
             }
+            long offset3 = tcfg3->get_offset(m, n);
+            *(__rvt_env->get_ptr<float>(rs3) + offset3) += result;
         }
     }
 }
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
-static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3) {
+static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void* rs3) {
     long rd = 0;
-    __tx_matmul_subfloat_e4m3_e4m3_bf16<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
+    __tx_matmul_subfloat_e4m3_e4m3_f32<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
+
 
 static inline void* __emu_get_dram_ptr(long in) {
     return (void*)in;
@@ -330,6 +383,18 @@ __attribute__((always_inline))
 static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, void* rs3)
 {
     NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b1, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_matmul_subfloat_e4m3_e4m3_32(void* rs1, void* rs2, void* rs3, long& rd) {
+    NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
+}
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void* rs3)
+{
+    NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
 }
 
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>

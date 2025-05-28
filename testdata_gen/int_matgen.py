@@ -1,6 +1,6 @@
-M = 37
-N = 97
-K = 82
+M = 16
+N = 16
+K = 16
 
 def export_matrix(name, matrix):
     matrix = matrix.flatten()

@@ -150,33 +150,48 @@ static inline void updateKTile(long kTile)
         return 0;                                                                                                                                                                 \
     }
 
+GEN_MATRIX_KERNEL(gmma_e4m3_e4m3_f32, 0, 0, 2, __tx_matmul_subfloat_e4m3_e4m3_f32)
 GEN_MATRIX_KERNEL(gmma_e4m3_e4m3_bf16, 0, 0, 1, __tx_matmul_subfloat_e4m3_e4m3_bf16)
 GEN_MATRIX_KERNEL(gmma_s8_s8_s32, 0, 0, 2, __tx_matmul_fix_s8_s8_s32)
 
-extern "C" long gmma_e4m3_bf16_32_32_32(void *a, void *b, void *c,
+extern "C" long gmma_e4m3_f32_16_16_16(void *a, void *b, void *c,
+    int m, int n, int k,
+    int lda, int ldb, int ldc)
+{
+return gmma_e4m3_e4m3_f32<16, 16, 16, false>(a, b, c, m, n, k, lda, ldb, ldc);
+}
+
+extern "C" long gmma_e4m3_bf16_16_16_16(void *a, void *b, void *c,
                                         int m, int n, int k,
                                         int lda, int ldb, int ldc)
 {
-    return gmma_e4m3_e4m3_bf16<32, 32, 32, false>(a, b, c, m, n, k, lda, ldb, ldc);
+    return gmma_e4m3_e4m3_bf16<16, 16, 16, false>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
-extern "C" long gmma_s8_s32_32_32_32(void *a, void *b, void *c,
+extern "C" long gmma_s8_s32_16_16_16(void *a, void *b, void *c,
                                      int m, int n, int k,
                                      int lda, int ldb, int ldc)
 {
-    return gmma_s8_s8_s32<32, 32, 32, false>(a, b, c, m, n, k, lda, ldb, ldc);
+    return gmma_s8_s8_s32<16, 16, 16, false>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
-extern "C" long gmma_e4m3_bf16_32_32_32_AT(void *a, void *b, void *c,
+extern "C" long gmma_e4m3_bf16_16_16_16_AT(void *a, void *b, void *c,
                                            int m, int n, int k,
                                            int lda, int ldb, int ldc)
 {
-    return gmma_e4m3_e4m3_bf16<32, 32, 32, true>(a, b, c, m, n, k, lda, ldb, ldc);
+    return gmma_e4m3_e4m3_bf16<16, 16, 16, true>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
-extern "C" long gmma_s8_s32_32_32_32_AT(void *a, void *b, void *c,
+extern "C" long gmma_e4m3_f32_16_16_16_AT(void *a, void *b, void *c,
+                                           int m, int n, int k,
+                                           int lda, int ldb, int ldc)
+{
+    return gmma_e4m3_e4m3_f32<16, 16, 16, true>(a, b, c, m, n, k, lda, ldb, ldc);
+}
+
+extern "C" long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
                                         int m, int n, int k,
                                         int lda, int ldb, int ldc)
 {
-    return gmma_s8_s8_s32<32, 32, 32, true>(a, b, c, m, n, k, lda, ldb, ldc);
+    return gmma_s8_s8_s32<16, 16, 16, true>(a, b, c, m, n, k, lda, ldb, ldc);
 }

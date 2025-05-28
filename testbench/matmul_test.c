@@ -7,16 +7,16 @@
         return -1;                                                                                           \
     }
 
-extern long gmma_e4m3_bf16_32_32_32(void *a, void *b, void *c,
+extern long gmma_e4m3_bf16_16_16_16(void *a, void *b, void *c,
                                     int m, int n, int k,
                                     int lda, int ldb, int ldc);
-extern long gmma_s8_s32_32_32_32(void *a, void *b, void *c,
+extern long gmma_s8_s32_16_16_16(void *a, void *b, void *c,
                                  int m, int n, int k,
                                  int lda, int ldb, int ldc);
-extern long gmma_e4m3_bf16_32_32_32_AT(void *a, void *b, void *c,
+extern long gmma_e4m3_bf16_16_16_16_AT(void *a, void *b, void *c,
                                        int m, int n, int k,
                                        int lda, int ldb, int ldc);
-extern long gmma_s8_s32_32_32_32_AT(void *a, void *b, void *c,
+extern long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
                                     int m, int n, int k,
                                     int lda, int ldb, int ldc);
 
@@ -42,8 +42,8 @@ int c_real[N * M] = {
 int main()
 {
     __tx_init();
-    printf("test_gmma_s8_s32_32_32_32 start\n");
-    gmma_s8_s32_32_32_32(
+    printf("test_gmma_s8_s32_16_16_16 start\n");
+    gmma_s8_s32_16_16_16(
         a, b, c,
         M, N, K,
         M, K, M);
@@ -54,5 +54,5 @@ int main()
             check(c[n * M + m], c_real[n * M + m]);
         }
     }
-    printf("test_gmma_s8_s32_32_32_32 success\n");
+    printf("test_gmma_s8_s32_16_16_16 success\n");
 }
