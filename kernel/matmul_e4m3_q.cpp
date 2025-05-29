@@ -1,4 +1,5 @@
 #include "npu_instruction.hpp"
+#include "npu_kernel.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -168,7 +169,7 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
     return 0;
 }
 
-extern "C" long gmma_e4m3q_fp32_AT_QK32(void *a, void *b, void *c,
+__device__ long gmma_e4m3q_fp32_AT_QK32(void *a, void *b, void *c,
                                               int m, int n, int k,
                                               int lda, int ldb, int ldc)
 {
