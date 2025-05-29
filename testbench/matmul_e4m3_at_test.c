@@ -30,15 +30,15 @@ extern long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
 
 extern void __tx_init();
 
-#include "e4m3_mat_size.gen"
+#include "generated/e4m3_mat_size.gen"
 
 // A^T mem               DIM0 DIM1
 float a_in[M * K] = {
-#include "e4m3_a_row.gen"
+#include "generated/e4m3_a_row.gen"
 }; // A[M][K]
 // B mem
 float b_in[N * K] = {
-#include "e4m3_b_col.gen"
+#include "generated/e4m3_b_col.gen"
 }; // B[N][K]
 // C mem
 
@@ -47,7 +47,7 @@ uint8_t b[N * K];
 float c[N * M];
 
 float c_real[N * M] = {
-#include "e4m3_c_col.gen"
+#include "generated/e4m3_c_col.gen"
 }; // C[N][M]
 
 extern uint8_t __f32_to_e4m3(float f);

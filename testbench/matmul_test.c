@@ -22,21 +22,21 @@ extern long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
 
 extern void __tx_init();
 
-#include "int_mat_size.gen"
+#include "generated/int_mat_size.gen"
 
 // A mem               DIM0 DIM1
 char a[M * K] = {
-#include "int_a_col.gen"
+#include "generated/int_a_col.gen"
 }; // A[K][M]
 // B mem
 char b[N * K] = {
-#include "int_b_col.gen"
+#include "generated/int_b_col.gen"
 }; // B[N][K]
 // C mem
 int c[N * M];
 
 int c_real[N * M] = {
-#include "int_c_col.gen"
+#include "generated/int_c_col.gen"
 }; // C[N][M]
 
 int main()

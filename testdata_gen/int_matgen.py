@@ -10,7 +10,7 @@ def export_matrix(name, matrix):
             if i != len(matrix) - 1:
                 f.write(",")
 
-with open("int_mat_size.gen", "w") as f:
+with open("generated/int_mat_size.gen", "w") as f:
     f.write(f"#define M {M}\n")
     f.write(f"#define N {N}\n")
     f.write(f"#define K {K}\n")
@@ -28,9 +28,9 @@ a = a.astype(np.int32)
 c = a @ b
 c.astype(np.int32)
 print(c.dtype)
-export_matrix("int_a_col", a.T)
-export_matrix("int_b_col", b.T)
-export_matrix("int_c_col", c.T)
-export_matrix("int_a_row", a)
-export_matrix("int_b_row", b)
-export_matrix("int_c_row", c)
+export_matrix("generated/int_a_col", a.T)
+export_matrix("generated/int_b_col", b.T)
+export_matrix("generated/int_c_col", c.T)
+export_matrix("generated/int_a_row", a)
+export_matrix("generated/int_b_row", b)
+export_matrix("generated/int_c_row", c)
