@@ -15,6 +15,8 @@
 extern volatile uint64_t tohost;
 extern volatile uint64_t fromhost;
 
+volatile uint64_t* perf_counter = (uint64_t*)(0x80000000 + (0x20000 * 1));
+
 struct GeneralEntryArgs {
   uint64_t kernel_entry;
   uint32_t ret;
@@ -65,12 +67,12 @@ void setStats(int enable)
 
 void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 {
-  tohost = (code << 1) | 1;
-  volatile long *ptr_bootaddr = (volatile long*)0x1000;
-  *ptr_bootaddr = 0;
+  perf_counter[1]++;
   entry_args.ret = code;
+  volatile int *ptr_bootaddr = (volatile int*)0x1000;
   void (*bootrom)();
   bootrom = (void*)0x10000;
+  *ptr_bootaddr = 0x10000;
   bootrom(); // Jump to the bootrom
   while(1); // Should never reach here
 }
@@ -121,9 +123,10 @@ static inline void init_tls()
 
 extern int function_call(volatile uint64_t kernel_entry, volatile uint64_t arg_count, volatile uint64_t* args);
 
-void _init(int cid, int nc)
+__attribute__((section(".text.init")))void _init(int cid, int nc)
 {
   init_tls();
+  perf_counter[0]++;
   int ret = function_call(entry_args.kernel_entry, entry_args.arg_count, entry_args.args);
   exit(ret);
 }

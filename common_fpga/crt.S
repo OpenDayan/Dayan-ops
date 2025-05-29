@@ -17,7 +17,7 @@
 _start:
   // Set bootaddr to 0x10000 for reset incomming  
   li a0, 0x1000  // program reset vector
-  li a1, 0x10000 // boot address
+  li a1, 0x0     // busy flag
   sw a1, 0(a0)   // set boot address to bootrom
 
   // Enable mie interrupts
@@ -77,9 +77,8 @@ _start:
 
 #ifdef __riscv_flen
   # initialize FPU if we have one
-  la t0, 1f
-  csrw mtvec, t0
-
+  // la t0, 1f
+  // csrw mtvec, t0
   fssr    x0
   // fmv.s.x f0, x0
   // fmv.s.x f1, x0
@@ -150,24 +149,22 @@ _start:
 // a0: kernel_entry, a1: args count, a2: args pointer
 function_call:
     // Reserve stack for ra
-    addi sp, sp, -16
-    sd	ra, 8(sp)
-    sd  s0, 0(sp)
+    addi sp, sp, -192
+    sd	ra, 184(sp)
     // t0: kernel_entry, t1: args count, t2: args pointer
     mv	t0, a0
     mv	t1, a1
     mv	t2, a2
     // Prepare stack for arguments > 8
     li	t3, 8
-    li  s0, 0
+    // li  s0, 0
     ble	t1, t3, 2f
 
     // If args count > 8, allocate space for additional arguments
-    addi t3, t1, -7 // Calculate additional args count, align to 16bytes
-    slli t3, t3, 3 // Multiply by 8 (size of each argument)
-    andi s0, t3, -16
-
-    sub sp, sp, s0 // Allocate space on stack
+    // addi t3, t1, -7 // Calculate additional args count, align to 16bytes
+    // slli t3, t3, 3 // Multiply by 8 (size of each argument)
+    // andi s0, t3, -16
+    // sub sp, sp, s0 // Allocate space on stack
     // Copy arguments to stack
     addi t4, t2, 8*8 // t4: pointer to first argument
     slli t3, t1, 3 // t3: size of arguments in bytes
@@ -175,19 +172,19 @@ function_call:
     mv t5, sp // t5: pointer to stack space
 1:
     ld t6, 0(t4) // Load argument
-    sd t6, 0(t5) // Store argument on stack
     addi t4, t4, 8 // Move to next argument
+    sd t6, 0(t5) // Store argument on stack
     addi t5, t5, 8 // Move stack pointer
-    bne t4, t3, 1b // Loop until all arguments are copied
+    ble t4, t3, 1b // Loop until all arguments are copied
 
     // if we have 0 arguments, we jump to (t3 + 4 * 13)
     // if we have 8 arguments, we jump to (t3 + 4 * 5)
     // so we should jump to (t3 + 4 * (13 - t1))
-    auipc t3, 0 // Current PC
-    addi t4, t1, -13
-    slli t4, t4, 2 // Multiply by 4 (size of each argument) 4 * (t1 - 13)
-    sub t3, t3, t4 // Adjust PC to jump to the right place
-    jr t3
+    // auipc t3, 0 // Current PC
+    // addi t4, t1, -13
+    // slli t4, t4, 2 // Multiply by 4 (size of each argument) 4 * (t1 - 13)
+    // sub t3, t3, t4 // Adjust PC to jump to the right place
+    // jr t3
 2:
     // load other arguments into registers
     ld a7, 56(t2) // Load 8th argument
@@ -201,12 +198,11 @@ function_call:
     // Call the kernel function
     jalr t0
 
-    add sp, sp, s0 // restore space on stack
+    // add sp, sp, s0 // restore space on stack
 
     // Restore ra and stack
-    ld  s0, 0(sp)
-    ld	ra, 8(sp)
-    addi sp, sp, 16
+    ld	ra, 184(sp)
+    addi sp, sp, 192
     ret
 
 .section ".tohost","aw",@progbits
