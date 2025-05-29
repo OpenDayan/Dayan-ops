@@ -1,6 +1,6 @@
-M = 2
-N = 2
-K = 2
+M = 19
+N = 38
+K = 27
 
 import torch
 
