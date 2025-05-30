@@ -118,17 +118,21 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
     for (long m_i = 0; m_i < m; m_i += mTile)
     {
         long m_left = m - m_i;
+        int realMTile = mTile;
         if (m_left < mTile)
         {
-            updateMTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(m_left);
+            realMTile = m_left;
         }
+        updateMTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realMTile);
         for (long n_i = 0; n_i < n; n_i += nTile)
         {
             long n_left = n - n_i;
+            int realNTile = nTile;
             if (n_left < nTile)
             {
-                updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(n_left);
+                realNTile = n_left; 
             }
+            updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realNTile);
             __tx_fence(); /* Load C */
             __tx_async_nram_load<cTCFG, cTileTCFG, log2ElementSizeC>((void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)), cTile);
             for (long k_ii = 0; k_ii < k; k_ii += Q_K)
@@ -148,21 +152,22 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
                     __tx_fence();
                 }
                 __tx_async_nram_store<cTileTCFG, cTileTCFG, log2ElementSizeC>(kernel_buffer, cPartitialTile);
-                __tx_fence(); /* Store C */
+                __tx_fence();
                 // Scale for the C tile
-                float scale_a = *(float *)((long)a + (lda * m_i + k_ii + k_ii_offset * sizeof(float)) * (1 << log2ElementSizeA));
-                float scale_b = *(float *)((long)b + (ldb * n_i + k_ii + k_ii_offset * sizeof(float)) * (1 << log2ElementSizeB));
-                float scale = scale_a * scale_b;
-                for (long i = 0; i < mTile * nTile; i++)
-                {
-                    kernel_buffer[i] *= scale;
+                for(int m_ii = 0 ; m_ii < realMTile; m_ii += 1) {
+                    for(int n_ii = 0 ; n_ii < realNTile; n_ii += 1) {
+                        long real_m = m_i + m_ii;
+                        long real_n = n_i + n_ii;
+                        float scale_a = *(float *)((long)a + (lda * real_m + k_ii * 1 + k_ii_offset * sizeof(float)));
+                        float scale_b = *(float *)((long)b + (ldb * real_n + k_ii * 1 + k_ii_offset * sizeof(float)));
+                        float scale = scale_a * scale_b;
+                        float* cF;
+                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii + n_ii * mTile] * scale;
+                    }
                 }
-            } /* Store C */
-            __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)));
-            if (n_left < nTile)
-            {
-                updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(nTile);
             }
+            __tx_fence();
+            // __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)));
         }
     }
     __tx_fence();

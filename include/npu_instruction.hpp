@@ -73,6 +73,8 @@ namespace RVT_EMU_FP8 {
 }
 
 #ifdef __EMULATED_RVT_EXT__
+#include <simsimd/simsimd.h>
+#define MAX_KTILE 256
 extern "C" void exit(int code);
 #define ASSERT(x) \
     do { \
@@ -159,6 +161,35 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, voi
     __tx_matmul_subfloat_e4m3_e4m3_bf16<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 
+union fp16_int16 {
+    simsimd_f16_t f;
+    uint16_t bits;
+};
+template<int E>
+static inline simsimd_f16_t to_float16(const RVT_EMU_FP8::FP8<E>& in) {
+    fp16_int16 out;
+    unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
+    unsigned int m = in.bits & 0x07;        // Extract mantissa bits
+    unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
+                           (((e - 7 + 15) << 10) | (m << 7)); // DONOT Handle denormalized numbers
+    out.bits = result;
+    return out.f;
+}
+union bfp16_int16 {
+    simsimd_bf16_t f;
+    uint16_t bits;
+};
+template<int E>
+static inline simsimd_bf16_t to_bfloat16(const RVT_EMU_FP8::FP8<E>& in) {
+    bfp16_int16 out;
+    unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
+    unsigned int m = in.bits & 0x07;        // Extract mantissa bits
+    unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
+                           (((e - 7 + 127) << 7) | (m << 4)); // DONOT Handle denormalized numbers
+    out.bits = result;
+    return out.f;
+}
+
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void* rs3, long& rd) {
     TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
@@ -167,20 +198,32 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
     ASSERT(tcfg1->dim1 == tcfg2->dim0);
     ASSERT(tcfg1->dim0 == tcfg3->dim0);
     ASSERT(tcfg2->dim1 == tcfg3->dim1);
-    for(int m =0; m < tcfg3->dim0; m+=1) {
-        for(int n = 0 ; n < tcfg3->dim1; n+=1) {
-            float result = 0.0f;
-            for(int k = 0; k < tcfg1->dim1; k += 1) {
-                long offset1 = tcfg1->get_offset(m, k);
-                long offset2 = tcfg2->get_offset(k, n);
-                RVT_EMU_FP8::FP8<4> rs1_rval = *(__rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs1) + offset1);
-                RVT_EMU_FP8::FP8<4> rs2_rval = *(__rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs2) + offset2);
-                float rs1_val = RVT_EMU_FP8::to_float<4>(rs1_rval);
-                float rs2_val = RVT_EMU_FP8::to_float<4>(rs2_rval);
-                result += rs1_val * rs2_val;
+    // Optimize for performance
+    RVT_EMU_FP8::FP8<4>* a = __rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs1);
+    RVT_EMU_FP8::FP8<4>* b = __rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs2);
+    simsimd_bf16_t aExp[MAX_KTILE];
+    simsimd_bf16_t bExp[MAX_KTILE];
+    float* c = __rvt_env->get_ptr<float>(rs3);
+    if(tcfg1->stride0 == 1) {
+        // Not support yet
+        ASSERT(false);
+    } else {
+        for(int m =0; m < tcfg3->dim0; m+=1) {
+            for(int n = 0 ; n < tcfg3->dim1; n+=1) {
+                RVT_EMU_FP8::FP8<4>* aRow = &a[m * tcfg1->stride0];
+                RVT_EMU_FP8::FP8<4>* bRow = &b[n * tcfg2->stride1];
+                // float acc = 0.f;
+                for(int k = 0; k < tcfg1->dim1; k += 1) {
+                    aExp[k] = to_bfloat16(aRow[k]);
+                    bExp[k] = to_bfloat16(bRow[k]);
+                    // printf("a[%d] = %x, b[%d] = %x\n", k, aExp[k], k, bExp[k]);
+                    // acc += RVT_EMU_FP8::to_float(aRow[k]) * RVT_EMU_FP8::to_float(bRow[k]);
+                }
+                double acc;
+                simsimd_dot_bf16(aExp, bExp, tcfg1->dim1, &acc);
+                // printf("m: %ld, n: %ld, f: %lf\n", m, n, acc);
+                c[n * tcfg3->stride1 + m] += acc;
             }
-            long offset3 = tcfg3->get_offset(m, n);
-            *(__rvt_env->get_ptr<float>(rs3) + offset3) += result;
         }
     }
 }

@@ -1,7 +1,7 @@
 ifeq ($(EMU),1)
 CROSS_COMPILE=
-CFLAGS=-Itestdata_gen -g -std=gnu99
-CXXFLAGS=-Itestdata_gen -g -std=c++17
+CFLAGS=-Itestdata_gen -g -std=gnu99 -march=znver4
+CXXFLAGS=-Itestdata_gen -g -std=c++17 -march=znver4
 else
 CROSS_COMPILE=riscv64-unknown-elf-
 CFLAGS=-Itestdata_gen -mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g

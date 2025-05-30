@@ -55,7 +55,6 @@ extern float __e4m3_to_f32(uint8_t f);
 
 int main() {
     __tx_init();
-    printf("gmma_e4m3_f32_16_16_16_AT start\n");
     for(int m = 0; m < M; m++) {
         for(int k = 0; k < K; k++) {
             a[m * K + k] = __f32_to_e4m3(a_in[m * K + k]);
@@ -68,10 +67,12 @@ int main() {
             fp_check(__e4m3_to_f32(b[n * K + k]), b_in[n * K + k], 0.0f);
         }
     }
+    printf("gmma_e4m3_f32_16_16_16_AT start\n");
     gmma_e4m3_f32_16_16_16_AT(
         a, b, c,
         M, N, K,
         K, K, M);
+        printf("gmma_e4m3_f32_16_16_16_AT finish\n");
     for(int n = 0; n < N; n++) {
         for(int m = 0; m < M; m++) {
             fp_check(c[n * M + m], c_real[n * M + m], 0.0f);

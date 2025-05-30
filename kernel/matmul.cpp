@@ -187,7 +187,7 @@ __device__ long gmma_e4m3_f32_16_16_16_AT(void *a, void *b, void *c,
                                            int m, int n, int k,
                                            int lda, int ldb, int ldc)
 {
-    return gmma_e4m3_e4m3_f32<16, 16, 16, true>(a, b, c, m, n, k, lda, ldb, ldc);
+    return gmma_e4m3_e4m3_f32<32, 32, 256, true>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
 __device__ long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
