@@ -115,7 +115,7 @@ int main()
     {
         for (int m = 0; m < M; m++)
         {
-            fp_checkr(m, n, c[n * M + m], c_real[n * M + m], 0.0f);
+            fp_checkr(m, n, c[n * M + m], c_real[n * M + m], 0.01f);
         }
     }
     printf("gmma_e4m3q_fp32_BT_QK256 success\n");

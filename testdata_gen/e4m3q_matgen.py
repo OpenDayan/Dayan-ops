@@ -1,7 +1,7 @@
 M = 1536
 N = 2
 K = 1536
-QK = 256
+QK = 32
 
 import torch
 

@@ -53,7 +53,7 @@ namespace RVT_EMU_FP8 {
     //     out.f *= exp_f2<127-FP8<E>::E_BIAS>();
     //     return out.f;
     // }
-    
+
 
     // TODO: Fixme, Not working in RISCV
     static int isubnorm[8] = {
@@ -141,6 +141,8 @@ namespace RVT_EMU_FP8 {
 #ifdef __EMULATED_RVT_EXT__
 // #include <simsimd/simsimd.h>
 #define MAX_KTILE 256
+#define MAX_MTILE 32
+#define MAX_NTILE 32
 extern "C" void exit(int code);
 #define ASSERT(x) \
     do { \
@@ -281,6 +283,9 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
         // Not support yet
         ASSERT(false);
     } else {
+        // printf("Note: temporarly false implementation of __tx_matmul_subfloat_e4m3_e4m3_f32\n");
+        ASSERT(tcfg3->stride1 == tcfg3->dim0);
+        memcpy(cExp, c, sizeof(float) * tcfg3->dim0 * tcfg3->dim1);
         for(int m =0; m < tcfg3->dim0; m+=1) {
             for(int n = 0 ; n < tcfg3->dim1; n+=1) {
                 RVT_EMU_FP8::FP8<4>* aRow = &a[m * tcfg1->stride0];
@@ -324,7 +329,7 @@ static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgd
     long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
     while(1) {
         // One Element One Time
-        *(T*)get_dst_ptr(dst + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) = 
+        *(T*)get_dst_ptr(dst + sizeof(T) * tcfgdst->get_offset(dst0, dst1, dst2, dst3)) =
         *(T*)get_src_ptr(src + sizeof(T) * tcfgsrc->get_offset(src0, src1, src2, src3));
         src0 += 1;
         dst0 += 1;
@@ -398,7 +403,7 @@ static inline void __tx_tcsr_xchg(long rs1, long &rd) {
 namespace NPUInstBuilder {
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3, long& rd) 
+    static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3, long& rd)
     {
         asm volatile (
             "\n"
@@ -411,7 +416,7 @@ namespace NPUInstBuilder {
     }
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3) 
+    static inline void __custom_64b_instruction3r(long rs1, long rs2, long rs3)
     {
         asm volatile (
             "\n"
@@ -423,7 +428,7 @@ namespace NPUInstBuilder {
     }
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction2r(long rs1, long rs3, long& rd) 
+    static inline void __custom_64b_instruction2r(long rs1, long rs3, long& rd)
     {
         asm volatile (
             "\n"
@@ -436,7 +441,7 @@ namespace NPUInstBuilder {
     }
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction2r(long rs1, long rs3) 
+    static inline void __custom_64b_instruction2r(long rs1, long rs3)
     {
         asm volatile (
             "\n"
@@ -448,7 +453,7 @@ namespace NPUInstBuilder {
     }
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction1r(long rs3, long& rd) 
+    static inline void __custom_64b_instruction1r(long rs3, long& rd)
     {
         asm volatile (
             "\n"
@@ -461,7 +466,7 @@ namespace NPUInstBuilder {
     }
     template <long encoding>
     __attribute__((always_inline))
-    static inline void __custom_64b_instruction1r(long rs3) 
+    static inline void __custom_64b_instruction1r(long rs3)
     {
         asm volatile (
             "\n"
@@ -513,7 +518,7 @@ namespace NPUInstBuilder {
         TX_INT_SRL   = 3,
         TX_INT_SRA   = 4,
         TX_INT_SLL   = 5,
-        TX_INT_LUTOP = 16, // 16 | LUT 
+        TX_INT_LUTOP = 16, // 16 | LUT
     };
     template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
     __attribute__((always_inline))

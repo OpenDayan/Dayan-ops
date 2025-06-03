@@ -138,7 +138,7 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
             int realNTile = nTile;
             if (n_left < nTile)
             {
-                realNTile = n_left; 
+                realNTile = n_left;
             }
             updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realNTile);
             __tx_fence(); /* Load C */
