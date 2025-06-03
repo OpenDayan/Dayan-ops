@@ -1,5 +1,5 @@
 M = 1536
-N = 1
+N = 2
 K = 1536
 
 import torch

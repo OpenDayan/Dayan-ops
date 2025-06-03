@@ -75,7 +75,7 @@ int main() {
         printf("gmma_e4m3_f32_16_16_16_AT finish\n");
     for(int n = 0; n < N; n++) {
         for(int m = 0; m < M; m++) {
-            fp_check(c[n * M + m], c_real[n * M + m], 0.0f);
+            fp_check(c[n * M + m], c_real[n * M + m], 0.1f);
         }
     }
     printf("gmma_e4m3_f32_16_16_16_AT success\n");

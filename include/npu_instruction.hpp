@@ -219,7 +219,7 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
                     // printf("a[%d] = %x, b[%d] = %x\n", k, aExp[k], k, bExp[k]);
                     // acc += RVT_EMU_FP8::to_float(aRow[k]) * RVT_EMU_FP8::to_float(bRow[k]);
                 }
-                double acc;
+                double acc = 0;
                 simsimd_dot_bf16(aExp, bExp, tcfg1->dim1, &acc);
                 // printf("m: %ld, n: %ld, f: %lf\n", m, n, acc);
                 c[n * tcfg3->stride1 + m] += acc;

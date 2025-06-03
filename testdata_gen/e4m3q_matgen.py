@@ -1,7 +1,7 @@
-M = 128
-N = 41
-K = 128
-QK = 32
+M = 1536
+N = 2
+K = 1536
+QK = 256
 
 import torch
 
@@ -17,6 +17,7 @@ with open("generated/e4m3q_mat_size.gen", "w") as f:
     f.write(f"#define M {M}\n")
     f.write(f"#define N {N}\n")
     f.write(f"#define K {K}\n")
+    f.write(f"#define QK {QK}\n")
 
 def conv(input):
     scale = torch.zeros((input.shape[0], input.shape[1] // QK), dtype=torch.float32)
@@ -62,8 +63,8 @@ c_q = e4m3q_matmul(a_data, b_data, a_scale, b_scale)
 # print(c)
 # print(c_q)
 print(torch.max((c_q - c).abs()))
-export_matrix("generated/e4m3q_b_col", b.T)
-export_matrix("generated/e4m3q_c_col", c.T)
-export_matrix("generated/e4m3q_a_row", a)
-export_matrix("generated/e4m3q_bs_col", b_scale.T)
+export_matrix("generated/e4m3q_a_row", a_data)
+export_matrix("generated/e4m3q_b_col", b_data)
+export_matrix("generated/e4m3q_c_col", c_q.T)
+export_matrix("generated/e4m3q_bs_col", b_scale)
 export_matrix("generated/e4m3q_as_row", a_scale)
