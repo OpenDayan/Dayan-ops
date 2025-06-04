@@ -57,6 +57,10 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
         printf("Not supported: k % Q_K != 0\n");
         return -1;
     }
+    if(Q_K != kTile) {
+        printf("Not supported: Q_K != kTile\n");
+        return -1;
+    }
 
     const long aTCFG = 0;
     const long bTCFG = 1;
@@ -162,7 +166,7 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
                         float scale_a = *(float *)((long)a + (lda * real_m + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale_b = *(float *)((long)b + (ldb * real_n + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale = scale_a * scale_b;
-                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii + n_ii * realMTile] * scale;
+                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii * realNTile + n_ii] * scale;
                     }
                 }
             }
@@ -179,4 +183,11 @@ __device__ long gmma_e4m3q_fp32_AT_QK32(void *a, void *b, void *c,
                                               int lda, int ldb, int ldc)
 {
     return gmma_e4m3q_fp32_AT<32, 32, 32, 32>(a, b, c, m, n, k, lda, ldb, ldc);
+}
+
+__device__ long gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c,
+                                              int m, int n, int k,
+                                              int lda, int ldb, int ldc)
+{
+    return gmma_e4m3q_fp32_AT<32, 32, 256, 256>(a, b, c, m, n, k, lda, ldb, ldc);
 }
