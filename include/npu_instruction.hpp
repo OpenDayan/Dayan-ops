@@ -201,8 +201,8 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
     // Optimize for performance
     RVT_EMU_FP8::FP8<4>* a = __rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs1);
     RVT_EMU_FP8::FP8<4>* b = __rvt_env->get_ptr<RVT_EMU_FP8::FP8<4>>(rs2);
-    simsimd_bf16_t aExp[MAX_KTILE];
-    simsimd_bf16_t bExp[MAX_KTILE];
+    // simsimd_bf16_t aExp[MAX_KTILE];
+    // simsimd_bf16_t bExp[MAX_KTILE];
     float* c = __rvt_env->get_ptr<float>(rs3);
     if(tcfg1->stride0 == 1) {
         // Not support yet
@@ -212,15 +212,15 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
             for(int n = 0 ; n < tcfg3->dim1; n+=1) {
                 RVT_EMU_FP8::FP8<4>* aRow = &a[m * tcfg1->stride0];
                 RVT_EMU_FP8::FP8<4>* bRow = &b[n * tcfg2->stride1];
-                // float acc = 0.f;
+                float acc = 0.f;
                 for(int k = 0; k < tcfg1->dim1; k += 1) {
-                    aExp[k] = to_bfloat16(aRow[k]);
-                    bExp[k] = to_bfloat16(bRow[k]);
+                    // aExp[k] = to_bfloat16(aRow[k]);
+                    // bExp[k] = to_bfloat16(bRow[k]);
                     // printf("a[%d] = %x, b[%d] = %x\n", k, aExp[k], k, bExp[k]);
-                    // acc += RVT_EMU_FP8::to_float(aRow[k]) * RVT_EMU_FP8::to_float(bRow[k]);
+                    acc += RVT_EMU_FP8::to_float(aRow[k]) * RVT_EMU_FP8::to_float(bRow[k]);
                 }
-                double acc = 0;
-                simsimd_dot_bf16(aExp, bExp, tcfg1->dim1, &acc);
+                // double acc = 0;
+                // simsimd_dot_bf16(aExp, bExp, tcfg1->dim1, &acc);
                 // printf("m: %ld, n: %ld, f: %lf\n", m, n, acc);
                 c[n * tcfg3->stride1 + m] += acc;
             }

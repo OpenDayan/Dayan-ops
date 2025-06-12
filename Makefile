@@ -23,6 +23,7 @@ modules     := kernel
 ifeq ($(EMU),1)
     EMU_DEFINE=-D__EMULATED_RVT_EXT__
 else
+    EMU_DEFINE=-D__EMULATED_RVT_EXT__
     modules=kernel common
     link_script=-T common/test.ld
 endif
