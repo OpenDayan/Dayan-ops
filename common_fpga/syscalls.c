@@ -126,7 +126,6 @@ extern int function_call(volatile uint64_t kernel_entry, volatile uint64_t arg_c
 __attribute__((section(".text.init")))void _init(int cid, int nc)
 {
   init_tls();
-  perf_counter[0]++;
   int ret = function_call(entry_args.kernel_entry, entry_args.arg_count, entry_args.args);
   exit(ret);
 }

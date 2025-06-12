@@ -15,6 +15,7 @@
   .section ".text.init"
   .globl _start
 _start:
+  fence.i
   // Set bootaddr to 0x10000 for reset incomming  
   li a0, 0x1000  // program reset vector
   li a1, 0x0     // busy flag
@@ -141,6 +142,14 @@ _start:
   add sp, sp, tp
   sll a2, a0, STKSHIFT
   add tp, tp, a2
+
+  li t0, 0x80020000
+  ld t1, 0(t0)
+  addi t1, t1, 1
+  sd t1, 0(t0)
+  sd sp, 16(t0)
+  sd tp, 24(t0)
+  sd gp, 32(t0)
 
   j _init
 
