@@ -21,6 +21,9 @@ struct GeneralEntryArgs {
   uint64_t kernel_entry;
   uint32_t ret;
   uint32_t arg_count;
+  uint64_t putchar_buf;
+  uint64_t putchar_buflength;
+  uint64_t putchar_wptr;
   uint64_t args[30];
 };
 
@@ -133,17 +136,20 @@ __attribute__((section(".text.init")))void _init(int cid, int nc)
 #undef putchar
 int putchar(int ch)
 {
-  static __thread char buf[64] __attribute__((aligned(64)));
-  static __thread int buflen = 0;
+  // static __thread char buf[64] __attribute__((aligned(64)));
+  // static __thread int buflen = 0;
 
-  buf[buflen++] = ch;
+  // buf[buflen++] = ch;
 
-  if (ch == '\n' || buflen == sizeof(buf))
-  {
-    syscall(SYS_write, 1, (uintptr_t)buf, buflen);
-    buflen = 0;
-  }
+  // if (ch == '\n' || buflen == sizeof(buf))
+  // {
+    // syscall(SYS_write, 1, (uintptr_t)buf, buflen);
+    // buflen = 0;
+  // }
 
+  char* putchar_buf = (char*) entry_args.putchar_buf;
+  uint64_t putchar_buflength = entry_args.putchar_buflength;
+  if(entry_args.putchar_wptr < putchar_buflength)putchar_buf[entry_args.putchar_wptr++] = ch;
   return 0;
 }
 

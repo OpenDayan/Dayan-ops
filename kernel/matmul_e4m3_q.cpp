@@ -166,7 +166,8 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
                         float scale_a = *(float *)((long)a + (lda * real_m + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale_b = *(float *)((long)b + (ldb * real_n + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale = scale_a * scale_b;
-                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii * realNTile + n_ii] * scale;
+                        cF[ldc * real_n + real_m] += 1.0f + kernel_buffer[m_ii * realNTile + n_ii] * scale;
+                        if(real_m == 0 && real_n == 0) printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
                     }
                 }
             }
