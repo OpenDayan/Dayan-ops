@@ -24,7 +24,7 @@ a = a.astype(np.int32)
 b = np.random.rand(K, N)
 b = (b * 256 - 128)
 b = b.astype(np.int8)
-a = a.astype(np.int32)
+b = b.astype(np.int32)
 c = a @ b
 c.astype(np.int32)
 print(c.dtype)

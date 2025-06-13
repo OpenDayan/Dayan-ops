@@ -1,32 +1,46 @@
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 
-#define check(x, expect)                                                                                     \
-    if ((x) != (expect))                                                                                     \
-    {                                                                                                        \
-        printf("Error: %s:%d: (%d,%d) %s = %d, expected %d\n", __FILE__, __LINE__, m, n, #x, (x), (expect)); \
-        return -1;                                                                                           \
-    }
+typedef union {
+  float f32;
+  int32_t i32;
+} fp_bits_t;
 
-#define fp_check(x, expect, eps)                                                                 \
-    if ((x) < (expect) - (eps) || (x) > (expect) + (eps))                                                     \
-    {                                                                                                        \
-        printf("Error: %s:%d: %s = %f, expected %f\n", __FILE__, __LINE__, #x, (x), (expect)); \
-        return -1;                                                                                           \
-    }
+#define check(x, expect)                                                       \
+  if ((x) != (expect)) {                                                       \
+    printf("Error: %s:%d: (%d,%d) %s = %d, expected %d\n", __FILE__, __LINE__, \
+           m, n, #x, (x), (expect));                                           \
+    return -1;                                                                 \
+  }
 
-extern long gmma_e4m3_f32_16_16_16(void *a, void *b, void *c,
-                                    int m, int n, int k,
-                                    int lda, int ldb, int ldc);
-extern long gmma_s8_s32_16_16_16(void *a, void *b, void *c,
-                                 int m, int n, int k,
+#define fp_check(x, expect, eps)                                               \
+  if ((x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+    fp_bits_t x_bits, expect_bits;                                             \
+    x_bits.f32 = x;                                                            \
+    expect_bits.f32 = expect;                                                  \
+    printf("Error: %s:%d: %s = %08x, expected %08x\n", __FILE__, __LINE__, #x, \
+           (x_bits.i32), (expect_bits.i32));                                   \
+    return -1;                                                                 \
+  }
+
+#define fp_check2(x, expect, eps)                                              \
+  if ((x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+    fp_bits_t x_bits, expect_bits;                                             \
+    x_bits.f32 = x;                                                            \
+    expect_bits.f32 = expect;                                                  \
+    printf("Error: %s:%d: (%d,%d) %s = %08x, expected %08x\n", __FILE__,       \
+           __LINE__, m, n, #x, (x_bits.i32), (expect_bits.i32));               \
+    return -1;                                                                 \
+  }
+
+extern long gmma_e4m3_f32_16_16_16(void *a, void *b, void *c, int m, int n,
+                                   int k, int lda, int ldb, int ldc);
+extern long gmma_s8_s32_16_16_16(void *a, void *b, void *c, int m, int n, int k,
                                  int lda, int ldb, int ldc);
-extern long gmma_e4m3_f32_16_16_16_AT(void *a, void *b, void *c,
-                                       int m, int n, int k,
-                                       int lda, int ldb, int ldc);
-extern long gmma_s8_s32_16_16_16_AT(void *a, void *b, void *c,
-                                    int m, int n, int k,
-                                    int lda, int ldb, int ldc);
+extern long gmma_e4m3_f32_16_16_16_BT(void *a, void *b, void *c, int m, int n,
+                                      int k, int lda, int ldb, int ldc);
+extern long gmma_s8_s32_16_16_16_BT(void *a, void *b, void *c, int m, int n,
+                                    int k, int lda, int ldb, int ldc);
 
 extern void __tx_init();
 
@@ -54,29 +68,45 @@ extern uint8_t __f32_to_e4m3(float f);
 extern float __e4m3_to_f32(uint8_t f);
 
 int main() {
-    __tx_init();
-    for(int m = 0; m < M; m++) {
-        for(int k = 0; k < K; k++) {
-            a[m * K + k] = __f32_to_e4m3(a_in[m * K + k]);
-            fp_check(__e4m3_to_f32(a[m * K + k]), a_in[m * K + k], 0.0f);
-        }
+  __tx_init();
+  printf("prepare data\n");
+  for (int m = 0; m < M; m++) {
+    for (int k = 0; k < K; k++) {
+      a[m * K + k] = __f32_to_e4m3(a_in[m * K + k]);
+      fp_check(__e4m3_to_f32(a[m * K + k]), a_in[m * K + k], 0.0f);
     }
-    for(int n = 0; n < N; n++) {
-        for(int k = 0; k < K; k++) {
-            b[n * K + k] = __f32_to_e4m3(b_in[n * K + k]);
-            fp_check(__e4m3_to_f32(b[n * K + k]), b_in[n * K + k], 0.0f);
-        }
+  }
+  for (int n = 0; n < N; n++) {
+    for (int k = 0; k < K; k++) {
+      b[n * K + k] = __f32_to_e4m3(b_in[n * K + k]);
+      fp_check(__e4m3_to_f32(b[n * K + k]), b_in[n * K + k], 0.0f);
     }
-    printf("gmma_e4m3_f32_16_16_16_AT start\n");
-    gmma_e4m3_f32_16_16_16_AT(
-        a, b, c,
-        M, N, K,
-        K, K, M);
-        printf("gmma_e4m3_f32_16_16_16_AT finish\n");
-    for(int n = 0; n < N; n++) {
-        for(int m = 0; m < M; m++) {
-            fp_check(c[n * M + m], c_real[n * M + m], 0.1f);
-        }
+  }
+  printf("M: %d, N: %d, K: %d\n", M, N, K);
+  printf("gmma_e4m3_f32_16_16_16_BT start\n");
+  gmma_e4m3_f32_16_16_16_BT(b, a, c, N, M, K, K, K, M);
+  printf("gmma_e4m3_f32_16_16_16_BT finish\n");
+
+  printf("c_col:\n");
+  for (size_t i = 0; i < N; i++) {
+    for (size_t j = 0; j < M; j++) {
+      printf("%x ", ((uint32_t *)c)[i * M + j]);
     }
-    printf("gmma_e4m3_f32_16_16_16_AT success\n");
+    printf("\n");
+  }
+
+  printf("c_col_golden:\n");
+  for (size_t i = 0; i < N; i++) {
+    for (size_t j = 0; j < M; j++) {
+      printf("%x ", ((uint32_t *)c_real)[i * M + j]);
+    }
+    printf("\n");
+  }
+
+  for (int n = 0; n < N; n++) {
+    for (int m = 0; m < M; m++) {
+      fp_check2(c[n * M + m], c_real[n * M + m], 0.1f);
+    }
+  }
+  printf("gmma_e4m3_f32_16_16_16_BT success\n");
 }
