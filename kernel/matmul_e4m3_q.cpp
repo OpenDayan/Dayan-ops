@@ -119,6 +119,9 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
     void *cPartitialTile = (void *)((long)bTile + kTile * nTile);
     // void *cTile = (void *)((long)cPartitialTile + mTile * nTile * sizeof(float));
     float* cF = (float*)c;
+    // memset(cF, 0, sizeof(float) * ldc * n);
+    // printf("Addr A: 0x%x, B: 0x%x, C: 0x%x\n", a, b, c);
+    // printf("M: %d N: %d K: %d\n", m, n, k);
 
     for (long m_i = 0; m_i < m; m_i += mTile)
     {
@@ -166,8 +169,15 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
                         float scale_a = *(float *)((long)a + (lda * real_m + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale_b = *(float *)((long)b + (ldb * real_n + k_ii * 1 + k_ii_offset * sizeof(float)));
                         float scale = scale_a * scale_b;
-                        cF[ldc * real_n + real_m] += 1.0f + kernel_buffer[m_ii * realNTile + n_ii] * scale;
-                        if(real_m == 0 && real_n == 0) printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
+                        // if(real_m == 0 && real_n == 0) {
+                        //     printf("kernel_buffer[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&kernel_buffer[m_ii * realNTile + n_ii]);
+                        //     printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
+                        // }
+                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii * realNTile + n_ii] * scale;
+                        // if(real_m == 0 && real_n == 0) {
+                        //     printf("kernel_buffer[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&kernel_buffer[m_ii * realNTile + n_ii]);
+                        //     printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
+                        // }
                     }
                 }
             }
