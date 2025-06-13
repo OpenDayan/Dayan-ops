@@ -42,8 +42,36 @@ namespace RVT_EMU_FP8 {
         static constexpr float MIN  = exp_f2<-M>()*exp_f2<2-exp_i2<E-1>()>();
     };
 
+    // template<int E>
+    // inline float to_float(const FP8<E>& in) {
+    //     fp32_int32 out = {0};
+    //     out.bits = in.bits & 0x80;
+    //     out.bits <<= 24;
+    //     uint32_t _bits = in.bits & 0x7F;
+    //     _bits <<= (23-FP8<E>::M);
+    //     out.bits |= _bits;
+    //     out.f *= exp_f2<127-FP8<E>::E_BIAS>();
+    //     return out.f;
+    // }
+    
+
+    // TODO: Fixme, Not working in RISCV
     template<int E>
     inline float to_float(const FP8<E>& in) {
+        // float subnorm[8] = {0.000000, 0.001953, 0.003906, 0.005859, 0.007812, 0.009766, 0.011719, 0.013672};
+        if(E == 4) {
+            static int isubnorm[8] = {0x00000000,
+                                      0x3b000000,
+                                      0x3b800000,
+                                      0x3bc00000,
+                                      0x3c000000,
+                                      0x3c200000,
+                                      0x3c400000,
+                                      0x3c600000};
+            float *subnorm = (float*)isubnorm;
+            if(in.bits < 0x08) return subnorm[in.bits];
+            if(in.bits < 0x88 && in.bits >= 0x80) return -subnorm[in.bits & 0x07];
+        }
         fp32_int32 out = {0};
         out.bits = in.bits & 0x80;
         out.bits <<= 24;
@@ -53,6 +81,34 @@ namespace RVT_EMU_FP8 {
         out.f *= exp_f2<127-FP8<E>::E_BIAS>();
         return out.f;
     }
+    // template<int E>
+    // inline float fp8Mul(const FP8<E>& a, const FP8<E>& b) {
+    //     fp32_int32 out = {0};
+    //     out.bits = (a.bits ^ b.bits) & 0x80;
+    //     out.bits <<= 24;
+
+    //     // Calculate mantissa
+    //     long mant_a = (a.bits & ((1 << FP8<E>::M) - 1));
+    //     long mant_b = (b.bits & ((1 << FP8<E>::M) - 1));
+
+    //     // Calculate exponent
+    //     long exp_a = (a.bits >> FP8<E>::M) & ((1 << E) - 1);
+    //     long exp_b = (a.bits >> FP8<E>::M) & ((1 << E) - 1);
+
+    //     // Handle subnormal numbers
+    //     if(exp_a) mant_a |= (1 << FP8<E>::M); // mant_a is Q1.M
+    //     if(exp_b) mant_b |= (1 << FP8<E>::M); // mant_b is Q1.M
+    //     long exp = exp_a + exp_b - FP8<E>::E_BIAS;
+
+    //     long mant = mant_a * mant_b; // mant is Q2.2M
+    //     mant = (mant >> FP8<E>::M) + (mant & ((1 << FP8<E>::M) - 1)) ? 1 : 0; // mant is Q2.M
+    //     long mant_clz = __builtin_clz(mant);
+    //     const machine_width = sizeof(long) * 8;
+    //     long width = machine_width - mant_clz;
+    //     if(width == 0) return 0.0f;
+
+    //     return out.f;
+    // }
     template<int E>
     inline uint8_t from_float(float value) {
         FP8<E> out;
@@ -73,7 +129,7 @@ namespace RVT_EMU_FP8 {
 }
 
 #ifdef __EMULATED_RVT_EXT__
-#include <simsimd/simsimd.h>
+// #include <simsimd/simsimd.h>
 #define MAX_KTILE 256
 extern "C" void exit(int code);
 #define ASSERT(x) \
@@ -161,34 +217,34 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_bf16(void* rs1, void* rs2, voi
     __tx_matmul_subfloat_e4m3_e4m3_bf16<tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
 
-union fp16_int16 {
-    simsimd_f16_t f;
-    uint16_t bits;
-};
-template<int E>
-static inline simsimd_f16_t to_float16(const RVT_EMU_FP8::FP8<E>& in) {
-    fp16_int16 out;
-    unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
-    unsigned int m = in.bits & 0x07;        // Extract mantissa bits
-    unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
-                           (((e - 7 + 15) << 10) | (m << 7)); // DONOT Handle denormalized numbers
-    out.bits = result;
-    return out.f;
-}
-union bfp16_int16 {
-    simsimd_bf16_t f;
-    uint16_t bits;
-};
-template<int E>
-static inline simsimd_bf16_t to_bfloat16(const RVT_EMU_FP8::FP8<E>& in) {
-    bfp16_int16 out;
-    unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
-    unsigned int m = in.bits & 0x07;        // Extract mantissa bits
-    unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
-                           (((e - 7 + 127) << 7) | (m << 4)); // DONOT Handle denormalized numbers
-    out.bits = result;
-    return out.f;
-}
+// union fp16_int16 {
+//     simsimd_f16_t f;
+//     uint16_t bits;
+// };
+// template<int E>
+// static inline simsimd_f16_t to_float16(const RVT_EMU_FP8::FP8<E>& in) {
+//     fp16_int16 out;
+//     unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
+//     unsigned int m = in.bits & 0x07;        // Extract mantissa bits
+//     unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
+//                            (((e - 7 + 15) << 10) | (m << 7)); // DONOT Handle denormalized numbers
+//     out.bits = result;
+//     return out.f;
+// }
+// union bfp16_int16 {
+//     simsimd_bf16_t f;
+//     uint16_t bits;
+// };
+// template<int E>
+// static inline simsimd_bf16_t to_bfloat16(const RVT_EMU_FP8::FP8<E>& in) {
+//     bfp16_int16 out;
+//     unsigned int e = (in.bits & 0x78) >> 3; // Extract exponent bits
+//     unsigned int m = in.bits & 0x07;        // Extract mantissa bits
+//     unsigned short result = ((in.bits & 0x80) << 8) | // Sign bit
+//                            (((e - 7 + 127) << 7) | (m << 4)); // DONOT Handle denormalized numbers
+//     out.bits = result;
+//     return out.f;
+// }
 
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void* rs3, long& rd) {
