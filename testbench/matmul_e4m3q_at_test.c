@@ -89,7 +89,7 @@ int main()
         for (int k = 0; k < K; k++)
         {
             b[(n * K + k) / QK].v[k % QK] = __f32_to_e4m3(b_in[n * K + k]);
-            fp_check(__e4m3_to_f32(b[(n * K + k) / QK].v[k % QK]), b_in[n * K + k], 0.0f);
+            fp_checkr(n, k, __e4m3_to_f32(b[(n * K + k) / QK].v[k % QK]), b_in[n * K + k], 0.0f);
         }
     }
     for (int m = 0; m < M; m++)
@@ -97,7 +97,7 @@ int main()
         for (int k = 0; k < K; k++)
         {
             a[(m * K + k) / QK].v[k % QK] = __f32_to_e4m3(a_in[m * K + k]);
-            fp_check(__e4m3_to_f32(a[(m * K + k) / QK].v[k % QK]), a_in[m * K + k], 0.0f);
+            fp_checkr(m, k, __e4m3_to_f32(a[(m * K + k) / QK].v[k % QK]), a_in[m * K + k], 0.0f);
         }
     }
     fp_check(a[1].scale, ((float *)a)[1 * (QK / sizeof(float) + 1)], 0.0f);

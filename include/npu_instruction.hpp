@@ -56,25 +56,26 @@ namespace RVT_EMU_FP8 {
     
 
     // TODO: Fixme, Not working in RISCV
+    static int isubnorm[8] = {
+                0x00000000,
+                0x3b000000,
+                0x3b800000,
+                0x3bc00000,
+                0x3c000000,
+                0x3c200000,
+                0x3c400000,
+                0x3c600000};
     template<int E>
     inline float to_float(const FP8<E>& in) {
-        // float subnorm[8] = {0.000000, 0.001953, 0.003906, 0.005859, 0.007812, 0.009766, 0.011719, 0.013672};
-        if(E == 4) {
-            static int isubnorm[8] = {0x00000000,
-                                      0x3b000000,
-                                      0x3b800000,
-                                      0x3bc00000,
-                                      0x3c000000,
-                                      0x3c200000,
-                                      0x3c400000,
-                                      0x3c600000};
-            float *subnorm = (float*)isubnorm;
-            if(in.bits < 0x08) return subnorm[in.bits];
-            if(in.bits < 0x88 && in.bits >= 0x80) return -subnorm[in.bits & 0x07];
-        }
         fp32_int32 out = {0};
         out.bits = in.bits & 0x80;
         out.bits <<= 24;
+        if(E == 4) {
+            if((in.bits & 0x7f) < 0x08) {
+                out.bits |= isubnorm[in.bits & 0x7f];
+                return out.f;
+            }
+        }
         uint32_t _bits = in.bits & 0x7F;
         _bits <<= (23-FP8<E>::M);
         out.bits |= _bits;
@@ -118,6 +119,15 @@ namespace RVT_EMU_FP8 {
         if (in.f >= FP8<E>::MAX) {
             out.bits |= 0x7E;
         } else if (in.f < FP8<E>::MIN) { // => 0.
+        } else if(E == 4 && in.bits < 0x3C800000) { // 2^-6
+            if(in.bits >= 0x3c500000)      out.bits |= 0x7;
+            else if(in.bits >= 0x3c300000) out.bits |= 0x6;
+            else if(in.bits >= 0x3c100000) out.bits |= 0x5;
+            else if(in.bits >= 0x3be00000) out.bits |= 0x4;
+            else if(in.bits >= 0x3ba00000) out.bits |= 0x3;
+            else if(in.bits >= 0x3b400000) out.bits |= 0x2;
+            else if(in.bits >  0x3a000000) out.bits |= 0x1;
+            return out.bits;
         } else {
             in.f *= exp_f2<FP8<E>::E_BIAS-127>();
             uint32_t eps = (0x3fffff>>FP8<E>::M) + ((in.bits >> (23-FP8<E>::M)) & 0x1);
