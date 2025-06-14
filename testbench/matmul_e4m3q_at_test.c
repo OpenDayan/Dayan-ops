@@ -24,6 +24,10 @@
 extern long gmma_e4m3q_fp32_AT_QK32(void *a, void *b, void *c,
                                     int m, int n, int k,
                                     int lda, int ldb, int ldc);
+extern long gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c,
+                                     int m, int n, int k,
+                                     int lda, int ldb, int ldc);
+                                    
 
 extern void __tx_init();
 
@@ -101,12 +105,12 @@ int main()
         }
     }
     fp_check(a[1].scale, ((float *)a)[1 * (QK / sizeof(float) + 1)], 0.0f);
-    printf("gmma_e4m3q_fp32_AT_QK32 start\n");
-    gmma_e4m3q_fp32_AT_QK32(
+    printf("gmma_e4m3q_fp32_AT_QK256 start\n");
+    gmma_e4m3q_fp32_AT_QK256(
         a, b, c,
         M, N, K,
         K + K * 4 / QK, K + K * 4 / QK, M);
-    printf("gmma_e4m3q_fp32_AT_QK32 finish\n");
+    printf("gmma_e4m3q_fp32_AT_QK256 finish\n");
     for (int n = 0; n < N; n++)
     {
         for (int m = 0; m < M; m++)
@@ -114,5 +118,5 @@ int main()
             fp_checkr(m, n, c[n * M + m], c_real[n * M + m], 0.0f);
         }
     }
-    printf("gmma_e4m3q_fp32_AT_QK32 success\n");
+    printf("gmma_e4m3q_fp32_AT_QK256 success\n");
 }

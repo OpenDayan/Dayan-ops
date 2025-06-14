@@ -278,19 +278,19 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
             for(int n = 0 ; n < tcfg3->dim1; n+=1) {
                 RVT_EMU_FP8::FP8<4>* aRow = &a[m * tcfg1->stride0];
                 RVT_EMU_FP8::FP8<4>* bRow = &b[n * tcfg2->stride1];
-                float acc = 0.f;
+                float acc = c[n * tcfg3->stride1 + m];
                 for(int k = 0; k < tcfg1->dim1; k += 1) {
                     // aExp[k] = to_bfloat16(aRow[k]);
                     // bExp[k] = to_bfloat16(bRow[k]);
-                    float aExp = to_float(aRow[k]);
-                    float bExp = to_float(bRow[k]);
+                    float aExp = RVT_EMU_FP8::to_float(aRow[k]);
+                    float bExp = RVT_EMU_FP8::to_float(bRow[k]);
                     float cExp = aExp * bExp;
                     acc += cExp;
                 }
                 // double acc = 0;
                 // simsimd_dot_bf16(aExp, bExp, tcfg1->dim1, &acc);
                 // printf("m: %ld, n: %ld, f: %lf\n", m, n, acc);
-                c[n * tcfg3->stride1 + m] += acc;
+                c[n * tcfg3->stride1 + m] = acc;
             }
         }
     }

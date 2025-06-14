@@ -173,7 +173,7 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
                         //     printf("kernel_buffer[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&kernel_buffer[m_ii * realNTile + n_ii]);
                         //     printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
                         // }
-                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii * realNTile + n_ii] * scale;
+                        cF[ldc * real_n + real_m] += kernel_buffer[m_ii + n_ii * mTile] * scale;
                         // if(real_m == 0 && real_n == 0) {
                         //     printf("kernel_buffer[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&kernel_buffer[m_ii * realNTile + n_ii]);
                         //     printf("cF[m:%d,n:%d] = %x\n", real_m, real_n, *(int*)&cF[ldc * real_n + real_m]);
