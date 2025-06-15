@@ -5,6 +5,7 @@
         "*.x": "rust",
         "*.bsv": "bluespec",
         "*.gen": "c",
-        "random": "c"
+        "random": "c",
+        "stdint.h": "c"
     }
 }

@@ -6,15 +6,13 @@ typedef union {
   int32_t i32;
 } fp_bits_t;
 
-#define check(x, expect)                                                       \
-  if ((x) != (expect)) {                                                       \
-    printf("Error: %s:%d: (%d,%d) %s = %d, expected %d\n", __FILE__, __LINE__, \
-           m, n, #x, (x), (expect));                                           \
-    return -1;                                                                 \
-  }
+int isnan(float in) {
+  int v = *(int*)&in;
+  return (v & 0x7f000000) == 0x7f000000;
+}
 
 #define fp_check(x, expect, eps)                                               \
-  if ((x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
     fp_bits_t x_bits, expect_bits;                                             \
     x_bits.f32 = x;                                                            \
     expect_bits.f32 = expect;                                                  \
@@ -24,7 +22,7 @@ typedef union {
   }
 
 #define fp_check2(x, expect, eps)                                              \
-  if ((x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
     fp_bits_t x_bits, expect_bits;                                             \
     x_bits.f32 = x;                                                            \
     expect_bits.f32 = expect;                                                  \
