@@ -4,6 +4,7 @@
         "*.inc": "c",
         "*.x": "rust",
         "*.bsv": "bluespec",
-        "*.gen": "c"
+        "*.gen": "c",
+        "random": "c"
     }
 }

@@ -173,14 +173,21 @@ public:
 
 class RVTEnv {
     public:
+        char* aram;
         char* nram;
         long* tcsr;
         TCFG* tcfg;
         template <typename T>
         T* get_ptr(void* raw_ptr) {
             long lraw_ptr = (long)raw_ptr;
-            ASSERT(lraw_ptr < NRAM_SIZE);
-            return (T*)(nram + lraw_ptr);
+            if(lraw_ptr & (1ul << 31)) {
+                lraw_ptr = lraw_ptr & 0x1fffffff; // No High 4 bits
+                ASSERT(lraw_ptr < NRAM_SIZE);
+                return (T*)(aram + lraw_ptr);
+            } else {
+                ASSERT(lraw_ptr < NRAM_SIZE);
+                return (T*)(nram + lraw_ptr);
+            }
         }
 };
 extern RVTEnv* __rvt_env;
