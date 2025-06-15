@@ -1,10 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
-
-int isnan(float in) {
-    int v = *(int*)&in;
-    return (v & 0x7f000000) == 0x7f000000;
-}
+#include <math.h>
 
 #define check(x, expect)                                                                                     \
     if ((x) != (expect))                                                                                     \
@@ -14,16 +10,15 @@ int isnan(float in) {
     }
 
 #define fp_check(x, expect, eps)                                                               \
-    if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps))                                      \
+    if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps))                          \
     {                                                                                          \
         printf("Error: %s:%d: %s = %f, expected %f\n", __FILE__, __LINE__, #x, (x), (expect)); \
-        exit(-1);                                                                             \
     }
 
 #define fp_checkr(m, n, x, expect, eps)                                                                      \
-    if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps))                                                    \
+    if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps))                                        \
     {                                                                                                        \
-        printf("Error: %s:%d: (%d,%d) %s = %x, expected %x\n", __FILE__, __LINE__, m, n, #x, *(int*)&(x), *(int*)&(expect)); \
+        printf("Error: %s:%d: (%d,%d) %s = %f, expected %f\n", __FILE__, __LINE__, m, n, #x, (x), (expect)); \
     }
 
 extern long gmma_e4m3q_fp32_BT_QK32(void *a, void *b, void *c,

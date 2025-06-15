@@ -1,18 +1,14 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 
 typedef union {
   float f32;
   int32_t i32;
 } fp_bits_t;
 
-int isnan(float in) {
-  int v = *(int*)&in;
-  return (v & 0x7f000000) == 0x7f000000;
-}
-
 #define fp_check(x, expect, eps)                                               \
-  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {          \
     fp_bits_t x_bits, expect_bits;                                             \
     x_bits.f32 = x;                                                            \
     expect_bits.f32 = expect;                                                  \
@@ -22,7 +18,7 @@ int isnan(float in) {
   }
 
 #define fp_check2(x, expect, eps)                                              \
-  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {                      \
+  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {          \
     fp_bits_t x_bits, expect_bits;                                             \
     x_bits.f32 = x;                                                            \
     expect_bits.f32 = expect;                                                  \
