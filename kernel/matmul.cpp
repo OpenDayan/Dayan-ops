@@ -54,7 +54,8 @@ static inline void updateKTile(long kTile) {
                           log2ElementSizeC, matmulFunc)                        \
   template <long iTile, long jTile, long kTile, bool B_T, long NPUSize>        \
   __attribute__((always_inline)) static inline long name(                      \
-      void *a, void *b, void *c, int max_i, int max_j, int max_k) {            \
+      void *a, void *b, void *c, int max_i, int max_j, int max_k, int lda,     \
+      int ldb, int ldc) {                                                      \
     /* Setup TCFGs for compute */                                              \
     const long aTCFG = 0;                                                      \
     const long bTCFG = 1;                                                      \
@@ -67,21 +68,21 @@ static inline void updateKTile(long kTile) {
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM0>(kTile);                             \
     __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE0>(1);                              \
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM1>(iTile);                             \
-    __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE1>(max_k);                          \
+    __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE1>(lda);                            \
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM2>(1);                                 \
     __tx_tcsr_write<aTCFG * 8 + TCSR_DIM3>(1);                                 \
                                                                                \
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM0>(B_T ? kTile : jTile);               \
     __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE0>(1);                              \
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM1>(B_T ? jTile : kTile);               \
-    __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE1>(B_T ? max_k : max_j);            \
+    __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE1>(ldb);                            \
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM2>(1);                                 \
     __tx_tcsr_write<bTCFG * 8 + TCSR_DIM3>(1);                                 \
                                                                                \
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM0>(jTile);                             \
     __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE0>(1);                              \
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM1>(iTile);                             \
-    __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE1>(max_j);                          \
+    __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE1>(ldc);                            \
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);                                 \
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);                                 \
                                                                                \
@@ -133,7 +134,7 @@ static inline void updateKTile(long kTile) {
         __tx_fence();                                                          \
         /* Load C */                                                           \
         __tx_async_nram_load<cTCFG, cTileTCFG, log2ElementSizeC>(              \
-            (void *)((uint64_t)c + (max_j * i + j) * (1 << log2ElementSizeC)), \
+            (void *)((uint64_t)c + (ldc * i + j) * (1 << log2ElementSizeC)), \
             (void *)cTile);                                                    \
         updateKTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG,      \
                     B_T>(kTile);                                               \
@@ -146,14 +147,14 @@ static inline void updateKTile(long kTile) {
           /* load A */                                                         \
           __tx_async_nram_load<aTCFG, aTileTCFG, log2ElementSizeA>(            \
               (void *)((uint64_t)a +                                           \
-                       (max_k * i + k) * (1 << log2ElementSizeA)),             \
+                       (lda * i + k) * (1 << log2ElementSizeA)),             \
               (void *)aTile);                                                  \
           /* load B */                                                         \
           __tx_async_nram_load<bTCFG, bTileTCFG, log2ElementSizeB>(            \
               (void *)(B_T ? ((uint64_t)b +                                    \
-                              (max_k * j + k) * (1 << log2ElementSizeB))       \
+                              (ldb * j + k) * (1 << log2ElementSizeB))       \
                            : ((uint64_t)b +                                    \
-                              (max_j * k + j) * (1 << log2ElementSizeB))),     \
+                              (ldb * k + j) * (1 << log2ElementSizeB))),     \
               (void *)bTile);                                                  \
           __tx_fence();                                                        \
           /* Compute C = C + A x B */                                          \
@@ -165,7 +166,7 @@ static inline void updateKTile(long kTile) {
         __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(             \
             (void *)(cTile + acc_en_read_full_addr),                           \
             (void *)((uint64_t)c +                                             \
-                     (max_j * i + j) * (1 << log2ElementSizeC)));              \
+                     (ldc * i + j) * (1 << log2ElementSizeC)));              \
       }                                                                        \
     }                                                                          \
     __tx_fence();                                                              \
@@ -187,34 +188,38 @@ GEN_MATRIX_KERNEL(gmma_s8_s8_s32, 0, 0, 2, __tx_matmul_fix_s8_s8_s32)
 
 __device__ long gmma_e4m3_f32_16_16_16(void *a, void *b, void *c, int m, int n,
                                        int k, int lda, int ldb, int ldc) {
-  return gmma_e4m3_e4m3_f32<16, 16, 16, false, 4>(a, b, c, m, n, k);
+  return gmma_e4m3_e4m3_f32<16, 16, 16, false, 4>(a, b, c, m, n, k, lda, ldb,
+                                                  ldc);
 }
 
 __device__ long gmma_e4m3_bf16_16_16_16(void *a, void *b, void *c, int m, int n,
                                         int k, int lda, int ldb, int ldc) {
-  return gmma_e4m3_e4m3_bf16<16, 16, 16, false, 4>(a, b, c, m, n, k);
+  return gmma_e4m3_e4m3_bf16<16, 16, 16, false, 4>(a, b, c, m, n, k, lda, ldb,
+                                                   ldc);
 }
 
 __device__ long gmma_s8_s32_16_16_16(void *a, void *b, void *c, int m, int n,
                                      int k, int lda, int ldb, int ldc) {
-  return gmma_s8_s8_s32<16, 16, 16, false, 16>(a, b, c, m, n, k);
+  return gmma_s8_s8_s32<16, 16, 16, false, 16>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
 __device__ long gmma_e4m3_bf16_16_16_16_BT(void *a, void *b, void *c, int m,
                                            int n, int k, int lda, int ldb,
                                            int ldc) {
-  return gmma_e4m3_e4m3_bf16<16, 16, 16, true, 4>(a, b, c, m, n, k);
+  return gmma_e4m3_e4m3_bf16<16, 16, 16, true, 4>(a, b, c, m, n, k, lda, ldb,
+                                                  ldc);
 }
 
 __device__ long gmma_e4m3_f32_16_16_16_BT(void *a, void *b, void *c, int m,
                                           int n, int k, int lda, int ldb,
                                           int ldc) {
-  return gmma_e4m3_e4m3_f32<16, 16, 16, true, 4>(a, b, c, m, n, k);
+  return gmma_e4m3_e4m3_f32<16, 16, 16, true, 4>(a, b, c, m, n, k, lda, ldb,
+                                                 ldc);
 }
 
 __device__ long gmma_s8_s32_16_16_16_BT(void *a, void *b, void *c, int m, int n,
                                         int k, int lda, int ldb, int ldc) {
-  return gmma_s8_s8_s32<16, 16, 16, true, 16>(a, b, c, m, n, k);
+  return gmma_s8_s8_s32<16, 16, 16, true, 16>(a, b, c, m, n, k, lda, ldb, ldc);
 }
 
 extern "C" uint8_t __f32_to_e4m3(float f) {
