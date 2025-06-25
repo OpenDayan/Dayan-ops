@@ -3,19 +3,27 @@ CC  := gcc
 
 CXXFLAGS := -g -Wall -std=c++17
 
-BIN_DIR := bin
+BUILD_DIR := build
+
 COMMON_SOURCES := common.cpp
-TEST_SOURCES := $(wildcard ./test_*.cpp)
-TEST_OBJECTS := $(patsubst ./%.cpp, ./%.o, $(TEST_SOURCES))
-TEST_TARGETS := $(patsubst ./%.cpp, $(BIN_DIR)/%, $(TEST_SOURCES))
+TEST_SOURCES := $(wildcard test_*.cpp)
 
-.PHONY: all
+COMMON_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(COMMON_SOURCES))
+TEST_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(TEST_SOURCES))
 
-all: $(TEST_TARGETS)
+TARGETS := $(patsubst %.cpp, $(BUILD_DIR)/%, $(TEST_SOURCES))
 
-$(BIN_DIR)/%: %.cpp
-	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $< $(COMMON_SOURCES)
+
+.PHONY: all clean
+
+all: $(TARGETS)
+
+$(TARGETS): %: %.o $(COMMON_OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(COMMON_OBJ)
+
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BUILD_DIR)
