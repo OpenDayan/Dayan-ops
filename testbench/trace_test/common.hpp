@@ -9,6 +9,7 @@
 
 std::vector<float> readF32FromFile(const std::string& filename);
 std::vector<uint16_t> readUInt16FromFile(const std::string& filename);
+std::vector<int> readInt32FromFile(const std::string& filename);
 
 enum mrope {NORMAL, NEOX, VISION};
 
@@ -16,22 +17,22 @@ struct RopeParams{
     int n_dims;
     int mode;
     int n_ctx_orig;
-    double freq_base;
-    double freq_scale;
-    double ext_factor;
-    double attn_factor;
-    double beta_fast;
-    double beta_slow;
+    float freq_base;
+    float freq_scale;
+    float ext_factor;
+    float attn_factor;
+    float beta_fast;
+    float beta_slow;
     std::vector<int> sections;
 };
 
 struct NormParams{
-    double eps;
+    float eps;
 };
 
 struct SoftmaxParams{
-    double scale;
-    double max_bias;
+    float scale;
+    float max_bias;
 };
 
 struct TensorParams{
@@ -55,6 +56,7 @@ private:
     void parse_norm_kv(NormParams * rms, const std::string& key, const std::string& value);
     void parse_softmax_kv(SoftmaxParams * softmax, const std::string& key, const std::string& value);
     std::vector<int> parse_vector(const std::string& str);
+    float read_hex_float(const std::string& str);
 };
 
 #endif

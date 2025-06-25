@@ -122,11 +122,11 @@ int main(int argc, char * argv[]) {
         std::string dst_trace = "trace/mul/" + std::to_string(i) + "-f32-dst.trace";
         std::string src0_trace = "trace/mul/" + std::to_string(i) + "-f32-src0.trace";
         std::string src1_trace = "trace/mul/" + std::to_string(i) + "-f32-src1.trace";
+        parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
         if (!pdst.is_contiguous || !psrc0.is_contiguous || !psrc1.is_contiguous) {
             std::cerr << "[ERROR] Mul tests only support contiguous tensor now!" << std::endl;
             return 1;
         }
-        parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
         std::cout << "Testing Mul with trace." << i << " ------------------ ";
         test_mul(src0_trace, src1_trace, dst_trace, psrc0, psrc1);
     }

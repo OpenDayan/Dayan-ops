@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 // 从二进制文件中读取所有 float 数据
 std::vector<float> readF32FromFile(const std::string& filename) {
@@ -47,6 +48,30 @@ std::vector<uint16_t> readUInt16FromFile(const std::string& filename) {
     }
 
     std::vector<uint16_t> buffer(size / sizeof(uint16_t));
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        throw std::runtime_error("Error in reading file: " + filename);
+    }
+
+    return buffer;
+}
+
+std::vector<int> readInt32FromFile(const std::string& filename) {
+    // 以二进制模式打开文件，并定位到文件末尾
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        throw std::runtime_error("Open file failed: " + filename);
+    }
+
+    // 获取文件大小
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // 检查文件大小是否是 int 大小的整数倍
+    if (size % sizeof(int) != 0) {
+        throw std::runtime_error("Invalid trace file, file size cannot be divided by 4: " + filename);
+    }
+
+    std::vector<int> buffer(size / sizeof(int));
     if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
         throw std::runtime_error("Error in reading file: " + filename);
     }
@@ -147,26 +172,25 @@ void TraceParamsParser::parse_rope_kv(RopeParams * rope, const std::string& key,
     if (key == "n_dims") rope->n_dims = std::stoi(value);
     else if (key == "mode") rope->mode = std::stoi(value);
     else if (key == "n_ctx_orig") rope->n_ctx_orig = std::stoll(value);
-    else if (key == "freq_base") rope->freq_base = std::stod(value);
-    else if (key == "freq_scale") rope->freq_scale = std::stod(value);
-    else if (key == "ext_factor") rope->ext_factor = std::stod(value);
-    else if (key == "attn_factor") rope->attn_factor = std::stod(value);
-    else if (key == "beta_fast") rope->beta_fast = std::stod(value);
-    else if (key == "beta_slow") rope->beta_slow = std::stod(value);
+    else if (key == "freq_base") rope->freq_base = read_hex_float(value);
+    else if (key == "freq_scale") rope->freq_scale = read_hex_float(value);
+    else if (key == "ext_factor") rope->ext_factor = read_hex_float(value);
+    else if (key == "attn_factor") rope->attn_factor = read_hex_float(value);
+    else if (key == "beta_fast") rope->beta_fast = read_hex_float(value);
+    else if (key == "beta_slow") rope->beta_slow = read_hex_float(value);
     else if (key == "sections") rope->sections = parse_vector(value);
 }
 
 // 解析 RMSParams的键值对
 void TraceParamsParser::parse_norm_kv(NormParams * rms, const std::string& key, const std::string& value) {
     if(rms == nullptr) return;
-    if(key == "eps")
-        rms->eps = std::stod(value);
+    if(key == "eps") rms->eps = read_hex_float(value);
 }
 
 void TraceParamsParser::parse_softmax_kv(SoftmaxParams * softmax, const std::string& key, const std::string& value) {
     if (softmax == NULL) return;
-    if (key == "scale") softmax->scale = std::stod(value);
-    else if (key == "max_bias") softmax->max_bias = std::stod(value);
+    if (key == "scale") softmax->scale = read_hex_float(value);
+    else if (key == "max_bias") softmax->max_bias = read_hex_float(value);
 }
 
 std::vector<int> TraceParamsParser::parse_vector(const std::string& str) {
@@ -189,4 +213,15 @@ std::vector<int> TraceParamsParser::parse_vector(const std::string& str) {
         result.push_back(num);
     }
     return result;
+}
+
+float TraceParamsParser::read_hex_float(const std::string& str) {
+    size_t start = str.find("(0x");
+    size_t end = str.find(')', start);
+    std::string hexStr = str.substr(start + 3, end - start - 3);
+    uint32_t f_u32 = static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16));
+    float res = 0.0;
+    std::memcpy(&res, &f_u32, sizeof(float));
+    // printf("[INFO] catch float %f (0x%x)\n", res, f_u32);
+    return res;
 }
