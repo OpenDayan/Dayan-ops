@@ -114,6 +114,8 @@ int test_get_rows(std::string src0_trace, std::string src1_trace, std::string ds
             // FIXME: RUN KERNEL HERE
             //
             // --------------------------------------------
+            // kernel_get_rows_bf16(data_a, data_b, result_data, ...);
+            // --------------------------------------------
             //
             // FIXME: CPU reference
             get_rows_bf16(data_a, data_b, result_data, psrc0, psrc1, pdst);
@@ -129,6 +131,8 @@ int test_get_rows(std::string src0_trace, std::string src1_trace, std::string ds
 
             // FIXME: RUN KERNEL HERE
             //
+            // --------------------------------------------
+            // kernel_get_rows_f32(data_a, data_b, result_data, ...);
             // --------------------------------------------
             //
             // FIXME: CPU reference
@@ -183,21 +187,25 @@ int test_get_rows(std::string src0_trace, std::string src1_trace, std::string ds
 
 
 int main(int argc, char * argv[]) {
+    int test_num = 0;
+    if(argc < 2) {
+        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+        return 0;
+    } else {
+        test_num = std::stoi(argv[1]);
+        if (test_num > 1000) {
+            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
+            return 1;
+        }
+    }
     TraceParamsParser parser;
     TensorParams psrc0, psrc1, pdst;
     std::cout << ">>>>>>>>>>>>> Start Get_Rows test:" << std::endl;
-    for(int i = 0; i < 6; ++i) {
-        std::string a = "trace/get_rows/" + std::to_string(i);
-        std::string dst_trace = "trace/get_rows/" + std::to_string(i) + "-f32-dst.trace";
-        std::string src0_trace = "trace/get_rows/" + std::to_string(i);
-        if (i % 3 == 0) { // embeddings
-            a += "-bf16.txt";
-            src0_trace += "-bf16-src0.trace";
-        } else { // last layer
-            a += "-f32.txt";
-            src0_trace += "-f32-src0.trace";
-        }
-        std::string src1_trace = "trace/get_rows/" + std::to_string(i) + "-i32-src1.trace";
+    for(int i = 0; i < test_num; ++i) {
+        std::string a = "trace/get_rows/" + std::to_string(i) + "-params.txt";
+        std::string dst_trace = "trace/get_rows/" + std::to_string(i) + "-dst.trace";
+        std::string src0_trace = "trace/get_rows/" + std::to_string(i) + "-src0.trace";
+        std::string src1_trace = "trace/get_rows/" + std::to_string(i) + "-src1.trace";
         parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
         if (!pdst.is_contiguous || !psrc0.is_contiguous || !psrc1.is_contiguous) {
             std::cerr << "[ERROR] get_rows tests only support contiguous tensor now!" << std::endl;

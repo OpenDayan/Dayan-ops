@@ -8,6 +8,7 @@
 #include <fstream>
 
 std::vector<float> readF32FromFile(const std::string& filename);
+std::vector<uint8_t> readUInt8FromFile(const std::string& filename);
 std::vector<uint16_t> readUInt16FromFile(const std::string& filename);
 std::vector<int> readInt32FromFile(const std::string& filename);
 

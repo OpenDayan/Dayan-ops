@@ -47,6 +47,8 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
         // FIXME: RUN KERNEL HERE
         //
         // --------------------------------------------
+        // kernel_silu(data_a, result_data, ...);
+        // --------------------------------------------
         //
         // FIXME: CPU reference
         for (size_t i = 0; i < data_a.size(); ++i) {
@@ -84,13 +86,24 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
 }
 
 int main(int argc, char * argv[]) {
+    int test_num = 0;
+    if(argc < 2) {
+        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+        return 0;
+    } else {
+        test_num = std::stoi(argv[1]);
+        if (test_num > 1000) {
+            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
+            return 1;
+        }
+    }
     TraceParamsParser parser;
     TensorParams psrc0, pdst;
     std::cout << ">>>>>>>>>>>>> Start SiLU test:" << std::endl;
-    for(int i = 0; i < 20; ++i) {
-        std::string a = "trace/silu/" + std::to_string(i) + "-f32.txt";
-        std::string dst_trace = "trace/silu/" + std::to_string(i) + "-f32-dst.trace";
-        std::string src0_trace = "trace/silu/" + std::to_string(i) + "-f32-src0.trace";
+    for(int i = 0; i < test_num; ++i) {
+        std::string a = "trace/silu/" + std::to_string(i) + "-params.txt";
+        std::string dst_trace = "trace/silu/" + std::to_string(i) + "-dst.trace";
+        std::string src0_trace = "trace/silu/" + std::to_string(i) + "-src0.trace";
         parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
         if (!pdst.is_contiguous || !psrc0.is_contiguous) {
             std::cerr << "[ERROR] SiLU tests only support contiguous tensor now!" << std::endl;

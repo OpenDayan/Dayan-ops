@@ -31,6 +31,30 @@ std::vector<float> readF32FromFile(const std::string& filename) {
     return buffer;
 }
 
+std::vector<uint8_t> readUInt8FromFile(const std::string& filename) {
+    // 以二进制模式打开文件，并定位到文件末尾
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        throw std::runtime_error("Open file failed: " + filename);
+    }
+
+    // 获取文件大小
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // 检查文件大小是否是 uint8_t 大小的整数倍
+    if (size % sizeof(uint8_t) != 0) {
+        throw std::runtime_error("Invalid trace file, file size cannot be divided by 1: " + filename);
+    }
+
+    std::vector<uint8_t> buffer(size / sizeof(uint8_t));
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        throw std::runtime_error("Error in reading file: " + filename);
+    }
+
+    return buffer;
+}
+
 std::vector<uint16_t> readUInt16FromFile(const std::string& filename) {
     // 以二进制模式打开文件，并定位到文件末尾
     std::ifstream file(filename, std::ios::binary | std::ios::ate);

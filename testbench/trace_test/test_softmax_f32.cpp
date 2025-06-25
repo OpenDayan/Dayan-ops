@@ -94,6 +94,8 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
         // FIXME: Run kernel here
         //
         // --------------------------------------------
+        // kernel_sofmax(data_a, data_b, result_data, ...);
+        // --------------------------------------------
         //
         // FIXME: CPU reference (should be replaced)
         softmax(data_a, data_b, result_data, psrc0, psrc1, psoft);
@@ -141,15 +143,26 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
 }
 
 int main(int argc, char * argv[]) {
+    int test_num = 0;
+    if(argc < 2) {
+        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+        return 0;
+    } else {
+        test_num = std::stoi(argv[1]);
+        if (test_num > 1000) {
+            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
+            return 1;
+        }
+    }
     TraceParamsParser parser;
     TensorParams psrc0, psrc1, pdst;
     SoftmaxParams psoft;
     std::cout << ">>>>>>>>>>>>> Start Softmax test:" << std::endl;
-    for(int i = 0; i < 20; ++i) {
-        std::string a = "trace/softmax/" + std::to_string(i) + "-f32.txt";
-        std::string dst_trace = "trace/softmax/" + std::to_string(i) + "-f32-dst.trace";
-        std::string src0_trace = "trace/softmax/" + std::to_string(i) + "-f32-src0.trace";
-        std::string src1_trace = "trace/softmax/" + std::to_string(i) + "-f32-src1.trace";
+    for(int i = 0; i < test_num; ++i) {
+        std::string a = "trace/softmax/" + std::to_string(i) + "-params.txt";
+        std::string dst_trace = "trace/softmax/" + std::to_string(i) + "-dst.trace";
+        std::string src0_trace = "trace/softmax/" + std::to_string(i) + "-src0.trace";
+        std::string src1_trace = "trace/softmax/" + std::to_string(i) + "-src1.trace";
         parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, &psoft);
         if (psoft.max_bias != 0.0f) {
             std::cerr << "[ERROR] Softmax tests only support max_bias == 0.0f" << std::endl;

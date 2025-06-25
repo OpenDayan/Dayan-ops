@@ -101,6 +101,8 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
         // FIXME: RUN KERNEL HERE
         //
         // --------------------------------------------
+        // kernel_rope_f32(data_a, data_b, result_data, ...);
+        // --------------------------------------------
         //
         // FIXME: CPU reference
         rope_neox(data_a, data_b, result_data, psrc0, psrc1, pdst, prope);
@@ -150,15 +152,26 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
 }
 
 int main(int argc, char * argv[]) {
+    int test_num = 0;
+    if(argc < 2) {
+        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+        return 0;
+    } else {
+        test_num = std::stoi(argv[1]);
+        if (test_num > 1000) {
+            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
+            return 1;
+        }
+    }
     TraceParamsParser parser;
     TensorParams psrc0, psrc1, pdst;
     RopeParams prope;
     std::cout << ">>>>>>>>>>>>> Start RoPE test:" << std::endl;
-    for(int i = 0; i < 20; ++i) {
-        std::string a = "trace/rope/" + std::to_string(i) + "-f32.txt";
-        std::string dst_trace = "trace/rope/" + std::to_string(i) + "-f32-dst.trace";
-        std::string src0_trace = "trace/rope/" + std::to_string(i) + "-f32-src0.trace";
-        std::string src1_trace = "trace/rope/" + std::to_string(i) + "-i32-src1.trace";
+    for(int i = 0; i < test_num; ++i) {
+        std::string a = "trace/rope/" + std::to_string(i) + "-params.txt";
+        std::string dst_trace = "trace/rope/" + std::to_string(i) + "-dst.trace";
+        std::string src0_trace = "trace/rope/" + std::to_string(i) + "-src0.trace";
+        std::string src1_trace = "trace/rope/" + std::to_string(i) + "-src1.trace";
         parser.parse(a, &pdst, &psrc0, &psrc1, NULL, &prope, NULL);
         if (!pdst.is_contiguous || !psrc0.is_contiguous || !psrc1.is_contiguous) {
             std::cerr << "[ERROR] RoPE tests only support contiguous tensor now!" << std::endl;

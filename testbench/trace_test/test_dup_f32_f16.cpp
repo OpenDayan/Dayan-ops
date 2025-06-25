@@ -99,6 +99,8 @@ int test_dup(std::string src0_trace, std::string dst_trace, TensorParams & psrc0
         // FIXME: RUN KERNEL HERE
         //
         // --------------------------------------------
+        // kernel_dup_f32_f16(data_a, result_data, ...);
+        // --------------------------------------------
         //
         // FIXME: CPU reference
         if (psrc0.is_contiguous)
@@ -168,13 +170,24 @@ int test_dup(std::string src0_trace, std::string dst_trace, TensorParams & psrc0
 
 
 int main(int argc, char * argv[]) {
+    int test_num = 0;
+    if(argc < 2) {
+        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+        return 0;
+    } else {
+        test_num = std::stoi(argv[1]);
+        if (test_num > 1000) {
+            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
+            return 1;
+        }
+    }
     TraceParamsParser parser;
     TensorParams psrc0, pdst;
     std::cout << ">>>>>>>>>>>>> Start Add test:" << std::endl;
-    for(int i = 0; i < 20; ++i) {
-        std::string a = "trace/dup/" + std::to_string(i) + "-f32.txt";
-        std::string dst_trace = "trace/dup/" + std::to_string(i) + "-f16-dst.trace";
-        std::string src0_trace = "trace/dup/" + std::to_string(i) + "-f32-src0.trace";
+    for(int i = 0; i < test_num; ++i) {
+        std::string a = "trace/dup/" + std::to_string(i) + "-params.txt";
+        std::string dst_trace = "trace/dup/" + std::to_string(i) + "-dst.trace";
+        std::string src0_trace = "trace/dup/" + std::to_string(i) + "-src0.trace";
         parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
         if((psrc0.is_contiguous != pdst.is_contiguous) ||
            (psrc0.type != "f32") ||
