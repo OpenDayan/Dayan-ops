@@ -44,7 +44,6 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
             return 0;
         }
 
-        // std::cout << "\nTesting SiLU ..." << std::endl;
         std::vector<float> result_data;
         result_data.resize(data_a.size());
 

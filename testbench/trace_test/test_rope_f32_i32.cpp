@@ -95,7 +95,6 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
             return 0;
         }
 
-        // std::cout << "\nTesting SiLU ..." << std::endl;
         std::vector<float> result_data;
         result_data.resize(data_a.size());
 
