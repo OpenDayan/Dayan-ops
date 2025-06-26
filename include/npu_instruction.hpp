@@ -488,6 +488,121 @@ namespace NPUInstBuilder {
         (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
         ((long)rs1, (long)rs2, (long)rs3);
     }
+
+    enum __TX_INT_OP_ENUM{
+        TX_INT_ADD   = 0,
+        TX_INT_SUB   = 1,
+        TX_INT_MUL   = 2,
+        TX_INT_SRL   = 3,
+        TX_INT_SRA   = 4,
+        TX_INT_SLL   = 5,
+        TX_INT_LUTOP = 16, // 16 | LUT 
+    };
+    template <long op, long type, long broadcast, long tcfgrs1, long tcfgrs2, long tcfgrs3>
+    static inline void __tx_int_op_type(void* rs1, void* rs2, void* rs3)
+    {
+        __custom_64b_instruction3r<
+            (0b00001000ul << 56ul) | // func == 0000 1000
+            (op << 50ul)           | // op
+            (broadcast << 45ul)    | // broadcast
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (tcfgrs2 << 35ul)      |
+            (tcfgrs1 << 32ul)
+        >((long)rs1, (long)rs2, (long)rs3);
+    }
+
+    enum __TX_FP_OP_ENUM{
+        TX_FP_ADD   = 0,
+        TX_FP_SUB   = 1,
+        TX_FP_MUL   = 2
+    };
+    template <long op, long type, long broadcast, long tcfgrs1, long tcfgrs2, long tcfgrs3>
+    static inline void __tx_fp_op_type(void* rs1, void* rs2, void* rs3)
+    {
+        __custom_64b_instruction3r<
+            (0b00001001ul << 56ul) | // func == 0000 1001
+            (op << 50ul)           | // op
+            (broadcast << 45ul)    | // broadcast
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (tcfgrs2 << 35ul)      |
+            (tcfgrs1 << 32ul)
+        >((long)rs1, (long)rs2, (long)rs3);
+    }
+
+    template <long type, long log2Length, long tcfgrs1, long width, long tcfgrs3>
+    static inline void __tx_lut_int_type(void* rs1, void* rs2, void* rs3)
+    {
+        __custom_64b_instruction3r<
+            (0b00001010ul << 56ul) | // func == 0000 1010
+            (log2Length << 50ul)   | // log2Length
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (width << 35ul)        |
+            (tcfgrs1 << 32ul)
+        >((long)rs1, (long)rs2, (long)rs3);
+    }
+
+    template <long mode, long type, long log2Length, long tcfgrs1, long width, long tcfgrs3>
+    static inline void __tx_lut_fp_mode_type(void* rs1, void* rs2, void* rs3)
+    {
+        __custom_64b_instruction3r<
+            (0b00001011ul << 56ul) | // func == 0000 1011
+            (log2Length << 50ul)   | // log2Length
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (width << 35ul)        |
+            (tcfgrs1 << 32ul)      |
+            (mode << 25ul)
+        >((long)rs1, (long)rs2, (long)rs3);
+    }
+
+    template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
+    static inline void __tx_int_reduce_op_type(void* rs1, void* rs3)
+    {
+        __custom_64b_instruction2r<
+            (0b10001100ul << 56ul) | // func == 1000 1100
+            (op << 50ul)           | // op
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (tcfgrs1 << 32ul)      |
+            (dim << 25ul)
+        >((long)rs1, (long)rs3);
+    }
+
+    template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
+    static inline void __tx_fp_reduce_op_type(void* rs1, void* rs3)
+    {
+        __custom_64b_instruction2r<
+            (0b10001101ul << 56ul) | // func == 1000 1101
+            (op << 50ul)           | // op
+            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (tcfgrs1 << 32ul)      |
+            (dim << 25ul)
+        >((long)rs1, (long)rs3);
+    }
+
+    template <long rs1type, long rs3type, long mode, long tcfgrs1, long tcfgrs3>
+    static inline void __tx_convert_rs1type_rs3type_mode(void* rs1, void* rs3)
+    {
+        __custom_64b_instruction3r<
+            (0b10001110ul << 56ul) | // func == 1000 1110
+            (rs3type << 45ul)      |
+            (((rs1type >> 3) & 0b1111) << 41ul) | // Type-HI
+            (((rs1type >> 0) & 0b0111) << 12ul) | // Type-LO
+            (tcfgrs3 << 38ul)      |
+            (tcfgrs1 << 32ul)      |
+            (dim << 25ul)
+        >((long)rs1, (long)rs2, (long)rs3);
+    }
 }
 
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
