@@ -489,6 +489,23 @@ namespace NPUInstBuilder {
         ((long)rs1, (long)rs2, (long)rs3);
     }
 
+    enum __TX_ELEM_DTYPE_ENUM {
+        TX_SUBBYTE_FLOAT = 0,
+        TX_U8   = 0b1000000,
+        TX_S8   = 0b1000001,
+        TX_U16  = 0b1000010,
+        TX_S16  = 0b1000011,
+        TX_U32  = 0b1000100,
+        TX_S32  = 0b1000101,
+        TX_U64  = 0b1000110,
+        TX_S64  = 0b1000111,
+        TX_FP16 = 0b1001010,
+        TX_BF16 = 0b1001011,
+        TX_FP32 = 0b1001100,
+        TX_TF32 = 0b1001101,
+        TX_FP64 = 0b1001110
+    };
+
     enum __TX_INT_OP_ENUM{
         TX_INT_ADD   = 0,
         TX_INT_SUB   = 1,
@@ -498,8 +515,9 @@ namespace NPUInstBuilder {
         TX_INT_SLL   = 5,
         TX_INT_LUTOP = 16, // 16 | LUT 
     };
-    template <long op, long type, long broadcast, long tcfgrs1, long tcfgrs2, long tcfgrs3>
-    static inline void __tx_int_op_type(void* rs1, void* rs2, void* rs3)
+    template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
+    __attribute__((always_inline))
+    static inline void __tx_int_op_type(long rs1, long rs2, long rs3)
     {
         __custom_64b_instruction3r<
             (0b00001000ul << 56ul) | // func == 0000 1000
@@ -518,8 +536,9 @@ namespace NPUInstBuilder {
         TX_FP_SUB   = 1,
         TX_FP_MUL   = 2
     };
-    template <long op, long type, long broadcast, long tcfgrs1, long tcfgrs2, long tcfgrs3>
-    static inline void __tx_fp_op_type(void* rs1, void* rs2, void* rs3)
+    template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
+    __attribute__((always_inline))
+    static inline void __tx_fp_op_type(long rs1, long rs2, long rs3)
     {
         __custom_64b_instruction3r<
             (0b00001001ul << 56ul) | // func == 0000 1001
@@ -533,8 +552,9 @@ namespace NPUInstBuilder {
         >((long)rs1, (long)rs2, (long)rs3);
     }
 
-    template <long type, long log2Length, long tcfgrs1, long width, long tcfgrs3>
-    static inline void __tx_lut_int_type(void* rs1, void* rs2, void* rs3)
+    template <long type, long tcfgrs1, long width, long tcfgrs3, long log2Length>
+    __attribute__((always_inline))
+    static inline void __tx_lut_int_type(long rs1, long rs2, long rs3)
     {
         __custom_64b_instruction3r<
             (0b00001010ul << 56ul) | // func == 0000 1010
@@ -548,7 +568,8 @@ namespace NPUInstBuilder {
     }
 
     template <long mode, long type, long log2Length, long tcfgrs1, long width, long tcfgrs3>
-    static inline void __tx_lut_fp_mode_type(void* rs1, void* rs2, void* rs3)
+    __attribute__((always_inline))
+    static inline void __tx_lut_fp_mode_type(long rs1, long rs2, long rs3)
     {
         __custom_64b_instruction3r<
             (0b00001011ul << 56ul) | // func == 0000 1011
@@ -563,7 +584,8 @@ namespace NPUInstBuilder {
     }
 
     template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
-    static inline void __tx_int_reduce_op_type(void* rs1, void* rs3)
+    __attribute__((always_inline))
+    static inline void __tx_int_reduce_op_type(long rs1, long rs3)
     {
         __custom_64b_instruction2r<
             (0b10001100ul << 56ul) | // func == 1000 1100
@@ -577,7 +599,8 @@ namespace NPUInstBuilder {
     }
 
     template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
-    static inline void __tx_fp_reduce_op_type(void* rs1, void* rs3)
+    __attribute__((always_inline))
+    static inline void __tx_fp_reduce_op_type(long rs1, long rs3)
     {
         __custom_64b_instruction2r<
             (0b10001101ul << 56ul) | // func == 1000 1101
@@ -591,7 +614,8 @@ namespace NPUInstBuilder {
     }
 
     template <long rs1type, long rs3type, long mode, long tcfgrs1, long tcfgrs3>
-    static inline void __tx_convert_rs1type_rs3type_mode(void* rs1, void* rs3)
+    __attribute__((always_inline))
+    static inline void __tx_convert_rs1type_rs3type_mode(long rs1, long rs3)
     {
         __custom_64b_instruction3r<
             (0b10001110ul << 56ul) | // func == 1000 1110
@@ -687,6 +711,41 @@ static inline void __tx_fence() {
         "FENCE iorw, iorw"
     );
 }
+
+#define GENERATE_TX_INT_OP_TYPE(opname, op, typename, type) \
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast> \
+__attribute__((always_inline)) \
+static inline void __tx_int_##opname##_##typename(long rs1, long rs2, long rs3) { \
+    NPUInstBuilder::__tx_int_op_type< \
+        NPUInstBuilder::op, \
+        NPUInstBuilder::type, \
+        tcfgrs1, tcfgrs2, tcfgrs3, broadcast \
+        >(rs1, rs2, rs3); \
+}
+
+#define GENERATE_TX_FP_OP_TYPE(opname, op, typename, type) \
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast> \
+__attribute__((always_inline)) \
+static inline void __tx_fp_##opname##_##typename(long rs1, long rs2, long rs3) { \
+    NPUInstBuilder::__tx_fp_op_type< \
+        NPUInstBuilder::op, \
+        NPUInstBuilder::type, \
+        tcfgrs1, tcfgrs2, tcfgrs3, broadcast \
+        >(rs1, rs2, rs3); \
+}
+
+GENERATE_TX_INT_OP_TYPE(add,   TX_INT_ADD,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(sub,   TX_INT_SUB,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(mul,   TX_INT_MUL,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(srl,   TX_INT_SRL,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(sra,   TX_INT_SRA,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(sll,   TX_INT_SLL,   s32, TX_S32)
+GENERATE_TX_INT_OP_TYPE(lutop, TX_INT_LUTOP, s32, TX_S32)
+
+GENERATE_TX_FP_OP_TYPE(add, TX_FP_ADD, fp32, TX_FP32)
+GENERATE_TX_FP_OP_TYPE(sub, TX_FP_SUB, fp32, TX_FP32)
+GENERATE_TX_FP_OP_TYPE(mul, TX_FP_MUL, fp32, TX_FP32)
+
 #endif
 
 #endif
