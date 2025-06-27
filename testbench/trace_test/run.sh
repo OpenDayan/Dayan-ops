@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# --------------- Example1: single run -----------------
+# --------------- Example1: 运行单个trace测试 -----------------
 
 # Usage: ./test <TRACE SUB DIR> <TRACE ID>
 # ./build/test_add_f32 ./trace/decode10/add  0
 
-# --------------- Example2: batch run ----------------------
+# --------------- Example2: 对于一种算子批量运行测试 ----------------------
 
 # ===== CONFIG: =====
 # prefill seq-len
