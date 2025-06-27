@@ -625,7 +625,7 @@ namespace NPUInstBuilder {
             (tcfgrs3 << 38ul)      |
             (tcfgrs1 << 32ul)      |
             (mode << 25ul)
-        >((long)rs1 , (long)rs3);
+        >((long)rs1, (long)rs3);
     }
 }
 
