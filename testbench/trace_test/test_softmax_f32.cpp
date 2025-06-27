@@ -132,7 +132,9 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
         Done:
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
-        }
+            return 0;
+        } else
+            return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
@@ -143,33 +145,26 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
 }
 
 int main(int argc, char * argv[]) {
-    int test_num = 0;
-    if(argc < 2) {
-        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+    if(argc < 3) {
+        std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
-    } else {
-        test_num = std::stoi(argv[1]);
-        if (test_num > 1000) {
-            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
-            return 1;
-        }
     }
+
+    std::string trace_dir(argv[1]);
+    int trace_id = std::stoi(argv[2]);
+
     TraceParamsParser parser;
     TensorParams psrc0, psrc1, pdst;
     SoftmaxParams psoft;
-    std::cout << ">>>>>>>>>>>>> Start Softmax test:" << std::endl;
-    for(int i = 0; i < test_num; ++i) {
-        std::string a = "trace/softmax/" + std::to_string(i) + "-params.txt";
-        std::string dst_trace = "trace/softmax/" + std::to_string(i) + "-dst.trace";
-        std::string src0_trace = "trace/softmax/" + std::to_string(i) + "-src0.trace";
-        std::string src1_trace = "trace/softmax/" + std::to_string(i) + "-src1.trace";
-        parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, &psoft);
-        if (psoft.max_bias != 0.0f) {
-            std::cerr << "[ERROR] Softmax tests only support max_bias == 0.0f" << std::endl;
-            return 1;
-        }
-        std::cout << "Testing Softmax with trace." << i << " ------------------ ";
-        test_softmax(src0_trace, src1_trace, dst_trace, psrc0, psrc1, pdst, psoft);
+    std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
+    std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
+    std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
+    std::string src1_trace = trace_dir + "/" + std::to_string(trace_id) + "-src1.trace";
+    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, &psoft);
+    if (psoft.max_bias != 0.0f) {
+        std::cerr << "[ERROR] Softmax tests only support max_bias == 0.0f" << std::endl;
+        return 1;
     }
-    std::cout << "<<<<<<<<<<<<< Softmax test end" << std::endl;
+    std::cout << "Testing Softmax with trace." << trace_id << " ------------------ ";
+    return test_softmax(src0_trace, src1_trace, dst_trace, psrc0, psrc1, pdst, psoft);
 }

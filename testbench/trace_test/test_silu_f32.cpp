@@ -75,7 +75,9 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
 
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
-        }
+            return 0;
+        } else
+            return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
@@ -86,32 +88,24 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
 }
 
 int main(int argc, char * argv[]) {
-    int test_num = 0;
-    if(argc < 2) {
-        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+    if(argc < 3) {
+        std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
-    } else {
-        test_num = std::stoi(argv[1]);
-        if (test_num > 1000) {
-            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
-            return 1;
-        }
     }
+
+    std::string trace_dir(argv[1]);
+    int trace_id = std::stoi(argv[2]);
+
     TraceParamsParser parser;
     TensorParams psrc0, pdst;
-    std::cout << ">>>>>>>>>>>>> Start SiLU test:" << std::endl;
-    for(int i = 0; i < test_num; ++i) {
-        std::string a = "trace/silu/" + std::to_string(i) + "-params.txt";
-        std::string dst_trace = "trace/silu/" + std::to_string(i) + "-dst.trace";
-        std::string src0_trace = "trace/silu/" + std::to_string(i) + "-src0.trace";
-        parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
-        if (!pdst.is_contiguous || !psrc0.is_contiguous) {
-            std::cerr << "[ERROR] SiLU tests only support contiguous tensor now!" << std::endl;
-            return 1;
-        }
-        std::cout << "Testing SiLU with trace." << i << " ------------------ ";
-        test_silu(src0_trace, dst_trace, psrc0, pdst);
+    std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
+    std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
+    std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
+    parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
+    if (!pdst.is_contiguous || !psrc0.is_contiguous) {
+        std::cerr << "[ERROR] SiLU tests only support contiguous tensor now!" << std::endl;
+        return 1;
     }
-    std::cout << "<<<<<<<<<<<<< SiLU test end" << std::endl;
-    return 0;
+    std::cout << "Testing SiLU with trace." << trace_id << " ------------------ ";
+    return test_silu(src0_trace, dst_trace, psrc0, pdst);
 }

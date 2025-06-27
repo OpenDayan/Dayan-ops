@@ -157,7 +157,9 @@ int test_dup(std::string src0_trace, std::string dst_trace, TensorParams & psrc0
         Done:
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
-        }
+            return 0;
+        } else
+            return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
@@ -170,33 +172,26 @@ int test_dup(std::string src0_trace, std::string dst_trace, TensorParams & psrc0
 
 
 int main(int argc, char * argv[]) {
-    int test_num = 0;
-    if(argc < 2) {
-        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+    if(argc < 3) {
+        std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
-    } else {
-        test_num = std::stoi(argv[1]);
-        if (test_num > 1000) {
-            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
-            return 1;
-        }
     }
+
+    std::string trace_dir(argv[1]);
+    int trace_id = std::stoi(argv[2]);
+
     TraceParamsParser parser;
     TensorParams psrc0, pdst;
-    std::cout << ">>>>>>>>>>>>> Start Add test:" << std::endl;
-    for(int i = 0; i < test_num; ++i) {
-        std::string a = "trace/dup/" + std::to_string(i) + "-params.txt";
-        std::string dst_trace = "trace/dup/" + std::to_string(i) + "-dst.trace";
-        std::string src0_trace = "trace/dup/" + std::to_string(i) + "-src0.trace";
-        parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
-        if((psrc0.is_contiguous != pdst.is_contiguous) ||
-           (psrc0.type != "f32") ||
-           (pdst.type != "f16")) {
-            std::cerr << "[ERROR] Dup tests only support FP32 to FP16 test and src0.is_contiguous == dst.is_contiguous" << std::endl;
-            return 1;
-        }
-        std::cout << "Testing Dup with trace." << i << " ------------------ ";
-        test_dup(src0_trace, dst_trace, psrc0, pdst);
+    std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
+    std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
+    std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
+    parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
+    if((psrc0.is_contiguous != pdst.is_contiguous) ||
+        (psrc0.type != "f32") ||
+        (pdst.type != "f16")) {
+        std::cerr << "[ERROR] Dup tests only support FP32 to FP16 test and src0.is_contiguous == dst.is_contiguous" << std::endl;
+        return 1;
     }
-    std::cout << "<<<<<<<<<<<<< Dup test end" << std::endl;
+    std::cout << "Testing Dup with trace." << trace_id << " ------------------ ";
+    return test_dup(src0_trace, dst_trace, psrc0, pdst);
 }

@@ -177,7 +177,7 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::v
 
 int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_trace,
                 TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
-    // try {
+    try {
 
         std::vector<float> data_b = readF32FromFile(src1_trace);
         std::vector<float> data_ref = readF32FromFile(dst_trace);
@@ -257,52 +257,47 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         Done:
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
-        }
+            return 0;
+        } else
+            return 1;
 
-    // } catch (const std::exception& e) {
-    //     std::cerr << "FATAL ERROR: " << e.what() << std::endl;
-    //     return 1;
-    // }
+    } catch (const std::exception& e) {
+        std::cerr << "FATAL ERROR: " << e.what() << std::endl;
+        return 1;
+    }
 
     return 0;
 
 }
 
 int main(int argc, char * argv[]) {
-    int test_num = 0;
-    if(argc < 2) {
-        std::cout << "Usage: ./test <TRACE NUM>" << std::endl;
+    if(argc < 3) {
+        std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
-    } else {
-        test_num = std::stoi(argv[1]);
-        if (test_num > 1000) {
-            std::cerr << "[ERROR] Trace num " << test_num << "exceeds limit (1000)" << std::endl;
-            return 1;
-        }
     }
+
+    std::string trace_dir(argv[1]);
+    int trace_id = std::stoi(argv[2]);
+
     TraceParamsParser parser;
     TensorParams psrc0, psrc1, pdst;
-    std::cout << ">>>>>>>>>>>>> Start Matmul test:" << std::endl;
-    for(int i = 0; i < test_num; ++i) {
-        std::string a = "trace/matmul/" + std::to_string(i) + "-params.txt";
-        std::string dst_trace = "trace/matmul/" + std::to_string(i) + "-dst.trace";
-        std::string src0_trace = "trace/matmul/" + std::to_string(i) + "-src0.trace";
-        std::string src1_trace = "trace/matmul/" + std::to_string(i) + "-src1.trace";
-        parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
-        if (!pdst.is_contiguous) {
-            std::cerr << "[ERROR] matmul tests only support contiguous result tensor now!" << std::endl;
-            return 1;
-        }
-        if ((psrc0.type != "f16") && (psrc0.type != "fp8_e4m3_q")) {
-            std::cerr << "[ERROR] matmul tests only support FP16/E4M3Q type in src0 tensor!" << std::endl;
-            return 1;
-        }
-        if ((psrc1.type != "f32") || (pdst.type != "f32")) {
-            std::cerr << "[ERROR] matmul tests only support F32 type in src1/dst tensor!" << std::endl;
-            return 1;
-        }
-        std::cout << "Testing Matmul with trace." << i << " ------------------ ";
-        test_matmul(src0_trace, src1_trace, dst_trace, psrc0, psrc1, pdst);
+    std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
+    std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
+    std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
+    std::string src1_trace = trace_dir + "/" + std::to_string(trace_id) + "-src1.trace";
+    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
+    if (!pdst.is_contiguous) {
+        std::cerr << "[ERROR] matmul tests only support contiguous result tensor now!" << std::endl;
+        return 1;
     }
-    std::cout << "<<<<<<<<<<<<< Matmul test end" << std::endl;
+    if ((psrc0.type != "f16") && (psrc0.type != "fp8_e4m3_q")) {
+        std::cerr << "[ERROR] matmul tests only support FP16/E4M3Q type in src0 tensor!" << std::endl;
+        return 1;
+    }
+    if ((psrc1.type != "f32") || (pdst.type != "f32")) {
+        std::cerr << "[ERROR] matmul tests only support F32 type in src1/dst tensor!" << std::endl;
+        return 1;
+    }
+    std::cout << "Testing Matmul with trace." << trace_id << " ------------------ ";
+    return test_matmul(src0_trace, src1_trace, dst_trace, psrc0, psrc1, pdst);
 }
