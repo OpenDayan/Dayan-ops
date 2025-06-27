@@ -613,6 +613,11 @@ namespace NPUInstBuilder {
         >((long)rs1, (long)rs3);
     }
 
+    enum __TX_CONVERT_MODE{
+        TX_CONVERT_ROUND = 0,
+        TX_CONVERT_FLOOR = 1,
+        TX_CONVERT_CEIL  = 2
+    }
     template <long rs1type, long rs3type, long mode, long tcfgrs1, long tcfgrs3>
     __attribute__((always_inline))
     static inline void __tx_convert_rs1type_rs3type_mode(long rs1, long rs3)
@@ -749,6 +754,27 @@ GENERATE_TX_INT_OP_TYPE(lutop, TX_INT_LUTOP, s32, TX_S32)
 GENERATE_TX_FP_OP_TYPE(add, TX_FP_ADD, fp32, TX_FP32)
 GENERATE_TX_FP_OP_TYPE(sub, TX_FP_SUB, fp32, TX_FP32)
 GENERATE_TX_FP_OP_TYPE(mul, TX_FP_MUL, fp32, TX_FP32)
+
+#undef GENERATE_TX_INT_OP_TYPE
+#undef GENERATE_TX_FP_OP_TYPE
+
+#define GENERATE_TX_CONVERT(rs1typename, rs1type, rs3typename, rs3type, modename, mode) \
+__attribute__((always_inline)) \
+static inline void __tx_convert_##rs1typename##_##rs3typename##modename(long rs1, long rs3) { \
+    NPUInstBuilder::__tx_convert_rs1type_rs3type_mode< \
+        NPUInstBuilder::rs1type, \
+        NPUInstBuilder::rs2type, \
+        mode \
+        tcfgrs1, tcfgrs3 \
+        >(rs1, rs3); \
+}
+
+GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _round, TX_CONVERT_ROUND)
+GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _floor, TX_CONVERT_FLOOR)
+GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _ceil , TX_CONVERT_CEIL)
+GENERATE_TX_CONVERT(s32 , TX_S32 , fp32, TX_FP32,       , TX_CONVERT_ROUND)
+
+#undef GENERATE_TX_CONVERT
 
 #endif
 
