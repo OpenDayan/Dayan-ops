@@ -624,8 +624,8 @@ namespace NPUInstBuilder {
             (((rs1type >> 0) & 0b0111) << 12ul) | // Type-LO
             (tcfgrs3 << 38ul)      |
             (tcfgrs1 << 32ul)      |
-            (dim << 25ul)
-        >((long)rs1, (long)rs2, (long)rs3);
+            (mode << 25ul)
+        >((long)rs1 , (long)rs3);
     }
 }
 
@@ -652,7 +652,11 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
 {
     NPUInstBuilder::__tx_matmul<0x0, 0b011100, 0b011100, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
 }
-
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_matmul_float_f32_f32_f32(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_matmul<0x1, 0b10, 0b10, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 __attribute__((always_inline))
 static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3, long& rd) {
