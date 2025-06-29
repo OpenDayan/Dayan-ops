@@ -1,5 +1,5 @@
-M = 8
-N = 16
+M = 16
+N = 32
 
 def export_matrix(name, matrix):
     matrix = matrix.flatten()
@@ -16,10 +16,8 @@ with open("generated/elementwise_int_size.gen", "w") as f:
 import numpy as np
 np.random.seed(0)
 a = np.random.rand(M, N)
-a = (a * 256 - 128)
 a = a.astype(np.int32)
 b = np.random.rand(M, N)
-b = (b * 256 - 128)
 b = b.astype(np.int32)
 c = a + b
 c.astype(np.int32)
