@@ -67,3 +67,36 @@ __device__ void tx_int_mul_s32(void *input0, void *input1, void *dst, int m,
   __tx_fence();
   // TODO: copy output from nram
 }
+
+__device__ void tx_fp_add_fp32(void *input0, void *input1, void *dst, int m,
+                               int n) {
+
+  configTCSRs(m, n);
+  __tx_fence();
+  // TODO: copy inputs to nram
+  __tx_fp_add_fp32<0, 1, 2, 0>((void *)input0, (void *)input1, (void *)dst);
+  __tx_fence();
+  // TODO: copy output from nram
+}
+
+__device__ void tx_fp_sub_fp32(void *input0, void *input1, void *dst, int m,
+                               int n) {
+
+  configTCSRs(m, n);
+  __tx_fence();
+  // TODO: copy inputs to nram
+  __tx_fp_sub_fp32<0, 1, 2, 0>((void *)input0, (void *)input1, (void *)dst);
+  __tx_fence();
+  // TODO: copy output from nram
+}
+
+__device__ void tx_fp_mul_fp32(void *input0, void *input1, void *dst, int m,
+                               int n) {
+
+  configTCSRs(m, n);
+  __tx_fence();
+  // TODO: copy inputs to nram
+  __tx_fp_mul_fp32<0, 1, 2, 0>((void *)input0, (void *)input1, (void *)dst);
+  __tx_fence();
+  // TODO: copy output from nram
+}

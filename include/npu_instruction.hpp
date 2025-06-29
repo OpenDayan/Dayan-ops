@@ -538,7 +538,7 @@ namespace NPUInstBuilder {
     };
     template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
     __attribute__((always_inline))
-    static inline void __tx_fp_op_type(long rs1, long rs2, long rs3)
+    static inline void __tx_fp_op_type(void* rs1, void* rs2, void* rs3)
     {
         __custom_64b_instruction3r<
             (0b00001001ul << 56ul) | // func == 0000 1001
