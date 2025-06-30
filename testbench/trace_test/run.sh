@@ -3,7 +3,7 @@
 # --------------- Example1: 运行单个trace测试 -----------------
 
 # Usage: ./test <TRACE SUB DIR> <TRACE ID>
-# ./build/test_add_f32 ./trace/decode10/add  0
+# ./build/test_add ./trace/decode10/add  0
 
 # --------------- Example2: 对于一种算子批量运行测试 ----------------------
 
@@ -28,7 +28,7 @@ op_name=softmax
 # get_rows: 3
 op_num_per_step=28
 # 编译后的测试程序 (与 op_name 算子类型一致)
-test_bin=./build/test_softmax_f32
+test_bin=./build/test_softmax
 
 
 # ===== RUN: =====
