@@ -14,6 +14,13 @@
 
 #include "common.hpp"
 
+#define QK 256
+
+struct block_e4m3_q{
+    float scale;
+    uint8_t data[QK];
+};
+
 static inline float fp32_from_bits(uint32_t w) {
     union {
         uint32_t as_bits;
@@ -72,17 +79,21 @@ uint16_t fp32_to_fp16(float f) {
     return (sign >> 16) | (shl1_w > UINT32_C(0xFF000000) ? UINT16_C(0x7E00) : nonsign);
 }
 
+union fp32_int32 {
+    float f;
+    uint32_t bits;
+};
+
 float e4m3q_to_float(uint8_t h) {
-    uint32_t out_u32 = 0;
-    float out_f32 = 0.0f;
-    out_u32 = h & 0x80;
-    out_u32 <<= 24;
+    fp32_int32 out = {0};
+    out.bits = h & 0x80;
+    out.bits <<= 24;
     uint32_t h_bits = h & 0x7F;
     h_bits <<= (23 - 3); // 23 - FP8::M (M==3 in e4m3q)
-    out_u32 |= h_bits;
+    out.bits |= h_bits;
     // 2^(127 - FP8::E_BIAS)
-    out_f32 *= std::pow(2, 127 - 7); // E==4 in e4m3q, so E_BIAS = 2^(E-1) - 1 = 7
-    return out_f32;
+    out.f *= std::pow(2, 127 - 7); // E==4 in e4m3q, so E_BIAS = 2^(E-1) - 1 = 7
+    return out.f;
 }
 
 void matmul_f16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::vector<float>& res,
@@ -134,11 +145,8 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::v
     int bs = psrc1.ne[3];
     int h = psrc1.ne[2];
 
-    // dim(0) and dim(1) only broadcast from src0 to src1
-    int rbs = psrc1.ne[3] / psrc0.ne[3];
-    int rj = psrc1.ne[2] / psrc0.ne[2];
-    assert(psrc1.ne[3] >= psrc0.ne[3]);
-    assert(psrc1.ne[2] >= psrc0.ne[2]);
+    assert(psrc1.ne[3] == psrc0.ne[3]);
+    assert(psrc1.ne[2] == psrc0.ne[2]);
 
     // src0 shape: (bs0, h0, n, k)
     // src1 shape: (bs, h, m, k)
@@ -147,30 +155,41 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::v
     int m = psrc1.ne[1];
     int k = psrc1.ne[0];
     assert(psrc1.ne[0] == psrc0.ne[0]);
-
-    #define QK 256
     assert(k % QK == 0);
 
     for (int i = 0; i < bs; ++i)
         for (int j = 0; j < h; ++j) {
-            // broadcast in dim(0)
-            int i0 = i / rbs;
-            // broadcase in dim(1)
-            int j0 = j / rj;
-
-            // b[i][j][:][:] * a[i0][j0][:][:]^T
             for (int p = 0; p < m; ++p)
                 for (int l = 0; l < n; ++l) {
-                    float val = 0.0;
-                    // res[i][j][p][l] += b[i][j][p][:] * a[i0][j0][l][:]^T
+                    float dot_sum = 0.0; // DOT SUM
+
+                    // a_t = &a[i][j][l][0]
+                    uint8_t * a_t = (uint8_t *)(a.data()) + i*psrc0.nb[3] + j*psrc0.nb[2] + l*psrc0.nb[1];
+
+                    // vector-dot loop
+                    // res[i][j][p][l] = b[i][j][p][:] * a[i0][j0][l][:]^T
                     for (int ib = 0; ib < k/QK; ++ib) {
-                        float sum = 0.0f;
+                        float block_sum = 0.0f; // BLOCK_SUM
+
+                        float scale = *((float *)a_t); // BLOCK_SCALE (a[i][j][l][B:B+4])
+                        a_t += sizeof(float);
+
+
+                        // in-block loop
                         for (int x = 0; x < QK; ++x) {
-                            // TODO:
+                            // a[i][j][p][B+4+x]
+                            float ea = e4m3q_to_float(a_t[x]);
+                            // b[i][j][p][ib*QK+x]
+                            float eb = b[(i*psrc1.nb[3] + j*psrc1.nb[2] + p*psrc1.nb[1] + (ib*QK + x)*psrc1.nb[0]) / sizeof(float)];
+
+                            block_sum += ea * eb;
                         }
-                        // TODO: val += sum * scale
+                        // a_t = &a[i][j][l][B_next]
+                        a_t += QK;
+
+                        dot_sum += scale * block_sum;
                     }
-                    res[i*h*m*n + j*m*n + p*n + l] = val;
+                    res[i*h*m*n + j*m*n + p*n + l] = dot_sum;
                 }
         }
 }
@@ -203,8 +222,8 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
 
         } else if (psrc0.type == "fp8_e4m3_q") {
             // TODO: pass
-            std::cout << "matmul fp8_e4m3_q is skipped" << std::endl;
-            return 0;
+            // std::cout << "matmul fp8_e4m3_q is skipped" << std::endl;
+            // return 0;
             std::vector<uint8_t> data_a = readUInt8FromFile(src0_trace);
             if (data_a.empty()) {
                 std::cout << "[WARNING] src0 data is empty!" << std::endl;
