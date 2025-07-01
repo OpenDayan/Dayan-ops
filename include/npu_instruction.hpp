@@ -757,7 +757,16 @@ GENERATE_TX_INT_OP_TYPE(mul,   TX_INT_MUL,   s32, TX_S32)
 GENERATE_TX_INT_OP_TYPE(srl,   TX_INT_SRL,   s32, TX_S32)
 GENERATE_TX_INT_OP_TYPE(sra,   TX_INT_SRA,   s32, TX_S32)
 GENERATE_TX_INT_OP_TYPE(sll,   TX_INT_SLL,   s32, TX_S32)
-GENERATE_TX_INT_OP_TYPE(lutop, TX_INT_LUTOP, s32, TX_S32)
+
+template <long lutop, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
+__attribute__((always_inline))
+static inline void __tx_int_lutop_s32(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_int_op_type<
+        NPUInstBuilder::TX_INT_LUTOP | lutop,
+        NPUInstBuilder::TX_S32,
+        tcfgrs1, tcfgrs2, tcfgrs3, broadcast
+        >(rs1, rs2, rs3);
+}
 
 GENERATE_TX_FP_OP_TYPE(add, TX_FP_ADD, fp32, TX_FP32)
 GENERATE_TX_FP_OP_TYPE(sub, TX_FP_SUB, fp32, TX_FP32)
