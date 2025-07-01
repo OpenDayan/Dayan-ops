@@ -135,3 +135,90 @@ __device__ void tx_fp_mul_fp32(void *input0, void *input1, void *dst, int m,
   __tx_async_nram_store<aTCFG, cTCFG, 2>((void *)nram2, dst);
   __tx_fence();
 }
+
+__device__ void tx_fp_reduce_max_fp32(void *input0,  void *dst, int m,
+                               int n, const int axis) {
+
+  configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(input0, (void *)nram0);
+  if (axis == 0) // reduce on dim0, so the result should be m x 1
+    configTCSRs(1, m);
+  if (axis  == 1)  // reduce on dim1, so the result should be 1 x n
+    configTCSRs(n, 1);
+
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
+  __tx_fence();
+
+  configTCSRs(n, m);
+  if (axis == 0)
+     __tx_fp_reduce_max_fp32<aTCFG, cTCFG, 0>((void *)nram0, (void *)nram2);
+  if (axis  == 1)
+     __tx_fp_reduce_max_fp32<aTCFG, cTCFG, 1>((void *)nram0, (void *)nram2);
+
+  __tx_fence();
+
+  if (axis == 0)
+    configTCSRs(1, m);
+  if (axis  == 1)
+    configTCSRs(n, 1);
+  __tx_async_nram_store<aTCFG, cTCFG, 2>((void *)nram2, dst);
+  __tx_fence();
+}
+
+__device__ void tx_fp_reduce_min_fp32(void *input0,  void *dst, int m,
+                               int n, const int axis) {
+
+  configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(input0, (void *)nram0);
+  if (axis == 0) // reduce on dim0, so the result should be m x 1
+    configTCSRs(1, m);
+  if (axis  == 1)  // reduce on dim1, so the result should be 1 x n
+    configTCSRs(n, 1);
+
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
+  __tx_fence();
+
+  configTCSRs(n, m);
+  if (axis == 0)
+     __tx_fp_reduce_min_fp32<aTCFG, cTCFG, 0>((void *)nram0, (void *)nram2);
+  if (axis  == 1)
+     __tx_fp_reduce_min_fp32<aTCFG, cTCFG, 1>((void *)nram0, (void *)nram2);
+
+  __tx_fence();
+
+  if (axis == 0)
+    configTCSRs(1, m);
+  if (axis  == 1)
+    configTCSRs(n, 1);
+  __tx_async_nram_store<aTCFG, cTCFG, 2>((void *)nram2, dst);
+  __tx_fence();
+}
+
+__device__ void tx_fp_reduce_add_fp32(void *input0,  void *dst, int m,
+                               int n, const int axis) {
+
+  configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(input0, (void *)nram0);
+  if (axis == 0) // reduce on dim0, so the result should be m x 1
+    configTCSRs(1, m);
+  if (axis  == 1)  // reduce on dim1, so the result should be 1 x n
+    configTCSRs(n, 1);
+
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
+  __tx_fence();
+
+  configTCSRs(n, m);
+  if (axis == 0)
+     __tx_fp_reduce_add_fp32<aTCFG, cTCFG, 0>((void *)nram0, (void *)nram2);
+  if (axis  == 1)
+     __tx_fp_reduce_add_fp32<aTCFG, cTCFG, 1>((void *)nram0, (void *)nram2);
+
+  __tx_fence();
+
+  if (axis == 0)
+    configTCSRs(1, m);
+  if (axis  == 1)
+    configTCSRs(n, 1);
+  __tx_async_nram_store<aTCFG, cTCFG, 2>((void *)nram2, dst);
+  __tx_fence();
+}

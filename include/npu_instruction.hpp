@@ -476,7 +476,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_matmul(void* rs1, void* rs2, void* rs3, long& rd)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
         (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
         ((long)rs1, (long)rs2, (long)rs3, rd);
     }
@@ -484,7 +484,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_matmul(void* rs1, void* rs2, void* rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
         (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
         ((long)rs1, (long)rs2, (long)rs3);
     }
@@ -519,7 +519,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_int_op_type(void* rs1, void* rs2, void* rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
             (0b00001000ul << 56ul) | // func == 0000 1000
             (op << 50ul)           | // op
             (broadcast << 45ul)    | // broadcast
@@ -536,11 +536,18 @@ namespace NPUInstBuilder {
         TX_FP_SUB   = 1,
         TX_FP_MUL   = 2
     };
+
+    enum __TX_FP_REDUCE_ENUM{
+        TX_FP_MAX   = 0,
+        TX_FP_MIN   = 1,
+        TX_FP_SUM   = 2
+    };
+
     template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
     __attribute__((always_inline))
     static inline void __tx_fp_op_type(void* rs1, void* rs2, void* rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
             (0b00001001ul << 56ul) | // func == 0000 1001
             (op << 50ul)           | // op
             (broadcast << 45ul)    | // broadcast
@@ -556,7 +563,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_lut_int_type(long rs1, long rs2, long rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
             (0b00001010ul << 56ul) | // func == 0000 1010
             (log2Length << 50ul)   | // log2Length
             (((type >> 3) & 0b1111) << 41ul) | // Type-HI
@@ -571,7 +578,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_lut_fp_mode_type(long rs1, long rs2, long rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
             (0b00001011ul << 56ul) | // func == 0000 1011
             (log2Length << 50ul)   | // log2Length
             (((type >> 3) & 0b1111) << 41ul) | // Type-HI
@@ -585,9 +592,9 @@ namespace NPUInstBuilder {
 
     template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
     __attribute__((always_inline))
-    static inline void __tx_int_reduce_op_type(long rs1, long rs3)
+    static inline void __tx_int_reduce_op_type(void* rs1, void* rs3)
     {
-        __custom_64b_instruction2r<
+        NPUInstBuilder::__custom_64b_instruction2r<
             (0b10001100ul << 56ul) | // func == 1000 1100
             (op << 50ul)           | // op
             (((type >> 3) & 0b1111) << 41ul) | // Type-HI
@@ -600,17 +607,16 @@ namespace NPUInstBuilder {
 
     template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
     __attribute__((always_inline))
-    static inline void __tx_fp_reduce_op_type(long rs1, long rs3)
+    static inline void __tx_fp_reduce_op_type(void* rs1, void* rs3)
     {
-        __custom_64b_instruction2r<
-            (0b10001101ul << 56ul) | // func == 1000 1101
+         constexpr long encoding =  (0b10001101ul << 56ul) | // func == 1000 1101
             (op << 50ul)           | // op
             (((type >> 3) & 0b1111) << 41ul) | // Type-HI
             (((type >> 0) & 0b0111) << 12ul) | // Type-LO
             (tcfgrs3 << 38ul)      |
             (tcfgrs1 << 32ul)      |
-            (dim << 25ul)
-        >((long)rs1, (long)rs3);
+            (dim << 25ul);
+            NPUInstBuilder::__custom_64b_instruction2r<encoding>((long)rs1, (long)rs3);
     }
 
     enum __TX_CONVERT_MODE{
@@ -622,7 +628,7 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_convert_rs1type_rs3type_mode(long rs1, long rs3)
     {
-        __custom_64b_instruction3r<
+        NPUInstBuilder::__custom_64b_instruction3r<
             (0b10001110ul << 56ul) | // func == 1000 1110
             (rs3type << 45ul)      |
             (((rs1type >> 3) & 0b1111) << 41ul) | // Type-HI
@@ -680,6 +686,8 @@ static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000110 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
 }
+
+
 template <long tcfgrs1, long tcfgrs3, long log2w>
 __attribute__((always_inline))
 static inline void __tx_async_nram_load(void* rs1, void* rs3) {
@@ -776,6 +784,21 @@ GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _ceil , TX_CONVERT_CEIL)
 GENERATE_TX_CONVERT(s32 , TX_S32 , fp32, TX_FP32,       , TX_CONVERT_ROUND)
 
 #undef GENERATE_TX_CONVERT
+
+#define GENERATE_TX_FP_REDUCE_TYPE(opname, op, typename, type) \
+template <long tcfgrs1, long tcfgrs3, long dim> \
+__attribute__((always_inline)) \
+static inline void __tx_fp_reduce_##opname##_##typename(void* rs1,  void* rs3) { \
+NPUInstBuilder::__tx_fp_reduce_op_type< \
+    NPUInstBuilder::op, \
+    NPUInstBuilder::type, \
+    tcfgrs1, tcfgrs3, dim \
+    >(rs1, rs3); \
+}
+
+GENERATE_TX_FP_REDUCE_TYPE(max, TX_FP_MAX, fp32, TX_FP32)
+GENERATE_TX_FP_REDUCE_TYPE(min, TX_FP_MIN, fp32, TX_FP32)
+GENERATE_TX_FP_REDUCE_TYPE(add, TX_FP_SUM, fp32, TX_FP32)
 
 #endif
 
