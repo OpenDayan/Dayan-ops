@@ -36,6 +36,9 @@ c_srl = srl_s32(a, d)
 c_sra = sra_s32(a, d)
 c_sll = sll_s32(a, d)
 
+c_and = a & b
+c_or  = a | b
+c_xor = a ^ b
 
 export_matrix("generated/elementwise_int_a_row", a)
 export_matrix("generated/elementwise_int_b_row", b)
@@ -46,3 +49,6 @@ export_matrix("generated/elementwise_int_c_mul_row", c_mul)
 export_matrix("generated/elementwise_int_c_srl_row", c_srl)
 export_matrix("generated/elementwise_int_c_sra_row", c_sra)
 export_matrix("generated/elementwise_int_c_sll_row", c_sll)
+export_matrix("generated/elementwise_int_c_and_row", c_and)
+export_matrix("generated/elementwise_int_c_or_row", c_or)
+export_matrix("generated/elementwise_int_c_xor_row", c_xor)
