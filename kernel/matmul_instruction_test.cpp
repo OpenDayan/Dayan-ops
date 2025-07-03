@@ -4,13 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-const long aTCFG = 0;
-const long bTCFG = 1;
-const long cTCFG = 2;
+static const long aTCFG = 0;
+static const long bTCFG = 1;
+static const long cTCFG = 2;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+static const uint64_t nram0 = 0x1000000;
+static const uint64_t nram1 = 0x2000000;
+static const uint64_t nram2 = 0x3000000;
 
 static inline void config_row_major_tcsr0(int m, int n) {
   __tx_tcsr_write<aTCFG * 8 + TCSR_DIM0>(m);
