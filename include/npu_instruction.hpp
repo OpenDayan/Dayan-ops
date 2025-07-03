@@ -138,20 +138,6 @@ namespace RVT_EMU_FP8 {
     }
 }
 
-#ifdef __EMULATED_RVT_EXT__
-// #include <simsimd/simsimd.h>
-#define MAX_KTILE 256
-#define MAX_MTILE 32
-#define MAX_NTILE 32
-extern "C" void exit(int code);
-#define ASSERT(x) \
-    do { \
-        if (!(x)) { \
-            printf("Assertion failed: %s\n", #x); \
-            exit(1); \
-        } \
-    } while (0)
-
 class TCFG{
 public:
     long dim0;
@@ -173,17 +159,31 @@ public:
     }
 };
 
+#ifdef __EMULATED_RVT_EXT__
+// #include <simsimd/simsimd.h>
+#define MAX_KTILE 256
+#define MAX_MTILE 32
+#define MAX_NTILE 32
+extern "C" void exit(int code);
+#define ASSERT(x) \
+    do { \
+        if (!(x)) { \
+            printf("Assertion failed: %s\n", #x); \
+            exit(1); \
+        } \
+    } while (0)
+
 class RVTEnv {
     public:
         char* aram;
-        char* nram;
+        b char* nram;
         long* tcsr;
         TCFG* tcfg;
         template <typename T>
         T* get_ptr(void* raw_ptr) {
             long lraw_ptr = (long)raw_ptr;
             if(lraw_ptr & (1ul << 31)) {
-                lraw_ptr = lraw_ptr & 0x1fffffff; // No High 4 bits
+                lraw_ptr = lraw_ptr & 0x1fffffff; // No High 4its
                 ASSERT(lraw_ptr < NRAM_SIZE);
                 return (T*)(aram + lraw_ptr);
             } else {
