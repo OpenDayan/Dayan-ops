@@ -74,16 +74,16 @@ static inline void config_dims_and_strides(TCFG *tcsr) {
 __device__ void tx_int_add_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
   config_dims_and_strides(tcsr);
-  // __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
-  // __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  // __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
-  // __tx_fence();
+  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
+  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_fence();
 
-  // __tx_int_add_s32<0, 1, 2, 0>((void *)nram0, (void *)nram1, (void *)nram2);
-  // __tx_fence();
+  __tx_int_add_s32<0, 1, 2, 0>((void *)nram0, (void *)nram1, (void *)nram2);
+  __tx_fence();
 
-  // __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
-  // __tx_fence();
+  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_fence();
 }
 
 __device__ void tx_int_sub_s32(void *input0, void *input1, void *dst, int m,
