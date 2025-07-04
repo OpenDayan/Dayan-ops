@@ -1,4 +1,4 @@
-M = 16
+M = 64
 N = 32
 
 def export_matrix(name, matrix):

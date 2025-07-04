@@ -1,4 +1,4 @@
-M = 16
+M = 64
 N = 32
 
 def export_matrix(name, matrix):
@@ -40,6 +40,19 @@ c_and = a & b
 c_or  = a | b
 c_xor = a ^ b
 
+b_row = np.random.randint(-50, 50, size=(1, N), dtype=np.int32)
+c_add_row_bcast = a + b_row
+c_mul_row_bcast = a * b_row
+
+b_col = np.random.randint(-50, 50, size=(M, 1), dtype=np.int32)
+c_sub_col_bcast = a - b_col
+c_or_col_bcast = a | b_col
+
+scalar = np.random.randint(-10, 10, dtype=np.int32)
+c_mul_scalar_bcast = a * scalar
+c_xor_scalar_bcast = a ^ scalar
+
+
 export_matrix("generated/elementwise_int_a_row", a)
 export_matrix("generated/elementwise_int_b_row", b)
 export_matrix("generated/elementwise_int_shift_row", d)
@@ -52,3 +65,13 @@ export_matrix("generated/elementwise_int_c_sll_row", c_sll)
 export_matrix("generated/elementwise_int_c_and_row", c_and)
 export_matrix("generated/elementwise_int_c_or_row", c_or)
 export_matrix("generated/elementwise_int_c_xor_row", c_xor)
+
+export_matrix("generated/broadcast_b_row", b_row)
+export_matrix("generated/broadcast_c_add_row_bcast", c_add_row_bcast)
+export_matrix("generated/broadcast_c_mul_row_bcast", c_mul_row_bcast)
+export_matrix("generated/broadcast_b_col", b_col)
+export_matrix("generated/broadcast_c_sub_col_bcast", c_sub_col_bcast)
+export_matrix("generated/broadcast_c_or_col_bcast", c_or_col_bcast)
+export_matrix("generated/broadcast_scalar", np.array([scalar]))
+export_matrix("generated/broadcast_c_mul_scalar_bcast", c_mul_scalar_bcast)
+export_matrix("generated/broadcast_c_xor_scalar_bcast", c_xor_scalar_bcast)
