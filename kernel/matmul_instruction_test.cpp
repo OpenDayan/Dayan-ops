@@ -204,12 +204,10 @@ __device__ void matmul_fp16_fp16_fp32_row_row(void *input0, void *input1, void *
                                       int m, int n, int k) {
 
   config_row_major_tcsr0(m, k);
-  config_row_major_tcsr2(m, k);
-  __tx_async_nram_load<aTCFG, cTCFG, 2>(input0, (void *)nram0);
+  __tx_async_nram_load<aTCFG, aTCFG, 2>(input0, (void *)nram0);
 
   config_row_major_tcsr0(k, n);
-  config_row_major_tcsr2(k, n);
-  __tx_async_nram_load<aTCFG, cTCFG, 2>(input1, (void *)nram1);
+  __tx_async_nram_load<aTCFG, aTCFG, 2>(input1, (void *)nram1);
 
   config_row_major_tcsr0(m, n);
   config_row_major_tcsr2(m, n);
@@ -223,9 +221,34 @@ __device__ void matmul_fp16_fp16_fp32_row_row(void *input0, void *input1, void *
                                          (void *)nram2);
 
   config_row_major_tcsr0(m, n);
+  __tx_fence();
+  __tx_async_nram_store<aTCFG, aTCFG, 2>((void *)nram2, dst);
+  __tx_fence();
+}
+
+__device__ void matmul_bf16_bf16_fp32_row_row(void *input0, void *input1, void *dst,
+                                      int m, int n, int k) {
+
+  config_row_major_tcsr0(m, k);
+  __tx_async_nram_load<aTCFG, aTCFG, 2>(input0, (void *)nram0);
+
+  config_row_major_tcsr0(k, n);
+  __tx_async_nram_load<aTCFG, aTCFG, 2>(input1, (void *)nram1);
+
+  config_row_major_tcsr0(m, n);
+  config_row_major_tcsr2(m, n);
+  __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
+
+  config_row_major_tcsr0(m, k);
+  config_row_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
-  __tx_async_nram_store<aTCFG, cTCFG, 2>((void *)nram2, dst);
+  __tx_matmul_float_bf16_bf16_f32<0, 1, 2>((void *)nram0, (void *)nram1,
+                                         (void *)nram2);
+
+  config_row_major_tcsr0(m, n);
+  __tx_fence();
+  __tx_async_nram_store<aTCFG, aTCFG, 2>((void *)nram2, dst);
   __tx_fence();
 }
 

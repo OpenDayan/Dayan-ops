@@ -680,6 +680,11 @@ static inline void __tx_matmul_float_fp16_fp16_f32(void* rs1, void* rs2, void* r
 }
 template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
 __attribute__((always_inline))
+static inline void __tx_matmul_float_bf16_bf16_f32(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_matmul<0x1, 0b01, 0b01, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
 static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3, long& rd) {
     NPUInstBuilder::__tx_matmul<0b00000010, 7, 7, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3, rd);
 }
