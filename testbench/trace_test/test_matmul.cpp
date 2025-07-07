@@ -58,6 +58,15 @@ float fp16_to_fp32(uint16_t h) {
     return fp32_from_bits(result);
 }
 
+float bf16_to_fp32(uint16_t h) {
+    union {
+        float value;
+        uint32_t bits;
+    } fp32;
+    fp32.bits = (static_cast<uint32_t>(h) << 16);
+    return fp32.value;
+}
+
 uint16_t fp32_to_fp16(float f) {
     const float scale_to_inf = fp32_from_bits(UINT32_C(0x77800000));
     const float scale_to_zero = fp32_from_bits(UINT32_C(0x08800000));
@@ -79,6 +88,21 @@ uint16_t fp32_to_fp16(float f) {
     return (sign >> 16) | (shl1_w > UINT32_C(0xFF000000) ? UINT16_C(0x7E00) : nonsign);
 }
 
+uint16_t fp32_to_bf16(float f) {
+    uint16_t res;
+    union {
+        float value;
+        uint32_t bits;
+    } fp32;
+    fp32.value = f;
+    if ((fp32.bits & 0x7fffffff) > 0x7f800000) { /* nan */
+        res = (fp32.bits >> 16) | 64; /* force to quiet */
+        return res;
+    }
+    res = (fp32.bits + (0x7fff + ((fp32.bits >> 16) & 1))) >> 16;
+    return res;
+}
+
 union fp32_int32 {
     float f;
     uint32_t bits;
@@ -96,7 +120,7 @@ float e4m3q_to_float(uint8_t h) {
     return out.f;
 }
 
-void matmul_f16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::vector<float>& res,
+void matmul_bf16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::vector<float>& res,
                         TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
     int bs = psrc1.ne[3];
     int h = psrc1.ne[2];
@@ -131,8 +155,8 @@ void matmul_f16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::ve
                     for (int x = 0; x < k; ++x) {
                         uint16_t ea = a[(i0*psrc0.nb[3] + j0*psrc0.nb[2] + l*psrc0.nb[1] + x*psrc0.nb[0]) / sizeof(uint16_t)];
                         float eb = b[(i*psrc1.nb[3] + j*psrc1.nb[2] + p*psrc1.nb[1] + x*psrc1.nb[0]) / sizeof(float)];
-                        // b[...] is converted to fp16 then converted to fp32
-                        val += (double)(fp16_to_fp32(ea) * fp16_to_fp32(fp32_to_fp16(eb)));
+                        // b[...] is converted to bf16 then converted to fp32
+                        val += (double)(bf16_to_fp32(ea) * bf16_to_fp32(fp32_to_bf16(eb)));
                     }
                     // double to float cast
                     res[i*h*m*n + j*m*n + p*n + l] = val;
@@ -204,7 +228,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         std::vector<float> result_data;
         result_data.resize(psrc0.ne[1] * psrc1.ne[1] * psrc1.ne[2] * psrc1.ne[3]);
 
-        if (psrc0.type == "f16") {
+        if (psrc0.type == "bf16") {
             std::vector<uint16_t> data_a = readUInt16FromFile(src0_trace);
             if (data_a.empty()) {
                 std::cout << "[WARNING] src0 data is empty!" << std::endl;
@@ -214,11 +238,11 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // FIXME: RUN KERNEL HERE
             //
             // --------------------------------------
-            // kernel_matmul_f16_f32_f32(data_a, data_b, result_data, ...);
+            // kernel_matmul_bf16_f32_f32(data_a, data_b, result_data, ...);
             // --------------------------------------
             //
             // FIXME: CPU reference
-            matmul_f16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else if (psrc0.type == "fp8_e4m3_q") {
             // TODO: pass
@@ -309,8 +333,8 @@ int main(int argc, char * argv[]) {
         std::cerr << "[ERROR] matmul tests only support contiguous result tensor now!" << std::endl;
         return 1;
     }
-    if ((psrc0.type != "f16") && (psrc0.type != "fp8_e4m3_q")) {
-        std::cerr << "[ERROR] matmul tests only support FP16/E4M3Q type in src0 tensor!" << std::endl;
+    if ((psrc0.type != "bf16") && (psrc0.type != "fp8_e4m3_q")) {
+        std::cerr << "[ERROR] matmul tests only support BF16/E4M3Q type in src0 tensor!" << std::endl;
         return 1;
     }
     if ((psrc1.type != "f32") || (pdst.type != "f32")) {
