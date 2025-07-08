@@ -508,7 +508,8 @@ namespace NPUInstBuilder {
         TX_BF16 = 0b1001011,
         TX_FP32 = 0b1001100,
         TX_TF32 = 0b1001101,
-        TX_FP64 = 0b1001110
+        TX_FP64 = 0b1001110,
+        TX_E4M3 = 0b0011100
     };
 
     enum __TX_INT_OP_ENUM{
@@ -631,17 +632,16 @@ namespace NPUInstBuilder {
     };
     template <long rs1type, long rs3type, long mode, long tcfgrs1, long tcfgrs3>
     __attribute__((always_inline))
-    static inline void __tx_convert_rs1type_rs3type_mode(long rs1, long rs3)
+    static inline void __tx_convert_rs1type_rs3type_mode(void* rs1, void* rs3)
     {
-        NPUInstBuilder::__custom_64b_instruction3r<
-            (0b10001110ul << 56ul) | // func == 1000 1110
+         constexpr long encoding =  (0b10001110ul << 56ul) | // func == 1000 1110
             (rs3type << 45ul)      |
             (((rs1type >> 3) & 0b1111) << 41ul) | // Type-HI
             (((rs1type >> 0) & 0b0111) << 12ul) | // Type-LO
             (tcfgrs3 << 38ul)      |
             (tcfgrs1 << 32ul)      |
-            (mode << 25ul)
-        >((long)rs1, (long)rs3);
+            (mode << 25ul);
+            NPUInstBuilder::__custom_64b_instruction2r<encoding>((long)rs1, (long)rs3);
     }
 }
 
@@ -793,7 +793,7 @@ GENERATE_TX_FP_OP_TYPE(mul, TX_FP_MUL, fp32, TX_FP32)
 #define GENERATE_TX_CONVERT(rs1typename, rs1type, rs3typename, rs3type, modename, mode) \
 template <long tcfgrs1, long tcfgrs3> \
 __attribute__((always_inline)) \
-static inline void __tx_convert_##rs1typename##_##rs3typename##modename(long rs1, long rs3) { \
+static inline void __tx_convert_##rs1typename##_##rs3typename##modename(void* rs1, void* rs3) { \
     NPUInstBuilder::__tx_convert_rs1type_rs3type_mode< \
         NPUInstBuilder::rs1type, \
         NPUInstBuilder::rs3type, \
@@ -805,6 +805,9 @@ static inline void __tx_convert_##rs1typename##_##rs3typename##modename(long rs1
 GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _round, TX_CONVERT_ROUND)
 GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _floor, TX_CONVERT_FLOOR)
 GENERATE_TX_CONVERT(fp32, TX_FP32, s32 , TX_S32 , _ceil , TX_CONVERT_CEIL)
+GENERATE_TX_CONVERT(fp32, TX_FP32, e4m3, TX_E4M3 , _round, TX_CONVERT_ROUND)
+GENERATE_TX_CONVERT(fp32, TX_FP32, fp16, TX_FP16 , _round, TX_CONVERT_ROUND)
+GENERATE_TX_CONVERT(fp32, TX_FP32, bf16, TX_BF16 , _round, TX_CONVERT_ROUND)
 GENERATE_TX_CONVERT(s32 , TX_S32 , fp32, TX_FP32,       , TX_CONVERT_ROUND)
 
 #undef GENERATE_TX_CONVERT
