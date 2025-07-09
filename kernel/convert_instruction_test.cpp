@@ -114,3 +114,17 @@ __device__ void tx_convert_fp32_bf16_round(void *input, void *output,
   __tx_async_nram_store<bTCSR, bTCSR, 1>((void *)nram1, output);
   __tx_fence();
 }
+
+__device__ void tx_convert_s32_fp32(void *input, void *output,
+                                      TCFG *tcsr) {
+
+  config_dims_and_strides(tcsr);
+  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
+  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void *)nram1);
+  __tx_fence();
+  __tx_convert_s32_fp32<0, 1>((void *)nram0, (void *)nram1);
+  __tx_fence();
+
+  __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram1, output);
+  __tx_fence();
+}
