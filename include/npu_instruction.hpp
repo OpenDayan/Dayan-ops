@@ -549,6 +549,12 @@ namespace NPUInstBuilder {
         TX_FP_SUM   = 2
     };
 
+    enum __TX_INT_REDUCE_ENUM{
+        TX_INT_MAX   = 0,
+        TX_INT_MIN   = 1,
+        TX_INT_SUM   = 2
+    };
+
     template <long op, long type, long tcfgrs1, long tcfgrs2, long tcfgrs3, long broadcast>
     __attribute__((always_inline))
     static inline void __tx_fp_op_type(void* rs1, void* rs2, void* rs3)
@@ -600,15 +606,14 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_int_reduce_op_type(void* rs1, void* rs3)
     {
-        NPUInstBuilder::__custom_64b_instruction2r<
-            (0b10001100ul << 56ul) | // func == 1000 1100
+         constexpr long encoding = (0b10001100ul << 56ul) | // func == 1000 1100
             (op << 50ul)           | // op
             (((type >> 3) & 0b1111) << 41ul) | // Type-HI
             (((type >> 0) & 0b0111) << 12ul) | // Type-LO
             (tcfgrs3 << 38ul)      |
             (tcfgrs1 << 32ul)      |
-            (dim << 25ul)
-        >((long)rs1, (long)rs3);
+            (dim << 25ul);
+        NPUInstBuilder::__custom_64b_instruction2r<encoding>((long)rs1, (long)rs3);
     }
 
     template <long op, long type, long tcfgrs1, long tcfgrs3, long dim>
@@ -826,6 +831,20 @@ NPUInstBuilder::__tx_fp_reduce_op_type< \
 GENERATE_TX_FP_REDUCE_TYPE(max, TX_FP_MAX, fp32, TX_FP32)
 GENERATE_TX_FP_REDUCE_TYPE(min, TX_FP_MIN, fp32, TX_FP32)
 GENERATE_TX_FP_REDUCE_TYPE(add, TX_FP_SUM, fp32, TX_FP32)
+
+#define GENERATE_TX_INT_REDUCE_TYPE(opname, op, typename, type) \
+template <long tcfgrs1, long tcfgrs3, long dim> \
+__attribute__((always_inline)) \
+static inline void __tx_int_reduce_##opname##_##typename(void* rs1,  void* rs3) { \
+NPUInstBuilder::__tx_int_reduce_op_type< \
+    NPUInstBuilder::op, \
+    NPUInstBuilder::type, \
+    tcfgrs1, tcfgrs3, dim \
+    >(rs1, rs3); \
+}
+GENERATE_TX_INT_REDUCE_TYPE(max, TX_INT_MAX, s32, TX_S32)
+GENERATE_TX_INT_REDUCE_TYPE(min, TX_INT_MIN, s32, TX_S32)
+GENERATE_TX_INT_REDUCE_TYPE(add, TX_INT_SUM, s32, TX_S32)
 
 #endif
 

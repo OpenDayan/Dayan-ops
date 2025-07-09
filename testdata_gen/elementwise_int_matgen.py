@@ -23,6 +23,10 @@ c_add = a + b
 c_sub = a - b
 c_mul = a * b
 
+c_max = np.max(a, axis=0)
+c_min = np.min(a, axis=0)
+c_sum = np.sum(a, axis=0)
+
 def srl_s32(a, b):
     return ((a.astype(np.int64) & 0xFFFFFFFF) >> b).astype(np.int32)
 
@@ -65,6 +69,10 @@ export_matrix("generated/elementwise_int_c_sll_row", c_sll)
 export_matrix("generated/elementwise_int_c_and_row", c_and)
 export_matrix("generated/elementwise_int_c_or_row", c_or)
 export_matrix("generated/elementwise_int_c_xor_row", c_xor)
+
+export_matrix("generated/elementwise_int_c_max_row", c_max)
+export_matrix("generated/elementwise_int_c_min_row", c_min)
+export_matrix("generated/elementwise_int_c_sum_row", c_sum)
 
 export_matrix("generated/broadcast_b_row", b_row)
 export_matrix("generated/broadcast_c_add_row_bcast", c_add_row_bcast)
