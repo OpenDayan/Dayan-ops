@@ -573,7 +573,7 @@ namespace NPUInstBuilder {
 
     template <long type, long tcfgrs1, long width, long tcfgrs3, long log2Length>
     __attribute__((always_inline))
-    static inline void __tx_lut_int_type(long rs1, long rs2, long rs3)
+    static inline void __tx_lut_int_type(void* rs1, void *rs2, void* rs3)
     {
         NPUInstBuilder::__custom_64b_instruction3r<
             (0b00001010ul << 56ul) | // func == 0000 1010
@@ -846,6 +846,16 @@ GENERATE_TX_INT_REDUCE_TYPE(max, TX_INT_MAX, s32, TX_S32)
 GENERATE_TX_INT_REDUCE_TYPE(min, TX_INT_MIN, s32, TX_S32)
 GENERATE_TX_INT_REDUCE_TYPE(add, TX_INT_SUM, s32, TX_S32)
 
+#define GENERATE_TX_LUT_INT_TYPE(typename, type) \
+template <long tcfgrs1, long width, long tcfgrs3, long log2Length> \
+__attribute__((always_inline)) \
+static inline void __tx_lut_int_##typename(void* rs1,  void *rs2, void* rs3) { \
+NPUInstBuilder::__tx_lut_int_type< \
+    NPUInstBuilder::type, \
+    tcfgrs1, width,  tcfgrs3, log2Length \
+    >(rs1, rs2, rs3); \
+}
+GENERATE_TX_LUT_INT_TYPE(s32, TX_S32)
 #endif
 
 #endif
