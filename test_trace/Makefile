@@ -13,8 +13,8 @@ TEST_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(TEST_SOURCES))
 
 TARGETS := $(patsubst %.cpp, $(BUILD_DIR)/%, $(TEST_SOURCES))
 
-CFLAGS := -g -Wall -O3 -std=c11 -I$(RUNTIME_DIR)/include
-CXXFLAGS := -g -Wall -O3 -std=c++17 -I$(RUNTIME_DIR)/include
+CFLAGS := -g -Wall -std=c11 -I$(RUNTIME_DIR)/include
+CXXFLAGS := -g -Wall -std=c++17 -I$(RUNTIME_DIR)/include
 
 .PHONY: all clean $(KERNEL_PACK)
 
