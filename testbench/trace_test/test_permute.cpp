@@ -2,19 +2,22 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-
+#include <iomanip>
 void permute_f32_2_1(std::vector<float>& a, std::vector<float>& res, TensorParams& pa, TensorParams& pres, PermuteParams& ppermute) {
     int bs = pa.ne[3];
     int n = pa.ne[2];
     int h = pa.ne[1];
+    int w = pa.ne[0];
+
+    int row_size = w * sizeof(float);
 
     for (int i = 0; i < bs; ++i) {
         for (int j = 0; j < n; ++j) {
             for (int k = 0; k < h; ++k) {
                 // Copy a[i][j][k][:] to res[i][k][j][:]
                 const char * a_ptr = (char *)a.data() + k*pa.nb[1] + j*pa.nb[2] + i*pa.nb[3];
-                size_t id = k*n*h + j*h;
-                std::memcpy((char *)res.data() + id, a_ptr, h);
+                size_t id = (k*n + j) * row_size;
+                std::memcpy((char *)res.data() + id, a_ptr, row_size);
             }
         }
     }
@@ -42,6 +45,42 @@ int test_permute_f32(std::string src0_trace, std::string dst_trace, TensorParams
         // --------------------------------------------
         // FIXME: CPU reference
         permute_f32_2_1(data_a, result_data, psrc0, pdst, ppermute);
+
+
+        const float epsilon = 1e-6f;
+        bool all_match = true;
+
+        int bs = pdst.ne[3];
+        int h = pdst.ne[2];
+        int n = pdst.ne[1];
+        int m = pdst.ne[0];
+        for (int i = 0; i < bs; ++i) {
+            for (int j = 0; j < h; ++j) {
+                for (int k = 0; k < n; ++k) {
+                    for (int p = 0; p < m; ++p) {
+                        float result = result_data[i*h*n*m + j*n*m + k*m + p];
+                        float ref = data_ref[i*h*n*m + j*n*m + k*m + p];
+                        if (std::abs(result - ref) > epsilon) {
+                            std::cerr << std::fixed << std::setprecision(8);
+                            std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
+                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p << "]:    "
+                                    << result << std::endl;
+                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p << "]:    "
+                                    << ref << std::endl;
+                            std::cerr << "  - result - ref:        " << std::abs(result - ref) << std::endl;
+                            all_match = false;
+                            goto Done;
+                        }
+                    }
+                }
+            }
+        }
+        Done:
+        if (all_match) {
+            std::cout << " *** Compare PASS ***" << std::endl;
+            return 0;
+        } else
+            return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
@@ -76,7 +115,7 @@ int main(int argc, char * argv[]) {
         std::cerr << "[ERROR] Permute tests only support (b, n, h, w) -> (b, h, n, w) permute" << std::endl;
         return 1;
     }
-    std::cout << "Testing Permute/Transpose with trace." << trace_id << " ------------------ ";
+    std::cout << "Testing Permute with trace." << trace_id << " ------------------ ";
 
     // TODO: is_transpose
     return test_permute_f32(src0_trace, dst_trace, psrc0, pdst, ppermute);
