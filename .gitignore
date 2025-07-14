@@ -7,3 +7,5 @@
 *.ipynb
 *.bin
 *.packed.c
+build
+example_trace
