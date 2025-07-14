@@ -26,9 +26,8 @@ op_name=softmax
 # softmax:  28
 # rope:     56
 # get_rows: 3
+# permute:  56
 op_num_per_step=28
-# 编译后的测试程序 (与 op_name 算子类型一致)
-test_bin=./build/test_softmax
 
 
 # ===== RUN: =====
@@ -37,7 +36,7 @@ run_test() {
     local trace_sub_dir=$2
     local trace_num=$3
     for ((i=0; i<$op_num_per_step; i++)); do
-        $test_bin $trace_sub_dir $i > /dev/null;
+        ./build/test_${op_name} $trace_sub_dir $i > /dev/null;
         ret=$?
         if [ $ret -eq 0 ]; then
             if (( i % 20 == 0 )); then

@@ -162,33 +162,6 @@ void dup_cont_f32_cont_f32(std::vector<float>& a, std::vector<float>& res, Tenso
     }
 }
 
-// non-contiguous f32 copy to contiguous f32 (in prefill stage)
-void dup_no_cont_f32_cont_f32(std::vector<float>& a, std::vector<float>& res, TensorParams& pa, TensorParams& pres) {
-    if((pa.ne[3] != pres.ne[3]) ||
-       (pa.ne[3] != pres.ne[3]) ||
-       (pa.ne[3] != pres.ne[3]) ||
-       (pa.ne[3] != pres.ne[3])) {
-        std::cerr << "[ERROR] Non-contiguous fp32 and contiguous fp32 tensor has different shape" << std::endl;
-        return;
-    }
-    int bs = pa.ne[3];
-    int h = pa.ne[2];
-    int n = pa.ne[1];
-    int m = pa.ne[0];
-    for (int i = 0; i < bs; ++i) {
-        for (int j = 0; j < h; ++j) {
-            for (int k = 0; k < n; ++k) {
-                for (int p = 0; p < m; ++p) {
-                    res[i*h*n*m + j*n*m + k*m + p] = a[i*pa.nb[3]/sizeof(float) +
-                                                       j*pa.nb[2]/sizeof(float) +
-                                                       k*pa.nb[1]/sizeof(float) +
-                                                       p*pa.nb[0]/sizeof(float)];
-                }
-            }
-        }
-    }
-}
-
 
 
 int test_dup_f32_to_bf16(std::string src0_trace, std::string dst_trace, TensorParams & psrc0, TensorParams & pdst) {
@@ -307,15 +280,7 @@ int test_dup_f32_to_f32(std::string src0_trace, std::string dst_trace, TensorPar
         // --------------------------------------------
         //
         // FIXME: CPU reference
-        if (psrc0.is_contiguous && pdst.is_contiguous)
-            dup_cont_f32_cont_f32(data_a, result_data, psrc0, pdst);
-        else if (!psrc0.is_contiguous && pdst.is_contiguous)
-            dup_no_cont_f32_cont_f32(data_a, result_data, psrc0, pdst);
-        else {
-            std::cerr << "Not supported src0.is_contiguous=" << psrc0.is_contiguous <<
-                         ", dst.is_contiguous=" << pdst.is_contiguous << std::endl;
-            return 1;
-        }
+        dup_cont_f32_cont_f32(data_a, result_data, psrc0, pdst);
 
         // std::cout << "\nCompare with ref..." << std::endl;
         bool all_match = true;
@@ -374,22 +339,22 @@ int main(int argc, char * argv[]) {
     std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
     std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
     std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
-    parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL);
+    parser.parse(a, &pdst, &psrc0, NULL, NULL, NULL, NULL, NULL);
     if (!(psrc0.type == "f32" && pdst.type == "f32") &&
         !(psrc0.type == "f32" && pdst.type == "bf16")) {
         std::cerr << "[ERROR] Dup tests only support FP32 to BF16/Fp32 test" << std::endl;
         return 1;
     }
     // dup f32 to bf16
-    if ((psrc0.type == "f32" && pdst.type == "bf16") &&
-        (!psrc0.is_contiguous && pdst.is_contiguous)) {
+    if (psrc0.type == "f32" && pdst.type == "bf16" &&
+        !psrc0.is_contiguous && pdst.is_contiguous) {
         std::cerr << "[ERROR] Dup tests does not support non-contiguous src0 and contiguous dst for FP32 to BF16 test" << std::endl;
         return 1;
     }
     // dup f32 to f32 输出张量连续
-    if ((psrc0.type == "f32" && pdst.type == "f32") &&
-        !pdst.is_contiguous) {
-        std::cerr << "[ERROR] Dup tests only support contiguous dst for FP32 to FP32 test" << std::endl;
+    if (psrc0.type == "f32" && pdst.type == "f32" &&
+        (!pdst.is_contiguous || !psrc0.is_contiguous)) {
+        std::cerr << "[ERROR] Dup tests only support contiguous FP32 to FP32 test" << std::endl;
         return 1;
     }
     std::cout << "Testing Dup with trace." << trace_id << " ------------------ ";

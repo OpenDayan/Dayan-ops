@@ -160,7 +160,7 @@ int main(int argc, char * argv[]) {
     std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
     std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
     std::string src1_trace = trace_dir + "/" + std::to_string(trace_id) + "-src1.trace";
-    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, &psoft);
+    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, &psoft, NULL);
     if (psoft.max_bias != 0.0f) {
         std::cerr << "[ERROR] Softmax tests only support max_bias == 0.0f" << std::endl;
         return 1;

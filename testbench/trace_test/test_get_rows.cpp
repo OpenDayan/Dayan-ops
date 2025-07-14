@@ -203,7 +203,7 @@ int main(int argc, char * argv[]) {
     std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
     std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
     std::string src1_trace = trace_dir + "/" + std::to_string(trace_id) + "-src1.trace";
-    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL);
+    parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL, NULL);
     if (!pdst.is_contiguous || !psrc0.is_contiguous || !psrc1.is_contiguous) {
         std::cerr << "[ERROR] get_rows tests only support contiguous tensor now!" << std::endl;
         return 1;

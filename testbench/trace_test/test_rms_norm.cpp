@@ -103,7 +103,7 @@ int main(int argc, char * argv[]) {
     std::string a = trace_dir + "/" + std::to_string(trace_id) + "-params.txt";
     std::string dst_trace = trace_dir + "/" + std::to_string(trace_id) + "-dst.trace";
     std::string src0_trace = trace_dir + "/" + std::to_string(trace_id) + "-src0.trace";
-    parser.parse(a, &pdst, &psrc0, NULL, &pnorm, NULL, NULL);
+    parser.parse(a, &pdst, &psrc0, NULL, &pnorm, NULL, NULL, NULL);
     if (!pdst.is_contiguous || !psrc0.is_contiguous) {
         std::cerr << "[ERROR] RMS_Norm tests only support contiguous tensor now!" << std::endl;
         return 1;

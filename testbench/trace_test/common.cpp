@@ -112,8 +112,8 @@ static void trim(std::string &s) {
     }).base(), s.end());
 }
 
-void TraceParamsParser::parse(const std::string& filename, TensorParams * pdst, TensorParams * psrc0,
-            TensorParams * psrc1, NormParams * pnorm, RopeParams * prope, SoftmaxParams * psoft) {
+void TraceParamsParser::parse(const std::string& filename, TensorParams * pdst, TensorParams * psrc0, TensorParams * psrc1,
+                              NormParams * prms, RopeParams * prope, SoftmaxParams * psoft, PermuteParams * ppermute) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: " + filename);
@@ -128,7 +128,7 @@ void TraceParamsParser::parse(const std::string& filename, TensorParams * pdst, 
     std::string line;
 
     // 使用状态机确定当前正在解析哪个部分
-    enum class Section { NONE, SRC0, SRC1, DST, ROPE, NORM, SOFTMAX};
+    enum class Section { NONE, SRC0, SRC1, DST, ROPE, NORM, SOFTMAX, PERMUTE};
     Section current_section = Section::NONE;
 
     while (std::getline(processed_stream, line)) {
@@ -141,6 +141,7 @@ void TraceParamsParser::parse(const std::string& filename, TensorParams * pdst, 
             else if (line.find("RoPE params") != std::string::npos) current_section = Section::ROPE;
             else if (line.find("Norm params") != std::string::npos) current_section = Section::NORM;
             else if (line.find("Softmax params") != std::string::npos) current_section = Section::SOFTMAX;
+            else if (line.find("Permute params") != std::string::npos) current_section = Section::PERMUTE;
             continue;
         }
 
@@ -168,11 +169,13 @@ void TraceParamsParser::parse(const std::string& filename, TensorParams * pdst, 
                 parse_rope_kv(prope, key, value);
                 break;
             case Section::NORM:
-                parse_norm_kv(pnorm, key, value);
+                parse_norm_kv(prms, key, value);
                 break;
             case Section::SOFTMAX:
                 parse_softmax_kv(psoft, key, value);
                 break;
+            case Section::PERMUTE:
+                parse_permute_kv(ppermute, key, value);
             case Section::NONE:
                 // 忽略在任何区块之外的参数 (除了 'name')
                 break;
@@ -215,6 +218,16 @@ void TraceParamsParser::parse_softmax_kv(SoftmaxParams * softmax, const std::str
     if (softmax == NULL) return;
     if (key == "scale") softmax->scale = read_hex_float(value);
     else if (key == "max_bias") softmax->max_bias = read_hex_float(value);
+}
+
+void TraceParamsParser::parse_permute_kv(PermuteParams * permute, const std::string& key, const std::string& value) {
+    if (permute == NULL) return;
+    if (key == "axis0") permute->axis0 = std::stoi(value);
+    else if (key == "axis1") permute->axis1 = std::stoi(value);
+    else if (key == "axis2") permute->axis2 = std::stoi(value);
+    else if (key == "axis3") permute->axis3 = std::stoi(value);
+    else
+        return;
 }
 
 std::vector<int> TraceParamsParser::parse_vector(const std::string& str) {

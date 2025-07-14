@@ -36,6 +36,13 @@ struct SoftmaxParams{
     float max_bias;
 };
 
+struct PermuteParams{
+    int axis0;
+    int axis1;
+    int axis2;
+    int axis3;
+};
+
 struct TensorParams{
     std::vector<int> ne;
     std::vector<int> nb;
@@ -44,18 +51,16 @@ struct TensorParams{
     uint64_t len;
 };
 
-void ParseTraceParams(TensorParams * dst, TensorParams * src0, TensorParams * src1,
-                      NormParams * rms, NormParams * rope);
-
 class TraceParamsParser {
 public:
     void parse(const std::string& filename, TensorParams * pdst, TensorParams * psrc0, TensorParams * psrc1,
-               NormParams * prms, RopeParams * prope, SoftmaxParams * psoft);
+               NormParams * prms, RopeParams * prope, SoftmaxParams * psoft, PermuteParams * ppermute);
 private:
     void parse_tensor_kv(TensorParams * tensor, const std::string& key, const std::string& value);
     void parse_rope_kv(RopeParams * rope, const std::string& key, const std::string& value);
     void parse_norm_kv(NormParams * rms, const std::string& key, const std::string& value);
     void parse_softmax_kv(SoftmaxParams * softmax, const std::string& key, const std::string& value);
+    void parse_permute_kv(PermuteParams * permute, const std::string& key, const std::string& value);
     std::vector<int> parse_vector(const std::string& str);
     float read_hex_float(const std::string& str);
 };
