@@ -550,7 +550,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         }
 
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 0.5;
+        const float epsilon = 1e-3;
         bool all_match = true;
 
         int bs = pdst.ne[3];
