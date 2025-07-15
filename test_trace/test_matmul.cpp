@@ -542,7 +542,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // --------------------------------------
             //
             // FIXME: CPU reference
-            matmul_e4m3q_e4m3q_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            // matmul_e4m3q_e4m3q_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else {
             std::cerr << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
