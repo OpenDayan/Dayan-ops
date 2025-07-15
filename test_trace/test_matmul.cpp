@@ -197,6 +197,44 @@ float e4m3q_to_float(uint8_t h) {
     return out.f;
 }
 
+// (2 - std::exp2(-M + 1)) * std::exp2(std::exp2(E - 1)) = (2 - 2**(-2)) *(2**(2**(3))) = (2 - 2**(-2)) * 2**(8)
+static const float e4m3q_max = (2 - std::exp2(-2)) * (std::exp2(8));
+
+// (std::exp2(-M)) * (std::exp2(2 - std::exp2(E - 1))) = (2**(-3)) * (2**(2 - 2**3)) = 2**(-9)
+static const float e4m3q_min = std::exp2(-3) * std::exp2(-6);
+uint8_t float_to_e4m3q(float h) {
+    uint8_t out;
+    fp32_int32 in = {h};
+    out = (in.bits >> 24) & 0x80;
+    in.bits &= 0x7fffffff;
+    if (in.f >= e4m3q_max) {
+        out |= 0x7E;
+    } else if (in.f < e4m3q_min) { // => 0.
+    } else {
+        in.f *= std::exp2(7 - 127); // E==4 in e4m3q, so E_BIAS = 2^(E-1) - 1 = 7
+        uint32_t eps = (0x3fffff>>3) + ((in.bits >> (23-3)) & 0x1);
+        in.bits += eps;
+        out |= (in.bits >> (23-3)) & 0x7F;
+    }
+    return out;
+}
+
+void block_float_to_e4m3q(float * b_f32, block_e4m3_q * b_fp8) {
+    float m = 0;
+    for (int i = 0; i < QK; ++i) {
+        m = std::max(std::abs(b_f32[i]),m);
+    }
+
+    const float D = e4m3q_max / m;
+
+    // set dequantize scale
+    b_fp8->scale = m / e4m3q_max;
+
+    for (int i = 0; i < QK; ++i) {
+        b_fp8->data[i] = float_to_e4m3q(b_f32[i] * D);
+    }
+}
+
 void matmul_bf16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::vector<float>& res,
                         TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
     int bs = psrc1.ne[3];
@@ -257,6 +295,8 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::v
     int k = psrc1.ne[0];
     assert(psrc1.ne[0] == psrc0.ne[0]);
     assert(k % QK == 0);
+    // rowsize = sizeof block scales + sizeof block data
+    int row_size = (k/QK)*sizeof(float) + k;
 
     for (int i = 0; i < bs; ++i)
         for (int j = 0; j < h; ++j) {
@@ -264,32 +304,84 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::v
                 for (int l = 0; l < n; ++l) {
                     float dot_sum = 0.0; // DOT SUM
 
-                    // a_t = &a[i][j][l][0]
-                    uint8_t * a_t = (uint8_t *)(a.data()) + i*psrc0.nb[3] + j*psrc0.nb[2] + l*psrc0.nb[1];
-
                     // vector-dot loop
-                    // res[i][j][p][l] = b[i][j][p][:] * a[i0][j0][l][:]^T
                     for (int ib = 0; ib < k/QK; ++ib) {
                         float block_sum = 0.0f; // BLOCK_SUM
 
-                        float scale = *((float *)a_t); // BLOCK_SCALE (a[i][j][l][B:B+4])
-                        a_t += sizeof(float);
-
+                        // get A block (fp8)
+                        block_e4m3_q * a_block_fp8 = (block_e4m3_q *)(a.data() + i*h*n*row_size + j*n*row_size + l*row_size + ib*sizeof(block_e4m3_q));
 
                         // in-block loop
                         for (int x = 0; x < QK; ++x) {
-                            // a[i][j][p][B+4+x]
-                            float ea = e4m3q_to_float(a_t[x]);
-                            // b[i][j][p][ib*QK+x]
-                            float eb = b[(i*psrc1.nb[3] + j*psrc1.nb[2] + p*psrc1.nb[1] + (ib*QK + x)*psrc1.nb[0]) / sizeof(float)];
-
+                            float ea = e4m3q_to_float(a_block_fp8->data[x]);
+                            float eb = b[i*h*m*k + j*m*k + p*k + (ib*QK + x)];
                             block_sum += ea * eb;
                         }
-                        // a_t = &a[i][j][l][B_next]
-                        a_t += QK;
 
-                        dot_sum += scale * block_sum;
+                        // add block sum to dot sum (with scaling)
+                        float scale_a = a_block_fp8->scale;
+                        dot_sum += scale_a * block_sum;
                     }
+
+                    // vector-dot result
+                    res[i*h*m*n + j*m*n + p*n + l] = dot_sum;
+                }
+        }
+}
+
+void matmul_e4m3q_e4m3q_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::vector<float>& res,
+                            TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
+    int bs = psrc1.ne[3];
+    int h = psrc1.ne[2];
+
+    assert(psrc1.ne[3] == psrc0.ne[3]);
+    assert(psrc1.ne[2] == psrc0.ne[2]);
+
+    // src0 shape: (bs0, h0, n, k)
+    // src1 shape: (bs, h, m, k)
+    // dst shape: (bs, h, m, n)
+    int n = psrc0.ne[1];
+    int m = psrc1.ne[1];
+    int k = psrc1.ne[0];
+    assert(psrc1.ne[0] == psrc0.ne[0]);
+    assert(k % QK == 0);
+    // rowsize = sizeof block scales + sizeof block data
+    int row_size = (k/QK)*sizeof(float) + k;
+
+    for (int i = 0; i < bs; ++i)
+        for (int j = 0; j < h; ++j) {
+            for (int p = 0; p < m; ++p)
+                for (int l = 0; l < n; ++l) {
+                    float dot_sum = 0.0; // DOT SUM
+
+                    // vector-dot loop
+                    for (int ib = 0; ib < k/QK; ++ib) {
+                        float block_sum = 0.0f; // BLOCK_SUM
+
+                        // get A block (fp8)
+                        block_e4m3_q * a_block_fp8 = (block_e4m3_q *)(a.data() + i*h*n*row_size + j*n*row_size + l*row_size + ib*sizeof(block_e4m3_q));
+
+                        // get B block (fp32)
+                        float * b_block_f32 = b.data() + i*h*m*k + j*m*k + p*k + (ib*QK);
+
+                        // transfer B block (to fp8)
+                        static struct block_e4m3_q b_block_fp8;
+                        block_float_to_e4m3q(b_block_f32, &b_block_fp8);
+
+                        // in-block loop
+                        for (int x = 0; x < QK; ++x) {
+                            float ea = e4m3q_to_float(a_block_fp8->data[x]);
+                            float eb = e4m3q_to_float(b_block_fp8.data[x]);
+                            block_sum += ea * eb;
+                        }
+
+                        // add block sum to dot sum (with scaling)
+                        float scale_a = a_block_fp8->scale;
+                        float scale_b = b_block_fp8.scale;
+                        dot_sum += scale_a * scale_b * block_sum;
+                    }
+
+                    // vector-dot result
                     res[i*h*m*n + j*m*n + p*n + l] = dot_sum;
                 }
         }
@@ -395,7 +487,7 @@ void kernel_matmul_e4m3q(
                               + i11 * (psrc1.nb[1] / sizeof(float)) * (QK + sizeof(float)) / QK
                             )/sizeof(uint8_t)),
                             k);
-            }  
+            }
         }
     }
 
@@ -450,7 +542,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // --------------------------------------
             //
             // FIXME: CPU reference
-            // matmul_e4m3q_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            matmul_e4m3q_e4m3q_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else {
             std::cerr << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
