@@ -48,7 +48,7 @@ void get_rows_bf16(std::vector<uint16_t>& a, std::vector<int>& b, std::vector<fl
                     val_u32 <<= 16;
                     float val_f32;
                     std::memcpy(&val_f32, &val_u32, sizeof(float));
-                    res[j*h1*n1*m0 + k*n1*m1 + p*m0 + l] = val_f32;
+                    res[j*n1*m1*m0 + k*n1*m1 + p*m0 + l] = val_f32;
                 }
 
             }
@@ -88,7 +88,7 @@ void get_rows_f32(std::vector<float>& a, std::vector<int>& b, std::vector<float>
                 }
                 // res[j][k][p][:] = a[j][k][row_idx][:]
                 for (int l = 0; l < m0; l++) {
-                    res[j*h1*n1*m0 + k*n1*m1 + p*m0 + l] = a[j*h0*n0*m0 + k*n0*m0 + row_idx*m0 + l];
+                    res[j*n1*m1*m0 + k*n1*m1 + p*m0 + l] = a[j*h0*n0*m0 + k*n0*m0 + row_idx*m0 + l];
                 }
 
             }
