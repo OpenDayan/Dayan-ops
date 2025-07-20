@@ -751,7 +751,7 @@ static inline void __tx_tcsr_xchg(long rs1, long &rd) {
 __attribute__((always_inline))
 static inline void __tx_fence() {
     asm volatile (
-        "FENCE iorw, iorw"
+        "FENCE iorw, iorw":::"memory"
     );
 }
 

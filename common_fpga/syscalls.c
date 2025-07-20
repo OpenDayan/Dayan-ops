@@ -72,6 +72,7 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 {
   perf_counter[1]++;
   entry_args.ret = code;
+  __asm__ __volatile__(".insn 0xfc000073":::"memory"); // CFLUSH.D.L1
   volatile int *ptr_bootaddr = (volatile int*)0x1000;
   void (*bootrom)();
   bootrom = (void*)0x10000;

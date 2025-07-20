@@ -16,6 +16,7 @@
   .globl _start
 _start:
   fence.i
+  .insn 0xfc200073
   // Set bootaddr to 0x10000 for reset incomming  
   li a0, 0x1000  // program reset vector
   li a1, 0x0     // busy flag
