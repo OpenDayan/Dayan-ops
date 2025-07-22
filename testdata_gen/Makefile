@@ -1,6 +1,6 @@
 target   := generated/int_mat_size.gen generated/e4m3_mat_size.gen generated/e4m3q_mat_size.gen
 target   += generated/elementwise_int_size.gen generated/elementwise_float_size.gen generated/convert_size.gen
-
+target   += generated/sfu_size.gen
 .PHONY: all
 
 all: generated $(target)
@@ -25,6 +25,9 @@ generated/elementwise_float_size.gen: elementwise_float_matgen.py generated
 
 generated/convert_size.gen: convert_matgen.py generated
 	python3 convert_matgen.py
+
+generated/sfu_size.gen: sfu_matgen.py generated
+	python3 sfu_matgen.py
 
 clean_all:
 	rm -rf generated

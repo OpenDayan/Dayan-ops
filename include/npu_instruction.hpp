@@ -666,14 +666,14 @@ namespace NPUInstBuilder {
     __attribute__((always_inline))
     static inline void __tx_sfu_op_type(void* rs1, void* rs3)
     {
-        NPUInstBuilder::__custom_64b_instruction2r<
-            (0b10010000ul << 56ul) | // func == 1001 0000
-            (op << 50ul)           | // op
-            (((type >> 3) & 0b1111) << 41ul) | // Type-HI
-            (((type >> 0) & 0b0111) << 12ul) | // Type-LO
-            (tcfgrs3 << 38ul)      |
-            (tcfgrs1 << 32ul)
-        >((long)rs1, (long)rs3);
+
+      constexpr long encoding = (0b10010000ul << 56ul) | // func == 1001 0000
+                                (op << 50ul) |           // op
+                                (((type >> 3) & 0b1111) << 41ul) | // Type-HI
+                                (((type >> 0) & 0b0111) << 12ul) | // Type-LO
+                                (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul);
+      NPUInstBuilder::__custom_64b_instruction2r<encoding>((long)rs1,
+                                                           (long)rs3);
     }
 }
 
@@ -899,7 +899,7 @@ NPUInstBuilder::__tx_sfu_op_type< \
     >(rs1, rs3); \
 }
 GENERATE_TX_SFU_OP_TYPE(recip, TX_SFU_RECIP, fp32, TX_FP32)
-GENERATE_TX_SFU_OP_TYPE(rsqrt, TX_SFU_RECIP, fp32, TX_FP32)
+GENERATE_TX_SFU_OP_TYPE(rsqrt, TX_SFU_RSQRT, fp32, TX_FP32)
 GENERATE_TX_SFU_OP_TYPE(sin,   TX_SFU_SIN  , fp32, TX_FP32)
 GENERATE_TX_SFU_OP_TYPE(cos,   TX_SFU_COS  , fp32, TX_FP32)
 GENERATE_TX_SFU_OP_TYPE(exp,   TX_SFU_EXP  , fp32, TX_FP32)
