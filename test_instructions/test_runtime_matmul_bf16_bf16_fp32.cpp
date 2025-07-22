@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "NPUDriver.h"
 #include "NPURuntime.h"
@@ -67,11 +68,14 @@ static uint64_t dst_0_addr = 0x83000000;
 /* bf16 conversion */
 static inline float __bf16_to_fp32(bf16 h) {
   uint32_t f = h << 16;
-  return *(float *)&f;
+  float r;
+  memcpy(&r, &f, sizeof(uint32_t));
+  return r; 
 }
 
 static inline bf16 __fp32_to_bf16(float f) {
-  uint32_t x = *(uint32_t *)&f;
+  uint32_t x;
+  memcpy(&x, &f, sizeof(float));
   return (x >> 16) & 0xFFFF;
 }
 

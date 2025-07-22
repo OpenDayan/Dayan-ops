@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
     std::cerr << "Failed to initialize Runtime: " << err << std::endl;
     return -1;
   }
-  long base;
+  long base = 0;
   if(argc >= 2) {
     base = std::atol(argv[1]);
   }

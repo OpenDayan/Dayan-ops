@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "NPUDriver.h"
 #include "NPURuntime.h"
@@ -27,10 +28,17 @@ typedef uint8_t fp8;
   }
 
 #define fp_checkr(m, n, x, expect, eps)                                        \
-  if (isnan(x) || (x) < (expect) - (eps) || (x) > (expect) + (eps)) {          \
-    printf("Error: %s:%d: (%d,%d) %s = %x, expected %x\n", __FILE__, __LINE__, \
-           m, n, #x, *(int *)&(x), *(int *)&(expect));                         \
-  }
+  do {                                                                         \
+    float _x = (x);                                                            \
+    float _expect = (expect);                                                  \
+    if (isnan(_x) || (_x) < (_expect) - (eps) || (_x) > (_expect) + (eps)) {   \
+      uint32_t x_bits, expect_bits;                                            \
+      memcpy(&x_bits, &_x, sizeof(x_bits));                                    \
+      memcpy(&expect_bits, &_expect, sizeof(expect_bits));                     \
+      printf("Error: %s:%d: (%d,%d) %s = %f (0x%08x), expected %f (0x%08x)\n", \
+             __FILE__, __LINE__, m, n, #x, _x, x_bits, _expect, expect_bits);  \
+    }                                                                          \
+  } while (0)
 
 #include "generated/e4m3_mat_size.gen"
 
@@ -245,7 +253,6 @@ int main(int argc, char **argv) {
   npu_runtime_deinit(&runtime);
 
   // Check result
-  
 
   return 0;
 }

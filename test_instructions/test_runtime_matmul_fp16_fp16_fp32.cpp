@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "NPUDriver.h"
 #include "NPURuntime.h"
@@ -85,11 +86,14 @@ static inline float __fp16_to_fp32(fp16 h) {
         }
     }
     
-    return *((float*)&x);
+    float r = 0.0f;
+    memcpy(&r, &x, sizeof(uint32_t));
+    return r;
 }
 
 static inline fp16 __fp32_to_fp16(float f) {
-  uint32_t x = *((uint32_t*)&f);
+  uint32_t x = 0;
+  memcpy(&x, &f, sizeof(float));
   uint16_t h = ((x >> 16) & 0x8000) | 
                  ((((x & 0x7f800000) - 0x38000000) >> 13) & 0x7c00) | 
                  ((x >> 13) & 0x03ff);
