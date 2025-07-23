@@ -1,4 +1,4 @@
-target := crt.o syscalls.o
+target := crt.o syscalls.o trap.o
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<

@@ -24,6 +24,7 @@ SECTIONS
   /* text: test code section */
   . = 0x80000000;
   .text.init : { *(.text.init) }
+  .text.trap : { *(.text.trap) }
 
   . = ALIGN(0x1000);
   .tohost : { *(.tohost) }

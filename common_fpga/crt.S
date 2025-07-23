@@ -17,6 +17,10 @@
 _start:
   fence.i
   .insn 0xfc200073
+  // Set mtvec to _trap_handler
+  la a0, _trap_handler
+  csrw mtvec, a0
+
   // Set bootaddr to 0x10000 for reset incomming  
   li a0, 0x1000  // program reset vector
   li a1, 0x0     // busy flag

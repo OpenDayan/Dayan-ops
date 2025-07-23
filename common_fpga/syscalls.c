@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <sys/signal.h>
 #include "util.h"
+#include "trap.h"
 
 #define SYS_write 64
 
@@ -79,11 +80,6 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code)
   *ptr_bootaddr = 0x10000;
   bootrom(); // Jump to the bootrom
   while(1); // Should never reach here
-}
-
-uintptr_t __attribute__((weak)) handle_trap(uintptr_t cause, uintptr_t epc, uintptr_t regs[32])
-{
-  tohost_exit(1337);
 }
 
 void exit(int code)
@@ -481,4 +477,23 @@ long atol(const char* str)
   }
 
   return sign ? -res : res;
+}
+
+static char* regname_table[32] = {
+  "$0", "ra", "sp", "gp", "tp", "t0", "t1", "t2",
+  "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+  "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7",
+  "s8", "s9", "s10", "s11", "t3", "t4", "t5", "t6"
+};
+
+__attribute__((section(".text.init"))) void trap_handler(struct Trapframe* tf)
+{
+  printf("Exception Detected.\n");
+  printf("---------------- Intger Registers ----------------\n");
+  for(int i = 0; i < 32; i ++) {
+    printf("%-3s: 0x%016lx%s", regname_table[i], tf->regs[i], (i % 4 == 3) ? "\n" : "\t");
+  }
+  printf("---------------- Privileged CSRs ----------------\n");
+  printf("mstatus: %016x\tmcause: %016x\tmepc: %016x\n", tf->mstatus, tf->mcause, tf->mepc);
+  exit(-1);
 }

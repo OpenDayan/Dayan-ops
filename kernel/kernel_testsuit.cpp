@@ -45,3 +45,9 @@ __device__ int kernel_testsuit(
 
     return a0 + 1;
 }
+
+__device__ int kernel_trap_testsuit() {
+    volatile long *ptr = (long *)0x0;
+
+    return *ptr;
+}
