@@ -453,8 +453,8 @@ int main(int argc, char * argv[]) {
         return 0;
     }
 
-    // test_random_case<float>();
-    // test_random_case<uint16_t>();
+    test_random_case<float>();
+    test_random_case<uint16_t>();
     // printf("test_random_case() returned to main\n");
     std::string trace_dir(argv[1]);
     int trace_id = std::stoi(argv[2]);
