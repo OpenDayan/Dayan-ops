@@ -67,7 +67,8 @@ SECTIONS
 
   /* Stack Area */
   . = ALIGN(0x40);
-  . = . + 0x100000;
+  /* Max 4 Core == 0x80000 */
+  . = . + 0x80000;
   . = ALIGN(0x1000);
   _heap = .;
 }
