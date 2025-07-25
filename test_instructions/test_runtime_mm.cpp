@@ -245,6 +245,11 @@ int main(int argc, char** argv) {
   test_case_3(&runtime);
   test_case_4(&runtime);
   test_case_5(&runtime);
+
+  npu_runtime_memset(&runtime, 0x80020000, 0x0, 0x20);
+  test_dump_mem(&runtime.dev_state, 0x80020000, 0x20);
+  npu_runtime_memset(&runtime, 0x80020000, 0xf, 0x20);
+  test_dump_mem(&runtime.dev_state, 0x80020000, 0x20);
   
   npu_runtime_deinit(&runtime);
 

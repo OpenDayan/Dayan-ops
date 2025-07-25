@@ -16,7 +16,7 @@
 extern volatile uint64_t tohost;
 extern volatile uint64_t fromhost;
 
-volatile uint64_t* perf_counter = (uint64_t*)(0x80000000 + (0x20000 * 1));
+volatile uint64_t __perf_counter[4] __attribute__((aligned(64)));
 
 struct GeneralEntryArgs {
   uint64_t kernel_entry;
@@ -71,7 +71,7 @@ void setStats(int enable)
 
 void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 {
-  perf_counter[1]++;
+  __perf_counter[1]++;
   entry_args.ret = code;
   __asm__ __volatile__(".insn 0xfc000073":::"memory"); // CFLUSH.D.L1
   volatile int *ptr_bootaddr = (volatile int*)0x1000;

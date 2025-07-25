@@ -43,7 +43,7 @@ with open(INPUT_FILE_NAME + '.bin', "rb") as rf:
 # objdump -t a.elf
 objdump = subprocess.Popen(['riscv64-unknown-elf-objdump', '-t', INPUT_FILE_NAME + '.elf'], stdout=subprocess.PIPE, text=True)
 # grep '.npu_kernel'
-grep = subprocess.Popen(['grep', '-E', TEXT_SECTION_NAME + '|entry_args|_heap'], stdin=objdump.stdout, stdout=subprocess.PIPE, text=True)
+grep = subprocess.Popen(['grep', '-E', TEXT_SECTION_NAME + '|entry_args|_heap|__perf_counter'], stdin=objdump.stdout, stdout=subprocess.PIPE, text=True)
 # awk '{print $6, $1}'
 awk_kernel = subprocess.Popen(['awk', "{print $6, $1, $5}"], stdin=grep.stdout, stdout=subprocess.PIPE, text=True)
 # 输出
@@ -52,6 +52,7 @@ print(output)
 # ---- Step3: 输出 -------------------------
 kernel_count = 0
 args_ptr = ''
+perf_ptr = ''
 heap_addr = ''
 
 out_desc_table = 'static struct NPUKernelDesc kernel_desc_table[] = {\n'
@@ -64,6 +65,9 @@ for kernel in output.split('\n')[:-1]:
     elif name == 'entry_args':
         args_ptr = entry
         print(f'entry_args Structure address: 0x{args_ptr}')
+    elif name == '__perf_counter':
+        perf_ptr = entry
+        print(f'perf counter address: 0x{perf_ptr}')
     elif heap_name == '_heap':
         heap_addr = entry
         print(f'heap start address: 0x{heap_addr}')
@@ -86,6 +90,7 @@ out_set_desc = 'struct NPUDeviceKernelSetDesc ' + struct_name + ' = {\n' + \
               f'    .data = {array_name},\n' + \
                '    .kernels = kernel_desc_table,\n' + \
               f'    .heap = 0x{heap_addr},\n' + \
+              f'    .perf = 0x{perf_ptr},\n' + \
                '};\n'
 
 

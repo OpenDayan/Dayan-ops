@@ -148,7 +148,7 @@ _start:
   sll a2, a0, STKSHIFT
   add tp, tp, a2
 
-  li t0, 0x80020000
+  la t0, __perf_counter
   ld t1, 0(t0)
   addi t1, t1, 1
   sd t1, 0(t0)
