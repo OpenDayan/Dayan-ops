@@ -43,26 +43,30 @@ with open(INPUT_FILE_NAME + '.bin', "rb") as rf:
 # objdump -t a.elf
 objdump = subprocess.Popen(['riscv64-unknown-elf-objdump', '-t', INPUT_FILE_NAME + '.elf'], stdout=subprocess.PIPE, text=True)
 # grep '.npu_kernel'
-grep = subprocess.Popen(['grep', '-E', TEXT_SECTION_NAME + '|entry_args'], stdin=objdump.stdout, stdout=subprocess.PIPE, text=True)
+grep = subprocess.Popen(['grep', '-E', TEXT_SECTION_NAME + '|entry_args|_heap'], stdin=objdump.stdout, stdout=subprocess.PIPE, text=True)
 # awk '{print $6, $1}'
-awk_kernel = subprocess.Popen(['awk', "{print $6, $1}"], stdin=grep.stdout, stdout=subprocess.PIPE, text=True)
+awk_kernel = subprocess.Popen(['awk', "{print $6, $1, $5}"], stdin=grep.stdout, stdout=subprocess.PIPE, text=True)
 # 输出
 output, _ = awk_kernel.communicate()
 print(output)
 # ---- Step3: 输出 -------------------------
 kernel_count = 0
 args_ptr = ''
+heap_addr = ''
 
 out_desc_table = 'static struct NPUKernelDesc kernel_desc_table[] = {\n'
 # 获取kernel名称和地址
 for kernel in output.split('\n')[:-1]:
-    [name, entry] = kernel.split(' ')
+    [name, entry, heap_name] = kernel.split(' ')
     entry = entry.lstrip('0') or '0'
     if name == TEXT_SECTION_NAME:
         continue
     elif name == 'entry_args':
         args_ptr = entry
         print(f'entry_args Structure address: 0x{args_ptr}')
+    elif heap_name == '_heap':
+        heap_addr = entry
+        print(f'heap start address: 0x{heap_addr}')
     else:
         print(f"Kernel Name: {name}, Kernel Entry: 0x{entry}")
         out_desc_table += f'    {{ .entry=0x{entry}, .name="{name}" }},\n'
@@ -80,7 +84,9 @@ out_set_desc = 'struct NPUDeviceKernelSetDesc ' + struct_name + ' = {\n' + \
                '    .general_entry = 0x80000000,\n' + \
               f'    .args_ptr = 0x{args_ptr},\n' + \
               f'    .data = {array_name},\n' + \
-               '    .kernels = kernel_desc_table\n};'
+               '    .kernels = kernel_desc_table,\n' + \
+              f'    .heap = 0x{heap_addr},\n' + \
+               '};\n'
 
 
 with open(OUTPUT_FILE_NAME, 'a') as f:

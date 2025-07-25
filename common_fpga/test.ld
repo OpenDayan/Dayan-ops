@@ -64,5 +64,11 @@ SECTIONS
 
   /* End of uninitalized data segement */
   _end = .;
+
+  /* Stack Area */
+  . = ALIGN(0x40);
+  . = . + 0x100000;
+  . = ALIGN(0x1000);
+  _heap = .;
 }
 

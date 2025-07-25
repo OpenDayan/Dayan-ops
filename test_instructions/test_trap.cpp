@@ -22,10 +22,6 @@ int main(int argc, char** argv) {
     std::cerr << "Failed to initialize Runtime: " << err << std::endl;
     return -1;
   }
-  long base;
-  if(argc >= 2) {
-    base = std::atol(argv[1]);
-  }
 
   std::cout << "Runtime initialized successfully." << std::endl;
 

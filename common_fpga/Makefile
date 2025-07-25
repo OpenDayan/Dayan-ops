@@ -1,10 +1,11 @@
-target := crt.o syscalls.o trap.o
+INCLUDES := -I../include/
+target := crt.o syscalls.o trap.o common_kernel.o
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) $(INCLUDES) -c $<
 
 %.o: %.S
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) $(INCLUDES) -c $<
 
 .PHONY: all clean
 
