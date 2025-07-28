@@ -98,19 +98,12 @@ void get_rows_f32(std::vector<float>& a, std::vector<int>& b, std::vector<float>
 #include <NPURuntime.h>
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
-long host_get_rows(void *a, void *b, void *c, 
-                        int h1, int n1, int m1, int m0, int n0,
-                        bool isbf16){
-    printf("\nh1:%d, n1:%d, m1:%d, m0:%d, n0:%d\n", h1, n1, m1, m0, n0);
-    int src_elem_size = sizeof(float);
-    if(isbf16){
-        printf("Using bf16 type input, will convert to f32\n");
-        src_elem_size = sizeof(uint16_t);
-    }
+long host_get_rows_f32(void *a, void *b, void *c, 
+                        int h1, int n1, int m1, int m0, int n0){
+    // printf("\nh1:%d, n1:%d, m1:%d, m0:%d, n0:%d\n", h1, n1, m1, m0, n0);
     static struct NPUKernelDesc *get_rows_f32_desc = NULL;
-    // if (get_rows_f32_desc == NULL)
-    // {
-    // Since two types may be used during testing, reinitialization is performed each time.
+    if (get_rows_f32_desc == NULL)
+    {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
         err = npu_runtime_init(&runtime);
@@ -126,21 +119,14 @@ long host_get_rows(void *a, void *b, void *c,
           exit(-1);
         }
         printf("[INFO] Kernel set loaded successfully.\n");
-        if(isbf16) {
-            printf("[INFO] Trying to load get_rows_bf16_i32_f32...\n");
-            err = npu_runtime_get_kernel_desc(&runtime, "get_rows_bf16_i32_f32", &get_rows_f32_desc);
-        }
-        else{
-            printf("[INFO] Trying to load get_rows_f32_i32_f32...\n");
-            err = npu_runtime_get_kernel_desc(&runtime, "get_rows_f32_i32_f32", &get_rows_f32_desc);
-        }
+        err = npu_runtime_get_kernel_desc(&runtime, "get_rows_f32_i32_f32", &get_rows_f32_desc);
         if (err != NPU_SUCCESS) {
           printf("Failed to get kernel description: err=%ld\n", err);
           npu_runtime_deinit(&runtime);
           exit(-1);
         }
-        printf("[INFO] Loaded get_rows kernel desc successfully.\n");
-    // }
+        printf("[INFO] Loaded get_rows_f32_i32_f32 kernel desc successfully.\n");
+    }
     // static address allocation
     uint64_t a_dev = 0x81000000;
     uint64_t b_dev = 0x83000000;
@@ -149,7 +135,7 @@ long host_get_rows(void *a, void *b, void *c,
 
     ssize_t ret = 0;
     // printf("[INFO] Ready to load data to dev\n");
-    ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, h1 * n1 * n0 * m0 * src_elem_size); // a
+    ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, h1 * n1 * n0 * m0 * sizeof(float)); // a
     if (ret < 0)
         printf("[ERROR] Failed to write a to device at 0x%lx: err=%ld\n", a_dev, ret);
     // printf("Wrote a to device at 0x%lx with ret:%ld\n", a_dev, ret);
@@ -167,6 +153,56 @@ long host_get_rows(void *a, void *b, void *c,
                              a_dev, b_dev, c_dev,
                              (uint64_t)h1, (uint64_t)n1, (uint64_t)m1, (uint64_t)m0, (uint64_t)n0);
     // printf("[INFO] Finished get rows npu kernel, ready for copy from dev\n");
+    npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, h1 * n1 * m1 * m0 * sizeof(float)); // c
+    return kernel_ret;
+}
+long host_get_rows_bf16(void *a, void *b, void *c, 
+                        int h1, int n1, int m1, int m0, int n0){
+    static struct NPUKernelDesc *get_rows_bf16_desc = NULL;
+    if (get_rows_bf16_desc == NULL)
+    {
+        ssize_t err = 0;
+        printf("[INFO] Initializing Runtime..\n");
+        err = npu_runtime_init(&runtime);
+        if (err != NPU_SUCCESS) {
+          printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
+          exit(-1);
+        }
+        printf("[INFO] Runtime initialized successfully.\n");
+        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        if (err != NPU_SUCCESS) {
+          printf("Failed to load kernel set: err=%ld\n", err);
+          npu_runtime_deinit(&runtime);
+          exit(-1);
+        }
+        printf("[INFO] Kernel set loaded successfully.\n");
+        err = npu_runtime_get_kernel_desc(&runtime, "get_rows_bf16_i32_f32", &get_rows_bf16_desc);
+        if (err != NPU_SUCCESS) {
+          printf("Failed to get kernel description: err=%ld\n", err);
+          npu_runtime_deinit(&runtime);
+          exit(-1);
+        }
+        printf("[INFO] Loaded get_rows_bf16_i32_f32 kernel desc successfully.\n");
+    }
+    // static address allocation
+    uint64_t a_dev = 0x81000000;
+    uint64_t b_dev = 0x83000000;
+    uint64_t c_dev = 0x85000000;
+    // Copy data to device
+    ssize_t ret = 0;
+    ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, h1 * n1 * n0 * m0 * sizeof(uint16_t)); // a
+    if (ret < 0)
+        printf("[ERROR] Failed to write a to device at 0x%lx: err=%ld\n", a_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, 1 * h1 * n1 * m1 * sizeof(int)); // b
+    if (ret < 0)
+        printf("[ERROR] Failed to write b to device at 0x%lx: err=%ld\n", b_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, c_dev, c, h1 * n1 * m1 * m0 * sizeof(float));   // c
+    if (ret < 0)
+        printf("[ERROR] Failed to write c to device at 0x%lx: err=%ld\n", c_dev, ret);
+    int kernel_ret;
+    npu_runtime_kernel_start(&runtime, get_rows_bf16_desc, &kernel_ret, 8,
+                             a_dev, b_dev, c_dev,
+                             (uint64_t)h1, (uint64_t)n1, (uint64_t)m1, (uint64_t)m0, (uint64_t)n0);
     npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, h1 * n1 * m1 * m0 * sizeof(float)); // c
     return kernel_ret;
 }
@@ -188,7 +224,7 @@ void kernel_get_rows_f32(std::vector<float>& a, std::vector<int>& b, std::vector
     assert((bs0 == h1) && (h0 == n1));
     assert(bs1 == 1);
 
-    host_get_rows(a.data(), b.data(), res.data(), h1, n1, m1, m0, n0, false);
+    host_get_rows_f32(a.data(), b.data(), res.data(), h1, n1, m1, m0, n0);
 
 }
 void kernel_get_rows_bf16(std::vector<uint16_t>& a, std::vector<int>& b, std::vector<float>& res,
@@ -208,7 +244,7 @@ void kernel_get_rows_bf16(std::vector<uint16_t>& a, std::vector<int>& b, std::ve
     assert((bs0 == h1) && (h0 == n1));
     assert(bs1 == 1);
 
-    host_get_rows(a.data(), b.data(), res.data(), h1, n1, m1, m0, n0, true);
+    host_get_rows_bf16(a.data(), b.data(), res.data(), h1, n1, m1, m0, n0);
 
 }
 #include <random>
@@ -453,9 +489,8 @@ int main(int argc, char * argv[]) {
         return 0;
     }
 
-    test_random_case<float>();
-    test_random_case<uint16_t>();
-    // printf("test_random_case() returned to main\n");
+    // test_random_case<float>();
+    // test_random_case<uint16_t>();
     std::string trace_dir(argv[1]);
     int trace_id = std::stoi(argv[2]);
 

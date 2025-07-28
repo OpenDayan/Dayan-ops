@@ -78,7 +78,7 @@ __device__ void dup_cont_f32_cont_bf16(void *a, void *res,
     __tx_fence();
     __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram0, (void *)nram1);
     __tx_fence();
-    __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram1, res);
+    __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, res);
     __tx_fence();
 }
 
@@ -102,7 +102,7 @@ __device__ void dup_cont_f32_no_cont_bf16(void *a, void *res,
                     __tx_fence();
                     __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram0, (void *)nram1);
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram1, (void *)((long)res + res_offset));
+                    __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, (void *)((long)res + res_offset));
                     __tx_fence();
                 }
             }
@@ -130,7 +130,7 @@ __device__ void dup_no_cont_f32_no_cont_bf16(void *a, void *res,
                     __tx_fence();
                     __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram0, (void *)nram1);
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram1, (void *)((long)res + res_offset));
+                    __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, (void *)((long)res + res_offset));
                     __tx_fence();
                 }
             }
