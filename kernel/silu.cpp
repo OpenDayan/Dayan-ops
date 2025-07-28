@@ -68,10 +68,10 @@ __device__ long silu_f32(void *x, void *y, void* minus_one, int b, int h, int n,
   __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE3>(1);
 
 
-  float XTile[b * h * n * m];
-  float mid1[b * h * n * m];
-  float mid2[b * h * n * m];
-  float minusone[1];
+  float* XTile     = (float*)NULL;
+  float* mid1      = XTile     + b * h * n * m;
+  float* mid2      = mid1      + b * h * n * m;
+  float* minusone  = mid2      + b * h * n * m;
 
 
   __tx_async_nram_load<xTCFG, xTCFG, 2>(
