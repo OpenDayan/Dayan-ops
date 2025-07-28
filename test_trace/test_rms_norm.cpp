@@ -6,6 +6,9 @@
 #include <stdexcept>
 #include <iomanip>
 #include <algorithm>
+#include <cassert>
+
+#include <NPURuntime.h>
 
 #include "common.hpp"
 
@@ -26,6 +29,91 @@ void rms_norm(std::vector<float>& a, std::vector<float>& res,
             res[i * m + j] *= 1.0f/std::sqrt(mean + (float)(pnorm.eps));
         }
     }
+}
+
+
+static struct NPURuntimeState runtime;
+extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+int host_rms_norm_f32(
+    void *x, void *y, int b, int h, int n, int m, float epsilon)
+{
+    printf("\nb:%d, h:%d, n:%d, m:%d\n", b, h, n, m);
+    printf("epsilon: %f\n", epsilon);
+    static struct NPUKernelDesc *rms_norm_f32_desc = NULL;
+    if (rms_norm_f32_desc == NULL)
+    {
+        ssize_t err = 0;
+        printf("[INFO] Initializing Runtime..\n");
+        err = npu_runtime_init(&runtime);
+        if (err != NPU_SUCCESS) {
+            printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
+            exit(-1);
+        }
+        printf("[INFO] Runtime initialized successfully.\n");
+
+        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        if (err != NPU_SUCCESS) {
+            printf("[ERROR] Failed to load kernel set: err=%ld\n", err);
+            npu_runtime_deinit(&runtime);
+            exit(-1);
+        }
+        printf("[INFO] Kernel set loaded successfully.\n");
+
+        err = npu_runtime_get_kernel_desc(&runtime, "rms_norm_f32", &rms_norm_f32_desc);
+        if (err != NPU_SUCCESS) {
+            printf("[ERROR] Failed to get kernel description: err=%ld\n", err);
+            npu_runtime_deinit(&runtime);
+            exit(-1);
+        }
+        printf("[INFO] Loaded rms_norm_f32 kernel desc successfully.\n");
+    }
+
+    // Static device addresses for input/output data
+    uint64_t x_dev = 0x81000000;
+    uint64_t y_dev = 0x83000000;
+    uint64_t num_m = 0x85000000;
+    float val = 1.0f / (float)m;
+    float arr[b * h * n * m];
+    std::fill(arr, arr + b * h * n * m, val);
+    // Copy data to device (x and y tensors)
+    ssize_t ret = 0;
+    ret = npu_memcpy_to_dev(&runtime.dev_state, x_dev, x, b * h * n * m * sizeof(float)); // x
+    if (ret < 0)
+        printf("[ERROR] Failed to write x to device at 0x%lx: err=%ld\n", x_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, y_dev, y, b * h * n * m * sizeof(float)); // y
+    if (ret < 0)
+        printf("[ERROR] Failed to write y to device at 0x%lx: err=%ld\n", y_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, num_m, arr, b * h * n * m * sizeof(float)); // m
+    if (ret < 0)
+        printf("[ERROR] Failed to write y to device at 0x%lx: err=%ld\n", y_dev, ret);
+    // Launch kernel
+    int kernel_ret;
+    npu_runtime_kernel_start(&runtime, rms_norm_f32_desc, &kernel_ret, 8,
+                             x_dev, y_dev, num_m, (uint64_t)b, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)epsilon);
+
+    // Copy result from device to host
+    ret = npu_memcpy_from_dev(&runtime.dev_state, y, y_dev, b * h * n * m * sizeof(float)); // y
+    if (ret < 0)
+        printf("[ERROR] Failed to read y from device at 0x%lx: err=%ld\n", y_dev, ret);
+
+    return kernel_ret;
+}
+
+
+void kernel_rms_norm(
+    std::vector<float>& a, std::vector<float>& res,
+    TensorParams& psrc0, TensorParams & pdst, NormParams & pnorm) {
+    int b = psrc0.ne[3];
+    int h = psrc0.ne[2];
+    int n = psrc0.ne[1];
+    int m = psrc0.ne[0];
+
+    float epsilon = (float)pnorm.eps;
+    
+    // Call Kernel
+    host_rms_norm_f32(
+        a.data(), res.data(),
+        b, h, n, m, epsilon);
 }
 
 int test_rms_norm(std::string src0_trace, std::string dst_trace,
@@ -50,11 +138,11 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
         // FIXME: RUN KERNEL HERE
         //
         // --------------------------------------------
-        // kernel_rms_norm(data_a, result_data, ...);
+        kernel_rms_norm(data_a, result_data, psrc0, pdst, pnorm);
         // --------------------------------------------
         //
         // FIXME: CPU reference
-        rms_norm(data_a, result_data, psrc0, pnorm);
+        // rms_norm(data_a, result_data, psrc0, pnorm);
 
         // 对比结果
         // std::cout << "\nCompare with ref..." << std::endl;
