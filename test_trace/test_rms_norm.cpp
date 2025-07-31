@@ -71,8 +71,6 @@ int host_rms_norm_f32(
     // Static device addresses for input/output data
     uint64_t x_dev = 0x81000000;
     uint64_t y_dev = 0x83000000;
-    uint64_t num_m = 0x85000000;
-    float val = 1.0f / (float)m;
 
     // Copy data to device (x and y tensors)
     ssize_t ret = 0;
@@ -82,13 +80,10 @@ int host_rms_norm_f32(
     ret = npu_memcpy_to_dev(&runtime.dev_state, y_dev, y, b * h * n * m * sizeof(float)); // y
     if (ret < 0)
         printf("[ERROR] Failed to write y to device at 0x%lx: err=%ld\n", y_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, num_m, &val, sizeof(float)); // m
-    if (ret < 0)
-        printf("[ERROR] Failed to write y to device at 0x%lx: err=%ld\n", y_dev, ret);
     // Launch kernel
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, rms_norm_f32_desc, &kernel_ret, 8,
-                             x_dev, y_dev, num_m, (uint64_t)b, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)epsilon);
+    npu_runtime_kernel_start(&runtime, rms_norm_f32_desc, &kernel_ret, 7,
+                             x_dev, y_dev, (uint64_t)b, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)epsilon);
 
     // Copy result from device to host
     ret = npu_memcpy_from_dev(&runtime.dev_state, y, y_dev, b * h * n * m * sizeof(float)); // y
@@ -154,7 +149,7 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
                 std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
                 
                 // Print first 9 mismatches
-                size_t mismatches_to_print = std::min((size_t)9, result_data.size());
+                size_t mismatches_to_print = std::min((size_t)6, result_data.size());
                 std::cerr << "First " << mismatches_to_print << " mismatches:" << std::endl;
                 
                 for (size_t j = 0; j < mismatches_to_print; j++) {
