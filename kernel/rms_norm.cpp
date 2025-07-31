@@ -4,44 +4,41 @@
 #include <string.h>
 #include <cmath>
 
-__device__ long rms_norm_f32(void *x, void *y, void *m0, int b, int h, int n, int m, float epsilon) {
-  const long xTCFG = 0;
-  const long yTCFG = 1;
-  const long normTCFG = 2;
-  const long oneTCFG = 3;
+const long aTCSR = 0;
+const long bTCSR = 1;
+const long cTCSR = 2;
+const long oneTCFG = 3;
 
-  const uint64_t stride0 = 1;
-  const uint64_t stride1 = stride0 * m;
-  const uint64_t stride2 = stride0 * m * n;
-  const uint64_t stride3 = stride0 * m * n * h;
+static inline void configTCSRs(int m, int n) {
+  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(m);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE0>(1);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM1>(n);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE1>(m);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM2>(1);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE2>(m * n);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM3>(1);
+  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE3>(m * n);
 
-  __tx_tcsr_write<xTCFG * 8 + TCSR_DIM0>(m);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_STRIDE0>(stride0);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_STRIDE1>(stride1);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_DIM2>(h);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_STRIDE2>(stride2);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_DIM3>(b);
-  __tx_tcsr_write<xTCFG * 8 + TCSR_STRIDE3>(stride3);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM0>(m);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE0>(1);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM1>(n);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE1>(m);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM2>(1);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE2>(m * n);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM3>(1);
+  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE3>(m * n);
 
-  __tx_tcsr_write<yTCFG * 8 + TCSR_DIM0>(m);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_STRIDE0>(stride0);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_STRIDE1>(stride1);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_DIM2>(h);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_STRIDE2>(stride2);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_DIM3>(b);
-  __tx_tcsr_write<yTCFG * 8 + TCSR_STRIDE3>(stride3);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM0>(m);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE0>(1);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM1>(n);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE1>(m);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM2>(1);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE2>(m * n);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM3>(1);
+  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE3>(m * n);
+}
 
-  __tx_tcsr_write<normTCFG * 8 + TCSR_DIM0>(1);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_STRIDE0>(stride0);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_STRIDE1>(stride1 / m);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_DIM2>(h);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_STRIDE2>(stride2 / m);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_DIM3>(b);
-  __tx_tcsr_write<normTCFG * 8 + TCSR_STRIDE3>(stride3 / m);
-
+static inline void configoneTCSR(void) {
   __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM0>(1);
   __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE0>(1);
   __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM1>(1);
@@ -50,39 +47,54 @@ __device__ long rms_norm_f32(void *x, void *y, void *m0, int b, int h, int n, in
   __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE2>(1);
   __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM3>(1);
   __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE3>(1);
+}
 
-  float* XTile          = (float*)NULL;
-  float* kernel_buffer  = XTile          + b * h * n * m;
-  float* mid            = kernel_buffer  + b * h * n * m;
-  float* Average        = mid            + b * h * n * m;
-  float* norm           = Average        + b * h * n;
-  float* m0ram          = norm           + b * h * n;
+__device__ long rms_norm_f32(float *x, float *y, int b, int h, int n, int m, float epsilon) {
+  float m0 = 1.0f / (float)m;
 
-  __tx_async_nram_load<xTCFG, xTCFG, 2>(
-    x, XTile);
-  __tx_async_nram_load<oneTCFG, oneTCFG, 2>(
-    m0, m0ram);
-  __tx_fence();
-  __tx_fp_mul_fp32<0, 1, 2, 0>(
-    XTile, XTile, mid);
-  __tx_fence();
-  __tx_fp_reduce_add_fp32<xTCFG, normTCFG, 0>(        //sum
-    mid, norm);
-  __tx_fence();
+  float* XTile  = (float*)NULL;
+  float* YTile  = XTile  + m;
+  float* mid    = YTile  + m;
+  float* ave    = mid    + m;
+  float* norm   = ave    + 1;
+  float* mram   = norm   + 1;
 
-  __tx_fp_mul_fp32<normTCFG, oneTCFG, normTCFG, 0b1110>(   //ave
-    norm, m0ram, Average);
-  __tx_fence();
+  configoneTCSR();
+  configTCSRs(m, 1);
 
-  __tx_sfu_rsqrt_fp32<normTCFG, normTCFG>(
-    Average, m0ram);
-  __tx_fence();
-  __tx_fp_mul_fp32<xTCFG, normTCFG, yTCFG, 0b0001>(
-    XTile, m0ram, kernel_buffer);
-  __tx_fence();
-  
-  __tx_async_nram_store<yTCFG, yTCFG, 2>(
-    kernel_buffer, y);
-  __tx_fence();
+  for (int i = 0; i < b; ++i) {
+    for (int j = 0; j < h; ++j) {
+      for (int k = 0; k < n; ++k) {
+        const int64_t head_offset = (i * h * n + j * n + k) * m;
+
+        const float* x_ptr = &x[head_offset];
+        float* y_ptr = &y[head_offset];
+
+        __tx_async_nram_load<aTCSR, aTCSR, 2>((float*)x_ptr, XTile);
+        __tx_async_nram_load<oneTCFG, oneTCFG, 2>(&m0, mram);
+        __tx_fence();
+
+        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0>(XTile, XTile, mid);
+        __tx_fence();
+
+        __tx_fp_reduce_add_fp32<aTCSR, oneTCFG, 0>(mid, norm);                      //sum
+        __tx_fence();
+
+        __tx_fp_mul_fp32<oneTCFG, oneTCFG, oneTCFG, 0b0000>(norm, mram, ave);
+        __tx_fence();
+        __tx_fp_sub_fp32<oneTCFG, oneTCFG, oneTCFG, 0b0000>(ave, &epsilon, mram);   //ave
+        __tx_fence();
+
+
+        __tx_sfu_rsqrt_fp32<oneTCFG, oneTCFG>(mram, norm);
+        __tx_fence();
+        __tx_fp_mul_fp32<aTCSR, oneTCFG, cTCSR, 0b0001>(XTile, norm, YTile);
+        __tx_fence();
+        
+        __tx_async_nram_store<cTCSR, cTCSR, 2>(YTile, (float*)y_ptr);
+        __tx_fence();
+      }
+    }
+  }
   return 0;
 }
