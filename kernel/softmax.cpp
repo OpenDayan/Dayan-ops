@@ -121,19 +121,11 @@ __device__ long softmax_f32_f32_f32(float* a, float* b, float* res, float scale,
       float maxval = -INFINITY;
       tx_fp_reduce_max_fp32(a_ptr, &maxval, m, 1, 1); // maxval = max(a[i][j][k][:])
 
-
-      // TODO: use tx_fp_sub_fp32_ to avoid loading a[i][j][k][:] again
-      float sum = 0.0f;
-      for (int p = 0; p < m; ++p) {
-        configTCSRs(1, 1);
-        float temp = a[i * h * n * m + j * m + p];
-        tx_fp_sub_fp32_(&temp, &maxval, &res[i * h * n * m + j * m + p]);  // a[i][j][k][:] -= max
-      }
-
-      float* res_ptr = &res[i * h * n * m + j * m];
       configTCSRs(1, m);
-      // float maxval_vec[m]; memset(maxval_vec, maxval, sizeof(maxval_vec));
-      // tx_fp_sub_fp32_(a_ptr, maxval_vec, res_ptr);  // a[i][j][k][:] -= max
+      float sum = 0.0f;
+      float* res_ptr = &res[i * h * n * m + j * m];
+      float maxval_vec[m]; memset(maxval_vec, maxval, sizeof(maxval_vec));
+      tx_fp_sub_fp32_(a_ptr, maxval_vec, res_ptr);  // a[i][j][k][:] -= max
       tx_sfu_exp_fp32_(res_ptr, res_ptr);  // x(i) = e^(x(i) - max)
       tx_fp_reduce_add_fp32(res_ptr, &sum, m, 1, 1);  // sum = 1 / (sum of e^(x(i) - max))
 
