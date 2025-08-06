@@ -45,11 +45,66 @@ float c1[M * N] = {0};
 float c2[M * N] = {0};
 float c3[M * N] = {0};
 
-float c_real[M * N] = {
-    // C = A * B
+/*
+A row major 2×3
+  [1,2,3]
+  [4,5,6]
+
+B row major 3×4
+  [1, 2, 3, 4]
+  [5, 6, 7, 8]
+  [9,10,11,12]
+*/
+float c0_real[M * N] = {
     38.0f,  44.0f,  50.0f,  56.0f, 
     83.0f,  98.0f, 113.0f, 128.0f
 };
+
+/*
+A row major 2×3
+  [1,2,3]
+  [4,5,6]
+
+B col major 3x4
+  [1,4,7,10]
+  [2,5,8,11]
+  [3,6,9,12]
+*/
+float c1_real[M * N] = {
+    14.0, 32.0, 50.0,  68.0,
+    32.0, 77.0, 122.0, 167.0,
+};
+
+/*
+A col major 2×3
+  [1,3,5]
+  [2,4,6]
+
+B row major 3x4
+  [1, 2, 3, 4]
+  [5, 6, 7, 8]
+  [9,10,11,12]
+*/
+float c2_real[M * N] = {
+    61.0, 70.0, 79.0, 88.0,
+    76.0, 88.0, 100.0, 112.0
+};
+
+/*
+A col major 2×3
+  [1,3,5]
+  [2,4,6]
+
+B col major 3x4
+  [1,4,7,10]
+  [2,5,8,11]
+  [3,6,9,12]
+*/
+float c3_real[M * N] = {
+  22.0, 49.0, 76.0, 103.0,
+  28.0, 64.0, 100.0, 136.0,
+};
+
 
 
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
@@ -117,7 +172,7 @@ static void testrt_npu_get_kernel_desc(const char *kernel_name) {
   printf("[INFO] Loaded '%s' kernel desc successfully.\n", kernel_name);
 }
 
-void check_result(float *c) {
+void check_result(float *c, float *c_real) {
   printf("[INFO] Check result ...\n");
   for (int n = 0; n < N; n++)
   {
@@ -203,16 +258,16 @@ int main(int argc, char** argv) {
   testrt_run_tx_init_kernel();
 
   run_kenrel("matmul_fp32_fp32_fp32_row_row", a_in, b_in, c0);
-  check_result(c0);
+  check_result(c0, c0_real);
 
   run_kenrel("matmul_fp32_fp32_fp32_row_col", a_in, b_in, c1);
-  check_result(c1);
+  check_result(c1, c1_real);
 
   run_kenrel("matmul_fp32_fp32_fp32_col_row", a_in, b_in, c2);
-  check_result(c2);
+  check_result(c2, c2_real);
 
   run_kenrel("matmul_fp32_fp32_fp32_col_col", a_in, b_in, c3);
-  check_result(c3);
+  check_result(c3, c3_real);
 
   // End
   npu_runtime_deinit(&runtime);

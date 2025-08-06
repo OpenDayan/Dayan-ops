@@ -126,7 +126,7 @@ __device__ void matmul_fp32_fp32_fp32_row_col(void *input0, void *input1, void *
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
   config_row_major_tcsr0(m, k);
-  config_row_major_tcsr1(k, n);
+  config_col_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
   __tx_matmul_float_f32_f32_f32<0, 1, 2>((void *)nram0, (void *)nram1,
@@ -155,7 +155,7 @@ __device__ void matmul_fp32_fp32_fp32_col_row(void *input0, void *input1, void *
   config_row_major_tcsr2(m, n);
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
-  config_row_major_tcsr0(m, k);
+  config_col_major_tcsr0(m, k);
   config_row_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
@@ -185,8 +185,8 @@ __device__ void matmul_fp32_fp32_fp32_col_col(void *input0, void *input1, void *
   config_row_major_tcsr2(m, n);
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
-  config_row_major_tcsr0(m, k);
-  config_row_major_tcsr1(k, n);
+  config_col_major_tcsr0(m, k);
+  config_col_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
   __tx_matmul_float_f32_f32_f32<0, 1, 2>((void *)nram0, (void *)nram1,
@@ -298,7 +298,7 @@ __device__ void matmul_e4m3_e4m3_fp32_row_col(void *input0, void *input1, void *
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
   config_row_major_tcsr0(m, k);
-  config_row_major_tcsr1(k, n);
+  config_col_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
   __tx_matmul_subfloat_e4m3_e4m3_f32<0, 1, 2>((void *)nram0, (void *)nram1,
@@ -326,7 +326,7 @@ __device__ void matmul_e4m3_e4m3_fp32_col_row(void *input0, void *input1, void *
   config_row_major_tcsr2(m, n);
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
-  config_row_major_tcsr0(m, k);
+  config_col_major_tcsr0(m, k);
   config_row_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
@@ -355,8 +355,8 @@ __device__ void matmul_e4m3_e4m3_fp32_col_col(void *input0, void *input1, void *
   config_row_major_tcsr2(m, n);
   __tx_async_nram_load<aTCFG, cTCFG, 2>(dst, (void *)nram2);
 
-  config_row_major_tcsr0(m, k);
-  config_row_major_tcsr1(k, n);
+  config_col_major_tcsr0(m, k);
+  config_col_major_tcsr1(k, n);
   config_row_major_tcsr2(m, n);
   __tx_fence();
   __tx_matmul_subfloat_e4m3_e4m3_f32<0, 1, 2>((void *)nram0, (void *)nram1,
