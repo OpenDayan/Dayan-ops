@@ -83,9 +83,9 @@ void rope_neox(std::vector<float>& a, std::vector<int>& b, std::vector<float>& r
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
 int host_rope_f32_i32_f32(
-    void* x, void* pos_sin, void* pos_cos, void* res,
-    int bs, int h, int n, int m, int n_dims) {
-    printf("\nbs:%d, h:%d, n:%d, m:%d, n_dims:%d\n", bs, h, n, m, n_dims);
+    void* a, void* b, void* res,
+    int bs, int h, int n, int m, int n_dims,
+    float theta_scale, float freq_scale, int mdst) {
     static struct NPUKernelDesc* rope_f32_i32_f32 = NULL;
     if (rope_f32_i32_f32 == NULL) {
         ssize_t err = 0;
@@ -112,28 +112,25 @@ int host_rope_f32_i32_f32(
         printf("[INFO] Loaded rope_f32_i32_f32 kernel desc successfully.\n");
     }
     // static address allocation
-    uint64_t x_dev = 0x81000000;
-    uint64_t pos_sin_dev = 0x83000000;
-    uint64_t pos_cos_dev = 0x85000000;
-    uint64_t res_dev = 0x87000000;
+    uint64_t a_dev = 0x81000000;
+    uint64_t b_dev = 0x83000000;
+    uint64_t res_dev = 0x85000000;
     // Copy data to device
     ssize_t ret = 0;
-    ret = npu_memcpy_to_dev(&runtime.dev_state, x_dev, x, bs * h * n * m * sizeof(float)); // x
+    ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, bs * h * n * m * sizeof(float)); // a
     if (ret < 0)
-        printf("[ERROR] Failed to write x to device at 0x%lx: err=%d\n", x_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, pos_sin_dev, pos_sin, bs * h * n * n_dims / 2 * sizeof(float)); // pos_sin
+        printf("[ERROR] Failed to write a to device at 0x%lx: err=%d\n", a_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, h * sizeof(int)); // b
     if (ret < 0)
-        printf("[ERROR] Failed to write pos_sin to device at 0x%lx: err=%d\n", pos_sin_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, pos_cos_dev, pos_cos, bs * h * n * n_dims / 2 * sizeof(float));   // pos_cos
-    if (ret < 0)
-        printf("[ERROR] Failed to write pos_cos to device at 0x%lx: err=%d\n", pos_cos_dev, ret);
+        printf("[ERROR] Failed to write b to device at 0x%lx: err=%d\n", b_dev, ret);
     ret = npu_memcpy_to_dev(&runtime.dev_state, res_dev, res, bs * h * n * m * sizeof(float));   // res
     if (ret < 0)
         printf("[ERROR] Failed to write res to device at 0x%lx: err=%d\n", res_dev, ret);
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, rope_f32_i32_f32, &kernel_ret, 9,
-                             x_dev, pos_sin_dev, pos_cos_dev, res_dev,
-                             (uint64_t)bs, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)n_dims);
+    npu_runtime_kernel_start(&runtime, rope_f32_i32_f32, &kernel_ret, 11,
+                             a_dev, b_dev, res_dev,
+                             (uint64_t)bs, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)n_dims,
+                             (float)theta_scale, (float)freq_scale, (int)mdst);
     npu_memcpy_from_dev(&runtime.dev_state, res, res_dev, bs * h * n * m * sizeof(float)); // res
     return kernel_ret;
 }
@@ -144,45 +141,15 @@ void kernel_rope_f32(std::vector<float>& a, std::vector<int>& b, std::vector<flo
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
     int m = psrc0.ne[0];
-    const float theta_scale = std::pow(prope.freq_base, -2.0f / prope.n_dims);
-
-    std::vector<float> cos_vec, sin_vec;
-
-    std::vector<float> cache;
-    cache.resize(psrc0.ne[0]);
-    for (size_t i = 0; i < bs; ++i) { // batch
-        for (size_t j = 0; j < h; ++j) { // seq-len
-            int64_t p = b[j];
-            rope_cache_init(cache, p, theta_scale,
-                            static_cast<float>(prope.freq_scale), pdst.ne[0]);
-            for (size_t i = 0; i < prope.n_dims; i += 2) {
-                cos_vec.push_back(cache[i]);
-                sin_vec.push_back(cache[i + 1]);
-            }
-        }
-    }
-
-    std::cout << std::endl << cos_vec.size() << " " << sin_vec.size();
+    float theta_scale = std::pow(prope.freq_base, -2.0f / prope.n_dims);
 
     host_rope_f32_i32_f32(
         a.data(),
-        sin_vec.data(),
-        cos_vec.data(),
+        b.data(),
         res.data(),
-        bs, h, n, m, prope.n_dims
+        bs, h, n, m, prope.n_dims,
+        theta_scale, prope.freq_scale, pdst.ne[0]
     );
-
-    for (int i = 0; i < bs; ++i) { // batch
-    for (int j = 0; j < h; ++j) { // seq-len
-      for (int k = 0; k < n; ++k) { // attn-heads
-        // fill remain res[i][j][k][prope.n_dims:]
-        for (size_t p = prope.n_dims; p < m; p += 2) {
-          res[i * h * n * m + j * n * m + k * m + p] = a[i * h * n * m + j * n * m + k * m + p];
-          res[i * h * n * m + j * n * m + k * m + p + 1] = a[i * h * n * m + j * n * m + k * m + p + 1];
-        }
-      }
-    }
-  }
 }
 
 int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_trace,
