@@ -94,7 +94,6 @@ void get_rows_f32(std::vector<float>& a, std::vector<int>& b, std::vector<float>
             }
 }
 
-//testing kernel function
 #include <NPURuntime.h>
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
@@ -138,21 +137,16 @@ long host_get_rows_f32(void *a, void *b, void *c,
     ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, h1 * n1 * n0 * m0 * sizeof(float)); // a
     if (ret < 0)
         printf("[ERROR] Failed to write a to device at 0x%lx: err=%ld\n", a_dev, ret);
-    // printf("Wrote a to device at 0x%lx with ret:%ld\n", a_dev, ret);
     ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, 1 * h1 * n1 * m1 * sizeof(int)); // b
     if (ret < 0)
         printf("[ERROR] Failed to write b to device at 0x%lx: err=%ld\n", b_dev, ret);
-    // printf("Wrote b to device at 0x%lx with ret:%ld\n", b_dev, ret);
     ret = npu_memcpy_to_dev(&runtime.dev_state, c_dev, c, h1 * n1 * m1 * m0 * sizeof(float));   // c
     if (ret < 0)
         printf("[ERROR] Failed to write c to device at 0x%lx: err=%ld\n", c_dev, ret);
-    // printf("Wrote c to device at 0x%lx with ret:%ld\n", c_dev, ret);
     int kernel_ret;
-    // printf("[INFO] Ready to start get rows npu kernel\n");
     npu_runtime_kernel_start(&runtime, get_rows_f32_desc, &kernel_ret, 8,
                              a_dev, b_dev, c_dev,
                              (uint64_t)h1, (uint64_t)n1, (uint64_t)m1, (uint64_t)m0, (uint64_t)n0);
-    // printf("[INFO] Finished get rows npu kernel, ready for copy from dev\n");
     npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, h1 * n1 * m1 * m0 * sizeof(float)); // c
     return kernel_ret;
 }
@@ -246,145 +240,6 @@ void kernel_get_rows_bf16(std::vector<uint16_t>& a, std::vector<int>& b, std::ve
 
     host_get_rows_bf16(a.data(), b.data(), res.data(), h1, n1, m1, m0, n0);
 
-}
-#include <random>
-#include <cassert>
-#include <chrono>
-#include <vector>
-#include <cstdio>
-
-template<typename T>
-void generate_random_test_data(
-    std::vector<T>& a, std::vector<int>& b,
-    TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
-
-    static_assert(std::is_same_v<T, float> || std::is_same_v<T, uint16_t>,
-                  "Only float or uint16_t are supported for a");
-
-    std::random_device rd;
-    int seed = rd();
-    printf("[INFO] Generating random test data using seed = %d\n", seed);
-    std::mt19937 rng(seed);
-
-    std::uniform_int_distribution<int> dim_dist(1, 20);
-    std::uniform_int_distribution<int> x_dist(1, 20);
-
-    int h1 = dim_dist(rng);
-    int n1 = dim_dist(rng);
-    int m0 = dim_dist(rng);
-    int m1 = dim_dist(rng);
-    int x  = x_dist(rng);
-
-    psrc0.ne.resize(4);
-    psrc1.ne.resize(4);
-    pdst.ne.resize(4);
-
-    psrc0.ne[0] = m0;
-    psrc0.ne[1] = x;
-    psrc0.ne[2] = n1;
-    psrc0.ne[3] = h1;
-
-    psrc1.ne[0] = m1;
-    psrc1.ne[1] = n1;
-    psrc1.ne[2] = h1;
-    psrc1.ne[3] = 1;
-
-    pdst.ne[0] = m0;
-    pdst.ne[1] = m1;
-    pdst.ne[2] = n1;
-    pdst.ne[3] = h1;
-
-    size_t a_size = h1 * n1 * x * m0;
-    a.resize(a_size);
-
-    if constexpr (std::is_same_v<T, float>) {
-        std::uniform_real_distribution<float> val_dist(-10.0f, 10.0f);
-        for (auto& v : a)
-            v = val_dist(rng);
-    } else if constexpr (std::is_same_v<T, uint16_t>) {
-        std::uniform_real_distribution<float> val_dist(-10.0f, 10.0f);
-        for (auto& v : a) {
-            float f = val_dist(rng);
-            uint32_t tmp;
-            std::memcpy(&tmp, &f, sizeof(float));
-            v = static_cast<uint16_t>(tmp >> 16);  // high 16 bit as bf16
-        }
-    }
-
-    size_t b_size = h1 * n1 * m1;
-    b.resize(b_size);
-
-    std::uniform_int_distribution<int> index_dist(0, x - 1);
-    for (auto& idx : b)
-        idx = index_dist(rng);  // make sure row index is legal
-
-    printf("Generated test data:\n");
-    printf("psrc0 shape: (%d, %d, %d, %d)\n", psrc0.ne[3], psrc0.ne[2], psrc0.ne[1], psrc0.ne[0]);
-    printf("psrc1 shape: (%d, %d, %d, %d)\n", psrc1.ne[3], psrc1.ne[2], psrc1.ne[1], psrc1.ne[0]);
-    printf("pdst  shape: (%d, %d, %d, %d)\n", pdst.ne[3], pdst.ne[2], pdst.ne[1], pdst.ne[0]);
-}
-
-template<typename T>
-int test_random_case() {
-    std::vector<T> a;
-    std::vector<int> b;
-    TensorParams psrc0, psrc1, pdst;
-
-    generate_random_test_data<T>(a, b, psrc0, psrc1, pdst);
-
-    size_t dst_size = pdst.ne[0] * pdst.ne[1] * pdst.ne[2] * pdst.ne[3];
-    std::vector<float> data_ref(dst_size);
-    std::vector<float> result_data(dst_size);
-
-    if constexpr (std::is_same_v<T, uint16_t>) {
-        get_rows_bf16(a, b, data_ref, psrc0, psrc1, pdst);
-        kernel_get_rows_bf16(a, b, result_data, psrc0, psrc1, pdst);
-    } else if constexpr (std::is_same_v<T, float>) {
-        get_rows_f32(a, b, data_ref, psrc0, psrc1, pdst);
-        kernel_get_rows_f32(a, b, result_data, psrc0, psrc1, pdst);
-    } else {
-        printf("Unsupported type\n");
-    }
-
-    const float epsilon = 1e-6f;
-    bool all_match = true;
-
-    int bs = pdst.ne[3];
-    int h = pdst.ne[2];
-    int n = pdst.ne[1];
-    int m = pdst.ne[0];
-
-    std::cout << "Testing random case...\n";
-    for (int i = 0; i < bs; ++i) {
-        for (int j = 0; j < h; ++j) {
-            for (int k = 0; k < n; ++k) {
-                for (int p = 0; p < m; ++p) {
-                    size_t idx = i * h * n * m + j * n * m + k * m + p;
-                    assert(idx < result_data.size());
-                    float result = static_cast<float>(result_data[idx]);
-                    float ref = static_cast<float>(data_ref[idx]);
-                    if (std::abs(result - ref) > epsilon) {
-                        std::cerr << std::fixed << std::setprecision(8);
-                        std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                        std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                  << result << std::endl;
-                        std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                  << ref << std::endl;
-                        std::cerr << "  - result - ref:        " << std::abs(result - ref) << std::endl;   
-                        all_match = false;
-                        goto Done;
-                    }
-                }
-            }
-        }
-    }
-    Done:
-        if (all_match) {
-            std::cout << " *** Compare PASS ***" << std::endl;
-            return 0;
-        } else {
-            return 1;
-        }
 }
 
 int test_get_rows(std::string src0_trace, std::string src1_trace, std::string dst_trace,
@@ -489,8 +344,6 @@ int main(int argc, char * argv[]) {
         return 0;
     }
 
-    // test_random_case<float>();
-    // test_random_case<uint16_t>();
     std::string trace_dir(argv[1]);
     int trace_id = std::stoi(argv[2]);
 

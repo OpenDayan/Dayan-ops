@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 
-const uint64_t b_buffer_dram = 0x87000000;
-const uint64_t c_buffer_dram = 0x87100000;
 const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
@@ -54,7 +52,6 @@ static uint16_t c_buffer_fp16;
 static uint32_t c_buffer_u32;
 __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c, 
                                     int h1, int n1, int m1, int m0, int n0){
-
     // assume the shape fits
     //a: source data, b: index c: result dst
     // sr0 shape: (h1, n1, x, m0)  (x is the number range of src0[0][j][k][p])
@@ -66,14 +63,7 @@ __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c,
         for (int k = 0; k < n1; ++k) {
             for (int p = 0; p < m1; ++p) {
                 int b_offset = j * n1 * m1 + k * m1 + p;
-
-                // Use the data from src1 to determine the row index to read from src0.
-                __tx_async_nram_load<bTCSR, bTCSR, 2>((void *)((long)b + b_offset * sizeof(int)), (void *)nram0);
-                // __tx_async_nram_load<bTCSR, bTCSR, 2>((void *)((long)b + b_offset * sizeof(int)), bidx);
-                __tx_fence();
-                __tx_async_nram_store<bTCSR, bTCSR, 2>((void*)nram0, (void *)((long)b_buffer_dram));
-                __tx_fence();
-                memcpy(&b_buffer,(void *)((long)b_buffer_dram),sizeof(int));
+                memcpy(&b_buffer,(void *)((long)b + b_offset * sizeof(int)),sizeof(int));
                 int row_idx = b_buffer;
                 if (row_idx < 0 || row_idx > n0) {
                     printf("[ERROR] invalid row_idx value: %d",row_idx);
@@ -92,12 +82,7 @@ __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c,
 }
 __device__ long get_rows_bf16_i32_f32(void *a, void *b, void *c, 
                                     int h1, int n1, int m1, int m0, int n0){
-
     // assume the shape fits
-    //a: source data, b: index c: result dst
-    // sr0 shape: (h1, n1, x, m0)  (x is the number range of src0[0][j][k][p])
-    // sr1 shape: (1, h1, n1, m1)
-    // dst shape: (h1, n1, m1, m0)
 
     config_dims_and_strides_get_rows(h1, n1, m1, m0);
 
@@ -105,12 +90,7 @@ __device__ long get_rows_bf16_i32_f32(void *a, void *b, void *c,
         for (int k = 0; k < n1; ++k) {
             for (int p = 0; p < m1; ++p) {
                 int b_offset = j * n1 * m1 + k * m1 + p;
-                // Use the data from src1 to determine the row index to read from src0.
-                __tx_async_nram_load<bTCSR, bTCSR, 2>((void *)((long)b + b_offset * sizeof(int)), (void *)nram0);
-                __tx_fence();
-                __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram0, (void *)((long)b_buffer_dram));
-                __tx_fence();
-                memcpy(&b_buffer,(void *)((long)b_buffer_dram),sizeof(int));
+                memcpy(&b_buffer,(void *)((long)b + b_offset * sizeof(int)),sizeof(int));
                 int row_idx = b_buffer;
                 if (row_idx < 0 || row_idx > n0) {
                 printf("[ERROR] invalid row_idx value: %d",row_idx);
