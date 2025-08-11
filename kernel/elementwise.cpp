@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// 向量化处理的块大小，根据NRAM容量调整
+// 向量化处理的块大小
 #define MTile 1024  // 每次处理1024个float元素
 
 const uint64_t nram0 = 0x0;        // A tensor: 0x0 - 0x14000 (80KB)
@@ -57,7 +57,7 @@ __device__ long kernel_add_fp32(void *a_ptr, void *b_ptr, void *c_ptr,
     uint8_t broadcast = get_broadcast(psrc0_ne0, psrc0_ne1, psrc0_ne2, psrc0_ne3,
                                      psrc1_ne0, psrc1_ne1, psrc1_ne2, psrc1_ne3);
 
-    printf("[KERNEL] Broadcasting pattern: 0x%x\n", broadcast);
+    // printf("[KERNEL] Broadcasting pattern: 0x%x\n", broadcast);
         
     int a_stride_dim1 = psrc0_ne0;
     int a_stride_dim2 = psrc0_ne0 * psrc0_ne1;
@@ -152,7 +152,7 @@ __device__ long kernel_add_fp32(void *a_ptr, void *b_ptr, void *c_ptr,
         }
     }
 
-    printf("[KERNEL] NPU kernel_add_fp32 execution completed successfully!\n");
+    // printf("[KERNEL] NPU kernel_add_fp32 execution completed successfully!\n");
     return 0;
 }
 
@@ -164,7 +164,7 @@ __device__ long kernel_mul_fp32(void *a_ptr, void *b_ptr, void *c_ptr,
     uint8_t broadcast = get_broadcast(psrc0_ne0, psrc0_ne1, psrc0_ne2, psrc0_ne3,
                                      psrc1_ne0, psrc1_ne1, psrc1_ne2, psrc1_ne3);
 
-    printf("[KERNEL] Broadcasting pattern: 0x%x\n", broadcast);
+    // printf("[KERNEL] Broadcasting pattern: 0x%x\n", broadcast);
         
     int a_stride_dim1 = psrc0_ne0;
     int a_stride_dim2 = psrc0_ne0 * psrc0_ne1;
@@ -261,6 +261,6 @@ __device__ long kernel_mul_fp32(void *a_ptr, void *b_ptr, void *c_ptr,
         }
     }
 
-    printf("[KERNEL] NPU kernel_mul_fp32 execution completed successfully!\n");
+    // printf("[KERNEL] NPU kernel_mul_fp32 execution completed successfully!\n");
     return 0;
 }
