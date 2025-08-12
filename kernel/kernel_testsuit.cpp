@@ -1,10 +1,14 @@
 #include "npu_kernel.h"
-
+__device__ int kernel_fp_testsuit(
+    long a0
+) {
+    return u32_as_float(a0) + 1;
+}
 __device__ int kernel_testsuit(
     long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7,
     long a8, long a9, long a10, long a11, long a12, long a13, long a14, long a15,
     long a16, long a17, long a18, long a19, long a20, long a21, long a22, long a23,
-    long a24, long a25, long a26, long a27, long a28, long a29
+    long a24, long a25, long a26, long a27, long a28, float a29
 ) {
     volatile long *ptr = (long *)0x81000000;
     ptr[0] = a0;
@@ -36,7 +40,7 @@ __device__ int kernel_testsuit(
     ptr[26] = a0 | a26;
     ptr[27] = a0 | a27;
     ptr[28] = a0 | a28;
-    ptr[29] = a0 | a29;
+    ptr[29] = a0 | float_as_u32(a29);
     // ptr = (long*)0x81000100;
     // while((long)ptr < 0x82000000) {
     //     *ptr = a0 + (long)ptr;
