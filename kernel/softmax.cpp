@@ -7,133 +7,86 @@
 const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
+const long oneTCSR = 3;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t nram0 = 0x0100000;
+const uint64_t nram1 = 0x0200000;
 
-static inline void initTCSR(int m, int n, TCFG tcsr) {
-  tcsr.dim0 = m;
-  tcsr.stride0 = 1;
-  tcsr.stride1 = m;
-  tcsr.dim1 = n;
-  tcsr.dim2 = 1;
-  tcsr.stride2 = m * n;
-  tcsr.dim3 = 1;
-  tcsr.stride3 = m * n;
+template<int TCSR_ID>
+static inline void config_tcsr_vector(int m) {
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM0>(m);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE0>(1);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM1>(1);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE1>(m);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM2>(1);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE2>(m);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM3>(1);
+  __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE3>(m);
 }
 
-static inline void configTCSRs(int m, int n) {
-  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(m);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE0>(1);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE1>(m);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM2>(1);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE2>(m * n);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_DIM3>(1);
-  __tx_tcsr_write<aTCSR * 8 + TCSR_STRIDE3>(m * n);
-
-  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM0>(m);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE0>(1);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE1>(m);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM2>(1);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE2>(m * n);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_DIM3>(1);
-  __tx_tcsr_write<bTCSR * 8 + TCSR_STRIDE3>(m * n);
-
-  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM0>(m);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE0>(1);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM1>(n);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE1>(m);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM2>(1);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE2>(m * n);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_DIM3>(1);
-  __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE3>(m * n);
-}
-
-static inline void tx_fp_sub_fp32_(void* input0, void* input1, void* dst) {
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void*)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void*)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void*)nram2);
-  __tx_fence();
-
-  __tx_fp_sub_fp32<0, 1, 2, 0b0000>((void*)nram0, (void*)nram1, (void*)nram2);
-
-  __tx_fence();
-
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram2, dst);
-  __tx_fence();
-}
-
-static inline void tx_fp_mul_fp32_(void* input0, void* input1, void* dst) {
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void*)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void*)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void*)nram2);
-  __tx_fence();
-
-  __tx_fp_mul_fp32<0, 1, 2, 0b0000>((void*)nram0, (void*)nram1, (void*)nram2);
-
-  __tx_fence();
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram2, dst);
-  __tx_fence();
-}
-
-static inline void tx_sfu_exp_fp32_(void* input, void* output) {
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void*)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void*)nram1);
-  __tx_fence();
-  __tx_sfu_exp_fp32<0, 1>((void*)nram0, (void*)nram1);
-  __tx_fence();
-
-  __tx_async_nram_store<bTCSR, bTCSR, 2>((void*)nram1, output);
-  __tx_fence();
-}
-
-
-extern "C" void tx_fp_reduce_max_fp32(void* input0, void* dst, int m, int n, const int axis);
-extern "C" void tx_fp_reduce_add_fp32(void* input0, void* dst, int m, int n, const int axis);
-
-__device__ long softmax_f32_f32_f32(float* a, float* b, float* res, float scale,
+__device__ long softmax_f32_f32_f32(float* a, float* b, float* res, uint32_t scale_,
               int bs, int h, int n, int m) {
-  TCFG tcsr[2];
+  float scale = u32_as_float(scale_);
+  float* sp = (float*)NULL;
+  float* scale_ram = sp + 1;
+  float* slope_ram = sp + 2;
+  float* max_ram = sp + 3;
+  float* sum_ram = sp + 4;
+
+  config_tcsr_vector<aTCSR>(m);
+  config_tcsr_vector<bTCSR>(m);
+  config_tcsr_vector<cTCSR>(m);
+  config_tcsr_vector<oneTCSR>(1);
 
   for (int i = 0; i < bs; ++i) { // batch
     for (int j = 0; j < (h * n); ++j) { // attn-heads * seq_len
+      const uint32_t hidx = (j / n); // current head idx
+      // const float slope = (max_bias > 0.0f) ? h < h_log2 ? powf(m0, h + 1) : powf(m1, 2*(h - h_log2) + 1) : 1.0f;
       float slope = 1.0f; // only support max_bias == 0.0f in qwen2
 
-      configTCSRs(1, m);
-
-      // scale
-      float scale_vec[m];memset(scale_vec, scale, sizeof(scale_vec));
       float* a_ptr = &a[i * h * n * m + j * m];
-      tx_fp_mul_fp32_(a_ptr, scale_vec, a_ptr); // a[i][j][k][:] *= scale
-
-
-      // mask
-      float buf1_vec[m];
-      float slope_vec[m];memset(slope_vec, slope, sizeof(slope_vec));
       float* b_ptr = &b[i * h * n * m + (j % n) * m];
-      tx_fp_mul_fp32_(b_ptr, slope_vec, buf1_vec); // a[i][j][k][:] += slope * b[i][0][k][:]
-      tx_fp_mul_fp32_(a_ptr, buf1_vec, a_ptr); // a[i][j][k][:] += slope * b[i][0][k][:]
-
-      // get max value for dim[-1]
-      float maxval = -INFINITY;
-      tx_fp_reduce_max_fp32(a_ptr, &maxval, m, 1, 1); // maxval = max(a[i][j][k][:])
-
-      configTCSRs(1, m);
-      float sum = 0.0f;
       float* res_ptr = &res[i * h * n * m + j * m];
-      float maxval_vec[m]; memset(maxval_vec, maxval, sizeof(maxval_vec));
-      tx_fp_sub_fp32_(a_ptr, maxval_vec, res_ptr);  // a[i][j][k][:] -= max
-      tx_sfu_exp_fp32_(res_ptr, res_ptr);  // x(i) = e^(x(i) - max)
-      tx_fp_reduce_add_fp32(res_ptr, &sum, m, 1, 1);  // sum = 1 / (sum of e^(x(i) - max))
 
-      sum = 1.0 / sum;
+      float sum = 0.0f;
 
-      // x(i) = e^(x(i) - max) / (sum of e^(x(i) - max))
-      float sum_vec[m];memset(sum_vec, sum, sizeof(sum_vec));
-      tx_fp_mul_fp32_(res_ptr, sum_vec, res_ptr); // res[i][j][k][:] *= (float)sum
+      // load stage
+      __tx_async_nram_load<aTCSR, aTCSR, 2>(a_ptr, (void*)nram0);
+      __tx_async_nram_load<bTCSR, bTCSR, 2>(b_ptr, (void*)nram1);
+      __tx_async_nram_load<oneTCSR, oneTCSR, 2>(&scale, scale_ram);
+      __tx_async_nram_load<oneTCSR, oneTCSR, 2>(&slope, slope_ram);
+      __tx_fence();
+
+      // compute stage
+      __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void*)nram0, scale_ram, (void*)nram0); // scale: a[i][j][k][:] *= scale
+      __tx_fp_mul_fp32<bTCSR, oneTCSR, cTCSR, 0b0001>((void*)nram1, slope_ram, (void*)nram1); // mask:  temp = slope * b[i][0][k][:]
+      __tx_fence();
+      __tx_fp_add_fp32<aTCSR, cTCSR, aTCSR, 0b0000>((void*)nram0, (void*)nram1, (void*)nram0); // mask: a[i][j][k][:] += temp
+      __tx_fence();
+
+      __tx_fp_reduce_max_fp32<aTCSR, oneTCSR, 1>((void*)nram0, max_ram); // maxval = max(a[i][j][k][:])
+      __tx_fence();
+
+      __tx_fp_sub_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void*)nram0, (void*)max_ram, (void*)nram0);  // a[i][j][k][:] = a[i][j][k][:] - max
+      __tx_fence();
+      __tx_sfu_exp_fp32<aTCSR, bTCSR>((void*)nram0, (void*)nram1);  // exp_temp = exp(a[i][j][k][:])
+      __tx_fence();
+
+      __tx_fp_reduce_add_fp32<bTCSR, oneTCSR, 0>((void*)nram1, (void*)sum_ram); // sum = sum of exp_temp
+      __tx_fence();
+      __tx_async_nram_store<oneTCSR, oneTCSR, 2>((void*)sum_ram, &sum);
+      __tx_fence();
+
+      sum = 1.0f / sum;
+
+      __tx_async_nram_load<oneTCSR, oneTCSR, 2>(&sum, sum_ram);
+      __tx_fence();
+      __tx_fp_mul_fp32<bTCSR, oneTCSR, cTCSR, 0b0001>((void*)nram1, sum_ram, (void*)nram1); // exp_temp *= 1/sum
+      __tx_fence();
+
+      // store stage
+      __tx_async_nram_store<bTCSR, bTCSR, 2>((void*)nram1, res_ptr);  // res[i][j][k][:] = exp_temp
+      __tx_fence();
     }
   }
   return 0;

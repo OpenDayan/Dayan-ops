@@ -119,7 +119,7 @@ int host_softmax_f32_f32_f32(float* a, float* b, float* res, float scale,
         printf("[ERROR] Failed to write res to device at 0x%lx: err=%d\n", res_dev, ret);
     int kernel_ret;
     npu_runtime_kernel_start(&runtime, softmax_f32_f32_f32, &kernel_ret, 8,
-                             a_dev, b_dev, res_dev, (float)scale,
+                             a_dev, b_dev, res_dev, float_as_u32(scale),
                              (uint64_t)bs, (uint64_t)h, (uint64_t)n, (uint64_t)m);
     npu_memcpy_from_dev(&runtime.dev_state, res, res_dev, bs * h * n * m * sizeof(float)); // res
     return kernel_ret;
@@ -137,7 +137,7 @@ void kernel_softmax(std::vector<float>& a, std::vector<float>& b, std::vector<fl
     const float m1 = powf(2.0f, -(psoft.max_bias / 2.0f) / h_log2);
 
     const float scale = psoft.scale;
-
+    
     host_softmax_f32_f32_f32(a.data(), b.data(), res.data(), scale, bs, h, n, m);
 }
 
