@@ -7,9 +7,7 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t nram_a = 0x0;
 
 static inline void config_dims_and_strides_permute(int bs, int h, int n, int m){
     __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(m);
@@ -35,19 +33,15 @@ __device__ void permute_f32_2_1(void *a, void *res, int bs, int h, int n, int m)
     // ppermute.axis0 = 0, ppermute.axis1 = 2, ppermute.axis2 == 1, ppermute.axis3 = 3
     config_dims_and_strides_permute(bs,h,n,m);
     for (int i = 0; i < bs; ++i) {
+        int i_stride = h * n * m;
         for (int j = 0; j < h; ++j) {
             for (int k = 0; k < n; ++k) {
                 // Copy a[i][j][k][:] to res[i][k][j][:]
-                uint64_t a_idx = i * h * n * m + j * n * m + k * m;
-                uint64_t res_idx = i * h * n * m + k * h * m + j * m;
-
-                //这句memcpy也可以
-                // memcpy((void *)((long)res + res_idx * sizeof(float)),(void *)((long)a + a_idx * sizeof(float)), m * sizeof(float));
-
-                //或load/store
-                __tx_async_nram_load<aTCSR, aTCSR, 2>((void *)((long)a + a_idx * sizeof(float)), (void*)nram0);
+                uint64_t a_idx = i * i_stride + j * n * m + k * m;
+                uint64_t res_idx = i * i_stride + k * h * m + j * m;
+                __tx_async_nram_load<aTCSR, aTCSR, 2>((void *)((long)a + a_idx * sizeof(float)), (void*)nram_a);
                 __tx_fence();
-                __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram0, (void *)((long)res + res_idx * sizeof(float)));
+                __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram_a, (void *)((long)res + res_idx * sizeof(float)));
                 __tx_fence();
             }
         }
