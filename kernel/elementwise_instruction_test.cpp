@@ -8,9 +8,9 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t uram0 = 0x1000000;
+const uint64_t uram1 = 0x2000000;
+const uint64_t uram2 = 0x3000000;
 
 static inline void configTCSRs(int m, int n) {
   __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(m);
@@ -99,17 +99,17 @@ static inline uint8_t get_broadcast(TCFG *tcsr) {
 __device__ void tx_int_add_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 
 #define CALL_TX_INT_ADD_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_add_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_add_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
 
   switch (broadcast) {
@@ -136,23 +136,23 @@ __device__ void tx_int_add_s32(void *input0, void *input1, void *dst,
 
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
 __device__ void tx_int_sub_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_INT_SUB_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_sub_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_sub_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_INT_SUB_S32(0b0000) // 0
@@ -178,7 +178,7 @@ __device__ void tx_int_sub_s32(void *input0, void *input1, void *dst,
 #undef CALL_TX_INT_SUB_S32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -186,16 +186,16 @@ __device__ void tx_int_mul_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_INT_MUL_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_mul_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_mul_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_INT_MUL_S32(0b0000) // 0
@@ -221,7 +221,7 @@ __device__ void tx_int_mul_s32(void *input0, void *input1, void *dst,
 #undef CALL_TX_INT_MUL_S32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -229,16 +229,16 @@ __device__ void tx_int_srl_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_INT_SRL_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_srl_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_srl_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_INT_SRL_S32(0b0000) // 0
@@ -264,7 +264,7 @@ __device__ void tx_int_srl_s32(void *input0, void *input1, void *dst,
 #undef CALL_TX_INT_SRL_S32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -272,16 +272,16 @@ __device__ void tx_int_sra_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_INT_SRA_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_sra_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_sra_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_INT_SRA_S32(0b0000) // 0
@@ -307,7 +307,7 @@ __device__ void tx_int_sra_s32(void *input0, void *input1, void *dst,
 #undef CALL_TX_INT_SRA_S32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -315,16 +315,16 @@ __device__ void tx_int_sll_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_INT_SLL_S32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_int_sll_s32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_int_sll_s32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_INT_SLL_S32(0b0000) // 0
@@ -350,7 +350,7 @@ __device__ void tx_int_sll_s32(void *input0, void *input1, void *dst,
 #undef CALL_TX_INT_SLL_S32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -358,9 +358,9 @@ __device__ void tx_int_lutop_s32(void *input0, void *input1, void *dst,
                                  uint8_t lutop, TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
   lutop = lutop & 0b1111;
 
@@ -369,8 +369,8 @@ __device__ void tx_int_lutop_s32(void *input0, void *input1, void *dst,
 
 #define CASE_LUTOP_BROADCAST(l, b)                                             \
   case ((l << 4) | b):                                                         \
-    __tx_int_lutop_s32<l, 0, 1, 2, b>((void *)nram0, (void *)nram1,            \
-                                      (void *)nram2);                          \
+    __tx_int_lutop_s32<l, 0, 1, 2, b>((void *)uram0, (void *)uram1,            \
+                                      (void *)uram2);                          \
     break;
 
   switch ((lutop << 4) | broadcast) {
@@ -635,7 +635,7 @@ __device__ void tx_int_lutop_s32(void *input0, void *input1, void *dst,
   }
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -643,16 +643,16 @@ __device__ void tx_fp_add_fp32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_FP_ADD_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_fp_add_fp32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_fp_add_fp32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_FP_ADD_FP32(0b0000) // 0
@@ -679,7 +679,7 @@ __device__ void tx_fp_add_fp32(void *input0, void *input1, void *dst,
 
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -687,16 +687,16 @@ __device__ void tx_fp_sub_fp32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_FP_SUB_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_fp_sub_fp32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_fp_sub_fp32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_FP_SUB_FP32(0b0000) // 0
@@ -722,7 +722,7 @@ __device__ void tx_fp_sub_fp32(void *input0, void *input1, void *dst,
 #undef CALL_TX_FP_ADD_FP32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -730,16 +730,16 @@ __device__ void tx_fp_mul_fp32(void *input0, void *input1, void *dst,
                                TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   uint8_t broadcast = get_broadcast(tcsr);
 #define CALL_TX_FP_MUL_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_fp_mul_fp32<0, 1, 2, broadcast_val>((void *)nram0, (void *)nram1,     \
-                                             (void *)nram2);                   \
+    __tx_fp_mul_fp32<0, 1, 2, broadcast_val>((void *)uram0, (void *)uram1,     \
+                                             (void *)uram2);                   \
     break;
   switch (broadcast) {
     CALL_TX_FP_MUL_FP32(0b0000) // 0
@@ -765,7 +765,7 @@ __device__ void tx_fp_mul_fp32(void *input0, void *input1, void *dst,
 #undef CALL_TX_FP_ADD_FP32
   __tx_fence();
 
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -773,20 +773,20 @@ __device__ void tx_fp_reduce_max_fp32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_fp_reduce_max_fp32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_max_fp32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_fp_reduce_max_fp32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_max_fp32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -794,7 +794,7 @@ __device__ void tx_fp_reduce_max_fp32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -802,20 +802,20 @@ __device__ void tx_fp_reduce_min_fp32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_fp_reduce_min_fp32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_min_fp32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_fp_reduce_min_fp32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_min_fp32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -823,7 +823,7 @@ __device__ void tx_fp_reduce_min_fp32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -831,20 +831,20 @@ __device__ void tx_fp_reduce_add_fp32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_fp_reduce_add_fp32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_add_fp32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_fp_reduce_add_fp32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_fp_reduce_add_fp32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -852,7 +852,7 @@ __device__ void tx_fp_reduce_add_fp32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -860,20 +860,20 @@ __device__ void tx_int_reduce_max_s32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_int_reduce_max_s32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_max_s32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_int_reduce_max_s32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_max_s32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -881,7 +881,7 @@ __device__ void tx_int_reduce_max_s32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -889,20 +889,20 @@ __device__ void tx_int_reduce_min_s32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_int_reduce_min_s32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_min_s32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_int_reduce_min_s32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_min_s32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -910,7 +910,7 @@ __device__ void tx_int_reduce_min_s32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }
 
@@ -918,20 +918,20 @@ __device__ void tx_int_reduce_add_s32(void *input0, void *dst, int m, int n,
                                       const int axis) {
 
   configTCSRs(n, m); // m x n;  dim0 = n, dim1 = m
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(input0, (void *)nram0);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(input0, (void *)uram0);
   if (axis == 0) // reduce on dim0, so the result should be m x 1
     configTCSRs(1, m);
   if (axis == 1) // reduce on dim1, so the result should be 1 x n
     configTCSRs(n, 1);
 
-  __tx_async_nram_load<aTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
 
   configTCSRs(n, m);
   if (axis == 0)
-    __tx_int_reduce_add_s32<aTCSR, cTCSR, 0>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_add_s32<aTCSR, cTCSR, 0>((void *)uram0, (void *)uram2);
   if (axis == 1)
-    __tx_int_reduce_add_s32<aTCSR, cTCSR, 1>((void *)nram0, (void *)nram2);
+    __tx_int_reduce_add_s32<aTCSR, cTCSR, 1>((void *)uram0, (void *)uram2);
 
   __tx_fence();
 
@@ -939,6 +939,6 @@ __device__ void tx_int_reduce_add_s32(void *input0, void *dst, int m, int n,
     configTCSRs(1, m);
   if (axis == 1)
     configTCSRs(n, 1);
-  __tx_async_nram_store<aTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<aTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }

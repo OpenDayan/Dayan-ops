@@ -6,9 +6,9 @@
 // 向量化处理的块大小
 #define MTile 1024  // 每次处理1024个float元素
 
-const uint64_t nram0 = 0x0;        // A tensor: 0x0 - 0x14000 (80KB)
-const uint64_t nram1 = 0x14000;    // B tensor: 0x14000 - 0x28000 (80KB)  
-const uint64_t nram2 = 0x28000;    // C tensor: 0x28000 - 0x3C000 (80KB)
+const uint64_t uram0 = 0x0;        // A tensor: 0x0 - 0x14000 (80KB)
+const uint64_t uram1 = 0x14000;    // B tensor: 0x14000 - 0x28000 (80KB)  
+const uint64_t uram2 = 0x28000;    // C tensor: 0x28000 - 0x3C000 (80KB)
 const int aTCSR = 0;
 const int bTCSR = 1; 
 const int cTCSR = 2;
@@ -80,14 +80,14 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                     float* b_elem_ptr = (float*)b_ptr + offset;
                     float* c_elem_ptr = (float*)c_ptr + offset;
 
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)nram0);
-                    __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
+                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     __tx_fence();
 
-                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)nram0, (void *)nram1, (void *)nram2);
+                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)uram0, (void *)uram1, (void *)uram2);
                     __tx_fence();
                     
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, c_elem_ptr);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
                     __tx_fence();
                     
                 } else {                    
@@ -101,16 +101,16 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                     float* a_elem_ptr_0 = (float*)a_ptr + offset_0;
                     float* b_elem_ptr_0 = (float*)b_ptr + offset_0;
                     
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(nram0 + 0 * MTile * sizeof(float)));
-                    __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     
                     // 计算第0块，同时加载第1块
                     if (total_chunks > 1) {
                         int chunk_1_size = ((ne0 - MTile) > MTile) ? MTile : (ne0 - MTile);
                         
-                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(nram1 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(nram2 + 0 * MTile * sizeof(float)));
+                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + 0 * MTile * sizeof(float)), 
+                                                                      (void *)(uram1 + 0 * MTile * sizeof(float)), 
+                                                                      (void *)(uram2 + 0 * MTile * sizeof(float)));
 
                         config_tcsr_vector<aTCSR>(chunk_1_size);
                         config_tcsr_vector<bTCSR>(chunk_1_size);
@@ -119,8 +119,8 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         float* a_elem_ptr_1 = (float*)a_ptr + offset_1;
                         float* b_elem_ptr_1 = (float*)b_ptr + offset_1;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(nram0 + 1 * MTile * sizeof(float)));
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                     }
                     
                     for (int chunk_idx = 2; chunk_idx < total_chunks; chunk_idx++) {
@@ -128,12 +128,12 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         
                         long c_offset_prev = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (chunk_idx - 2) * MTile;
                         float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
                         
                         int prev_buffer_idx = (chunk_idx - 1) % 2;
-                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(nram1 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(nram2 + prev_buffer_idx * MTile * sizeof(float)));
+                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), 
+                                                                      (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), 
+                                                                      (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)));
                         
                         int current_chunk_size = ((ne0 - chunk_idx * MTile) > MTile) ? MTile : (ne0 - chunk_idx * MTile);
                         int current_buffer_idx = chunk_idx % 2;
@@ -145,25 +145,25 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         float* a_elem_ptr_curr = (float*)a_ptr + offset_curr;
                         float* b_elem_ptr_curr = (float*)b_ptr + offset_curr;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(nram0 + current_buffer_idx * MTile * sizeof(float)));
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                     }
                     
                     __tx_fence();
                     
                     long c_offset_second_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 2) * MTile;
                     float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
                     
                     int last_buffer_idx = 1;
-                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(nram1 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(nram2 + last_buffer_idx * MTile * sizeof(float)));
+                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), 
+                                                                  (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), 
+                                                                  (void *)(uram2 + last_buffer_idx * MTile * sizeof(float)));
                     
                     long c_offset_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 1) * MTile;
                     float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
                     __tx_fence();
                 }
             }
@@ -221,12 +221,12 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     long c_offset = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1;
                     float* c_elem_ptr = (float*)c_ptr + c_offset;
 
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)nram0);
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
                     if (psrc1_ne0 == 1) {
                         config_tcsr_vector<bTCSR>(1);
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     } else {
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     }
                     __tx_fence();
 
@@ -234,7 +234,7 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
 #define CALL_TX_FP_ADD_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)nram0, (void *)nram1, (void *)nram2); \
+    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)uram0, (void *)uram1, (void *)uram2); \
     break;
 
                     switch (current_broadcast) {
@@ -262,7 +262,7 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 #undef CALL_TX_FP_ADD_FP32
 
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, c_elem_ptr);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
                     __tx_fence();
                     
                 } else {
@@ -281,12 +281,12 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     }
                     float* b_elem_ptr_0 = (float*)b_ptr + b_offset_0;
                     
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(nram0 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
                     if (psrc1_ne0 == 1) {
                         config_tcsr_vector<bTCSR>(1);
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     } else {
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     }
                     
                     uint8_t current_broadcast = (psrc1_ne0 == 1) ? (broadcast | 0b0001) : broadcast;
@@ -297,7 +297,7 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
 #define CALL_TX_FP_ADD_FP32_PIPELINE(broadcast_val)                            \
   case broadcast_val:                                                          \
-    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + 0 * MTile * sizeof(float)), (void *)(nram1 + 0 * MTile * sizeof(float)), (void *)(nram2 + 0 * MTile * sizeof(float))); \
+    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + 0 * MTile * sizeof(float)), (void *)(uram1 + 0 * MTile * sizeof(float)), (void *)(uram2 + 0 * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
@@ -336,12 +336,12 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         }
                         float* b_elem_ptr_1 = (float*)b_ptr + b_offset_1;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(nram0 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
                         if (psrc1_ne0 == 1) {
                             config_tcsr_vector<bTCSR>(1);
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                         } else {
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                         }
                     }
                     
@@ -350,13 +350,13 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
                         long c_offset_prev = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (chunk_idx - 2) * MTile;
                         float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
                         
                         int prev_buffer_idx = (chunk_idx - 1) % 2;
                         
 #define CALL_TX_FP_ADD_FP32_MAIN(broadcast_val)                                \
   case broadcast_val:                                                          \
-    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + prev_buffer_idx * MTile * sizeof(float)), (void *)(nram1 + prev_buffer_idx * MTile * sizeof(float)), (void *)(nram2 + prev_buffer_idx * MTile * sizeof(float))); \
+    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
@@ -398,12 +398,12 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         }
                         float* b_elem_ptr_curr = (float*)b_ptr + b_offset_curr;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(nram0 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
                         if (psrc1_ne0 == 1) {
                             config_tcsr_vector<bTCSR>(1);
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                         } else {
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                         }
                     }
                     
@@ -411,13 +411,13 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 
                     long c_offset_second_last = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (total_chunks - 2) * MTile;
                     float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
 
                     int last_buffer_idx = 1;
                     
 #define CALL_TX_FP_ADD_FP32_LAST(broadcast_val)                                \
   case broadcast_val:                                                          \
-    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + last_buffer_idx * MTile * sizeof(float)), (void *)(nram1 + last_buffer_idx * MTile * sizeof(float)), (void *)(nram2 + last_buffer_idx * MTile * sizeof(float))); \
+    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + last_buffer_idx * MTile * sizeof(float))); \
     break;
 
                     switch (current_broadcast) {
@@ -446,7 +446,7 @@ __device__ long kernel_add_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     long c_offset_last = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (total_chunks - 1) * MTile;
                     float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
                     __tx_fence();
                 }
             }
@@ -496,14 +496,14 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                     float* b_elem_ptr = (float*)b_ptr + offset;
                     float* c_elem_ptr = (float*)c_ptr + offset;
 
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)nram0);
-                    __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
+                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     __tx_fence();
 
-                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)nram0, (void *)nram1, (void *)nram2);
+                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)uram0, (void *)uram1, (void *)uram2);
                     __tx_fence();
                     
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, c_elem_ptr);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
                     __tx_fence();
                     
                 } else {
@@ -516,16 +516,16 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                     float* a_elem_ptr_0 = (float*)a_ptr + offset_0;
                     float* b_elem_ptr_0 = (float*)b_ptr + offset_0;
                     
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(nram0 + 0 * MTile * sizeof(float)));
-                    __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     
                     // 计算第0块，同时加载第1块
                     if (total_chunks > 1) {
                         int chunk_1_size = ((ne0 - MTile) > MTile) ? MTile : (ne0 - MTile);
                         
-                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(nram1 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(nram2 + 0 * MTile * sizeof(float)));
+                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + 0 * MTile * sizeof(float)), 
+                                                                      (void *)(uram1 + 0 * MTile * sizeof(float)), 
+                                                                      (void *)(uram2 + 0 * MTile * sizeof(float)));
 
                         config_tcsr_vector<aTCSR>(chunk_1_size);
                         config_tcsr_vector<bTCSR>(chunk_1_size);
@@ -534,8 +534,8 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         float* a_elem_ptr_1 = (float*)a_ptr + offset_1;
                         float* b_elem_ptr_1 = (float*)b_ptr + offset_1;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(nram0 + 1 * MTile * sizeof(float)));
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                     }
                     
                     for (int chunk_idx = 2; chunk_idx < total_chunks; chunk_idx++) {
@@ -543,12 +543,12 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         
                         long c_offset_prev = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (chunk_idx - 2) * MTile;
                         float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
                         
                         int prev_buffer_idx = (chunk_idx - 1) % 2;
-                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(nram1 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(nram2 + prev_buffer_idx * MTile * sizeof(float)));
+                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), 
+                                                                      (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), 
+                                                                      (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)));
                         
                         int current_chunk_size = ((ne0 - chunk_idx * MTile) > MTile) ? MTile : (ne0 - chunk_idx * MTile);
                         int current_buffer_idx = chunk_idx % 2;
@@ -560,25 +560,25 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
                         float* a_elem_ptr_curr = (float*)a_ptr + offset_curr;
                         float* b_elem_ptr_curr = (float*)b_ptr + offset_curr;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(nram0 + current_buffer_idx * MTile * sizeof(float)));
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                     }
                     
                     __tx_fence();
                     
                     long c_offset_second_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 2) * MTile;
                     float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
                     
                     int last_buffer_idx = 1;
-                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(nram0 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(nram1 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(nram2 + last_buffer_idx * MTile * sizeof(float)));
+                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), 
+                                                                  (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), 
+                                                                  (void *)(uram2 + last_buffer_idx * MTile * sizeof(float)));
                     
                     long c_offset_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 1) * MTile;
                     float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
                     __tx_fence();
                 }
             }
@@ -637,12 +637,12 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     long c_offset = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1;
                     float* c_elem_ptr = (float*)c_ptr + c_offset;
 
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)nram0);
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
                     if (psrc1_ne0 == 1) {
                         config_tcsr_vector<bTCSR>(1);
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     } else {
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)nram1);
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
                     }
                     __tx_fence();
 
@@ -650,7 +650,7 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
 #define CALL_TX_FP_ADD_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
-    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)nram0, (void *)nram1, (void *)nram2); \
+    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)uram0, (void *)uram1, (void *)uram2); \
     break;
 
                     switch (current_broadcast) {
@@ -678,7 +678,7 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 #undef CALL_TX_FP_ADD_FP32
 
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, c_elem_ptr);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
                     __tx_fence();
                     
                 } else {
@@ -699,12 +699,12 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     }
                     float* b_elem_ptr_0 = (float*)b_ptr + b_offset_0;
                     
-                    __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(nram0 + 0 * MTile * sizeof(float)));
+                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
                     if (psrc1_ne0 == 1) {
                         config_tcsr_vector<bTCSR>(1);
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     } else {
-                        __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(nram1 + 0 * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
                     }
                     
                     uint8_t current_broadcast = (psrc1_ne0 == 1) ? (broadcast | 0b0001) : broadcast;
@@ -715,7 +715,7 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
 #define CALL_TX_FP_ADD_FP32_PIPELINE(broadcast_val)                            \
   case broadcast_val:                                                          \
-    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + 0 * MTile * sizeof(float)), (void *)(nram1 + 0 * MTile * sizeof(float)), (void *)(nram2 + 0 * MTile * sizeof(float))); \
+    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + 0 * MTile * sizeof(float)), (void *)(uram1 + 0 * MTile * sizeof(float)), (void *)(uram2 + 0 * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
@@ -754,12 +754,12 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         }
                         float* b_elem_ptr_1 = (float*)b_ptr + b_offset_1;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(nram0 + 1 * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
                         if (psrc1_ne0 == 1) {
                             config_tcsr_vector<bTCSR>(1);
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                         } else {
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(nram1 + 1 * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
                         }
                     }
                     
@@ -768,13 +768,13 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         
                         long c_offset_prev = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (chunk_idx - 2) * MTile;
                         float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
 
                         int prev_buffer_idx = (chunk_idx - 1) % 2;
                         
 #define CALL_TX_FP_ADD_FP32_MAIN(broadcast_val)                                \
   case broadcast_val:                                                          \
-    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + prev_buffer_idx * MTile * sizeof(float)), (void *)(nram1 + prev_buffer_idx * MTile * sizeof(float)), (void *)(nram2 + prev_buffer_idx * MTile * sizeof(float))); \
+    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
@@ -816,12 +816,12 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                         }
                         float* b_elem_ptr_curr = (float*)b_ptr + b_offset_curr;
                         
-                        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(nram0 + current_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
                         if (psrc1_ne0 == 1) {
                             config_tcsr_vector<bTCSR>(1);
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                         } else {
-                            __tx_async_nram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(nram1 + current_buffer_idx * MTile * sizeof(float)));
+                            __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
                         }
                     }
                     
@@ -830,13 +830,13 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 
                     long c_offset_second_last = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (total_chunks - 2) * MTile;
                     float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
 
                     int last_buffer_idx = 1;
                     
 #define CALL_TX_FP_ADD_FP32_LAST(broadcast_val)                                \
   case broadcast_val:                                                          \
-    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(nram0 + last_buffer_idx * MTile * sizeof(float)), (void *)(nram1 + last_buffer_idx * MTile * sizeof(float)), (void *)(nram2 + last_buffer_idx * MTile * sizeof(float))); \
+    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + last_buffer_idx * MTile * sizeof(float))); \
     break;
 
                     switch (current_broadcast) {
@@ -866,7 +866,7 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     long c_offset_last = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (total_chunks - 1) * MTile;
                     float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
                     __tx_fence();
-                    __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)(nram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
+                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
                     __tx_fence();
                 }
             }

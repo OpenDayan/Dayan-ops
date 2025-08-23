@@ -8,9 +8,9 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t uram0 = 0x1000000;
+const uint64_t uram1 = 0x2000000;
+const uint64_t uram2 = 0x3000000;
 
 static inline void config_dims_and_strides(TCFG *tcsr) {
   __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(tcsr[0].dim0);
@@ -44,13 +44,13 @@ static inline void config_dims_and_strides(TCFG *tcsr) {
 __device__ void tx_lut_int_s32(void *input0, void *input1, void *dst,
                                TCFG *tcsr, int width, int log2Length) {
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input0, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(input1, (void *)nram1);
-  __tx_async_nram_load<cTCSR, cTCSR, 2>(dst, (void *)nram2);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input0, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(input1, (void *)uram1);
+  __tx_async_uram_load<cTCSR, cTCSR, 2>(dst, (void *)uram2);
   __tx_fence();
   // width is 2, log2length is 3. lookuptable size is 8 x 2.
-  __tx_lut_int_s32<aTCSR, 2, cTCSR, 3>((void *)nram0, (void *)nram1,  (void *)nram2);
+  __tx_lut_int_s32<aTCSR, 2, cTCSR, 3>((void *)uram0, (void *)uram1,  (void *)uram2);
   __tx_fence();
-  __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram2, dst);
+  __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, dst);
   __tx_fence();
 }

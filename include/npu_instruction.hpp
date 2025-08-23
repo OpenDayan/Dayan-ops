@@ -2,7 +2,7 @@
 #define _NPU_INSTRUCTION_HPP_
 
 // public
-#define NRAM_SIZE 1024 * 256 // 256KB
+#define URAM_SIZE 1024 * 256 // 256KB
 #define TCSR_SIZE 64 // 64
 
 const long TCSR_DIM0 = 0;const long TCSR_STRIDE0 = 1;
@@ -176,7 +176,7 @@ extern "C" void exit(int code);
 class RVTEnv {
     public:
         char* aram;
-        b char* nram;
+        b char* uram;
         long* tcsr;
         TCFG* tcfg;
         template <typename T>
@@ -184,11 +184,11 @@ class RVTEnv {
             long lraw_ptr = (long)raw_ptr;
             if(lraw_ptr & (1ul << 31)) {
                 lraw_ptr = lraw_ptr & 0x1fffffff; // No High 4its
-                ASSERT(lraw_ptr < NRAM_SIZE);
+                ASSERT(lraw_ptr < URAM_SIZE);
                 return (T*)(aram + lraw_ptr);
             } else {
-                ASSERT(lraw_ptr < NRAM_SIZE);
-                return (T*)(nram + lraw_ptr);
+                ASSERT(lraw_ptr < URAM_SIZE);
+                return (T*)(uram + lraw_ptr);
             }
         }
 };
@@ -317,13 +317,13 @@ static inline void __tx_matmul_subfloat_e4m3_e4m3_f32(void* rs1, void* rs2, void
 static inline void* __emu_get_dram_ptr(long in) {
     return (void*)in;
 }
-static inline void* __emu_get_nram_ptr(long in) {
+static inline void* __emu_get_uram_ptr(long in) {
     return (void*)(__rvt_env->get_ptr<char>((void*)in));
 }
 
 template <typename T>
 static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgdst, void*(* get_src_ptr)(long), void*(* get_dst_ptr)(long)) {
-    ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 <= NRAM_SIZE);
+    ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 <= URAM_SIZE);
     ASSERT(tcfgsrc->dim0 * tcfgsrc->dim1 * tcfgsrc->dim2 * tcfgsrc->dim3 == tcfgdst->dim0 * tcfgdst->dim1 * tcfgdst->dim2 * tcfgdst->dim3);
     long src0 = 0, src1 = 0, src2 = 0, src3 = 0;
     long dst0 = 0, dst1 = 0, dst2 = 0, dst3 = 0;
@@ -344,34 +344,34 @@ static inline void __emu_raw_copy(long src, long dst, TCFG* tcfgsrc, TCFG* tcfgd
 }
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
-static inline void __tx_async_nram_load(void* rs1, void* rs3) {
+static inline void __tx_async_uram_load(void* rs1, void* rs3) {
     TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
     TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
     static_assert(log2w >= 0 && log2w <= 3, "log2w must be between 0 and 3");
-    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_nram_ptr);
-    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_dram_ptr, &__emu_get_nram_ptr);
-    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_dram_ptr, &__emu_get_nram_ptr);
-    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_nram_ptr);
+    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_uram_ptr);
+    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_dram_ptr, &__emu_get_uram_ptr);
+    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_dram_ptr, &__emu_get_uram_ptr);
+    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_dram_ptr, &__emu_get_uram_ptr);
 }
 template <long tcfgrs1, long tcfgrs3, long log2w>
-static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
-    __tx_async_nram_load<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
+static inline void __tx_async_uram_load(void* rs1, void* rs3, long& rd) {
+    __tx_async_uram_load<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
 }
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
-static inline void __tx_async_nram_store(void* rs1, void* rs3, long& rd) {
+static inline void __tx_async_uram_store(void* rs1, void* rs3, long& rd) {
     TCFG* tcfg1 = __rvt_env->tcfg + tcfgrs1;
     TCFG* tcfg3 = __rvt_env->tcfg + tcfgrs3;
     static_assert(log2w >= 0 && log2w <= 3, "log2w must be between 0 and 3");
-    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_nram_ptr, &__emu_get_dram_ptr);
-    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_nram_ptr, &__emu_get_dram_ptr);
-    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_nram_ptr, &__emu_get_dram_ptr);
-    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_nram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 0) __emu_raw_copy<char>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_uram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 1) __emu_raw_copy<short>((long)rs1, (long)rs3, tcfg1, tcfg3, &__emu_get_uram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 2) __emu_raw_copy<int>((long)rs1, (long)rs3, tcfg1, tcfg3,   &__emu_get_uram_ptr, &__emu_get_dram_ptr);
+    if(log2w == 3) __emu_raw_copy<long>((long)rs1, (long)rs3, tcfg1, tcfg3,  &__emu_get_uram_ptr, &__emu_get_dram_ptr);
 }
 template <long tcfgrs1, long tcfgrs3, long log2w>
-static inline void __tx_async_nram_store(void* rs1, void* rs3) {
+static inline void __tx_async_uram_store(void* rs1, void* rs3) {
     long rd = 0;
-    __tx_async_nram_store<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
+    __tx_async_uram_store<tcfgrs1, tcfgrs3, log2w>(rs1, rs3, rd);
 }
 
 
@@ -729,7 +729,7 @@ static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3)
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
 __attribute__((always_inline))
-static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
+static inline void __tx_async_uram_load(void* rs1, void* rs3, long& rd) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000110 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
 }
@@ -737,20 +737,20 @@ static inline void __tx_async_nram_load(void* rs1, void* rs3, long& rd) {
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
 __attribute__((always_inline))
-static inline void __tx_async_nram_load(void* rs1, void* rs3) {
+static inline void __tx_async_uram_load(void* rs1, void* rs3) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000110 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3);
 }
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
 __attribute__((always_inline))
-static inline void __tx_async_nram_store(void* rs1, void* rs3, long& rd) {
+static inline void __tx_async_uram_store(void* rs1, void* rs3, long& rd) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3, rd);
 }
 template <long tcfgrs1, long tcfgrs3, long log2w>
 __attribute__((always_inline))
-static inline void __tx_async_nram_store(void* rs1, void* rs3) {
+static inline void __tx_async_uram_store(void* rs1, void* rs3) {
     NPUInstBuilder::__custom_64b_instruction2r<
         ((long)0b10000101 << 56ul) | (tcfgrs3 << 38ul) | (tcfgrs1 << 32ul) | (log2w << 12)>((long)rs1, (long)rs3);
 }

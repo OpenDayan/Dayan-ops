@@ -91,7 +91,7 @@ gmma_e4m3q_fp32_BT(void *a, void *b, void *c, int max_i, int max_j, int max_k,
   __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);
   __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);
 
-  /* NRAM TCFGs */
+  /* URAM TCFGs */
   __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM0>(kTile);
   __tx_tcsr_write<aTileTCFG * 8 + TCSR_STRIDE0>(1);
   __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM1>(iTile);
@@ -146,22 +146,22 @@ gmma_e4m3q_fp32_BT(void *a, void *b, void *c, int max_i, int max_j, int max_k,
           real_j_tile);
       __tx_fence();
       /* Load C */
-      // __tx_async_nram_load<cTCFG, cTileTCFG, log2ElementSizeC>((void
+      // __tx_async_uram_load<cTCFG, cTileTCFG, log2ElementSizeC>((void
       // *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)), cTile);
       for (long k = 0; k < max_k; k += Q_K) {
         long k_offset = (k / Q_K);
         memset(kernel_buffer, 0, sizeof(float) * real_i_tile * real_j_tile);
         __tx_fence();
-        __tx_async_nram_load<cTileTCFG, cTileTCFG, log2ElementSizeC>(
+        __tx_async_uram_load<cTileTCFG, cTileTCFG, log2ElementSizeC>(
             kernel_buffer, (void *)cPartitialTile);
         // Partital C is computed in each Q_K x Q_K block
         for (long k_i = k; k_i < k + Q_K; k_i += kTile) {
           long real_k_i = k_i + (1 + k_offset) * sizeof(float);
-          __tx_async_nram_load<aTCFG, aTileTCFG, log2ElementSizeA>(
+          __tx_async_uram_load<aTCFG, aTileTCFG, log2ElementSizeA>(
               (void *)((long)a +
                        (lda * i + real_k_i) * (1 << log2ElementSizeA)),
               (void *)aTile);
-          __tx_async_nram_load<bTCFG, bTileTCFG, log2ElementSizeB>(
+          __tx_async_uram_load<bTCFG, bTileTCFG, log2ElementSizeB>(
               (void *)((long)b +
                        (ldb * j + real_k_i) * (1 << log2ElementSizeB)),
               (void *)bTile);
@@ -170,7 +170,7 @@ gmma_e4m3q_fp32_BT(void *a, void *b, void *c, int max_i, int max_j, int max_k,
               (void *)aTile, (void *)bTile, (void *)cPartitialTile);
           __tx_fence();
         }
-        __tx_async_nram_store<cTileTCFG, cTileTCFG, log2ElementSizeC>(
+        __tx_async_uram_store<cTileTCFG, cTileTCFG, log2ElementSizeC>(
             (void *)(cPartitialTile + acc_en_read_full_addr), kernel_buffer);
         __tx_fence();
         // Scale for the C tile
@@ -201,7 +201,7 @@ gmma_e4m3q_fp32_BT(void *a, void *b, void *c, int max_i, int max_j, int max_k,
         }
       }
       __tx_fence();
-      // __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void
+      // __tx_async_uram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void
       // *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)));
     }
   }

@@ -75,7 +75,7 @@ static inline void updateKTile(long kTile)
         __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);                                                                                                                                \
         __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);                                                                                                                                \
                                                                                                                                                                                   \
-        /* NRAM TCFGs */                                                                                                                                                          \
+        /* URAM TCFGs */                                                                                                                                                          \
         __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM0>(mTile);                                                                                                                        \
         __tx_tcsr_write<aTileTCFG * 8 + TCSR_STRIDE0>(A_T ? kTile : 1);                                                                                                           \
         __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM1>(kTile);                                                                                                                        \
@@ -118,7 +118,7 @@ static inline void updateKTile(long kTile)
                 }                                                                                                                                                                 \
                 __tx_fence();                                                                                                                                                     \
                 /* Load C */                                                                                                                                                      \
-                __tx_async_nram_load<cTCFG, cTileTCFG, log2ElementSizeC>((void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)), cTile);                                 \
+                __tx_async_uram_load<cTCFG, cTileTCFG, log2ElementSizeC>((void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)), cTile);                                 \
                 for (long k_i = 0; k_i < k; k_i += kTile)                                                                                                                         \
                 {                                                                                                                                                                 \
                     long k_left = k - k_i;                                                                                                                                        \
@@ -127,9 +127,9 @@ static inline void updateKTile(long kTile)
                         updateKTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, A_T>(k_left);                                                                           \
                     }                                                                                                                                                             \
                     /* load A */                                                                                                                                                  \
-                    __tx_async_nram_load<aTCFG, aTileTCFG, log2ElementSizeA>((void *)((long)a + (A_T ? (lda * m_i + k_i) : (lda * k_i + m_i)) * (1 << log2ElementSizeA)), aTile); \
+                    __tx_async_uram_load<aTCFG, aTileTCFG, log2ElementSizeA>((void *)((long)a + (A_T ? (lda * m_i + k_i) : (lda * k_i + m_i)) * (1 << log2ElementSizeA)), aTile); \
                     /* load B */                                                                                                                                                  \
-                    __tx_async_nram_load<bTCFG, bTileTCFG, log2ElementSizeB>((void *)((long)b + (ldb * n_i + k_i) * (1 << log2ElementSizeB)), bTile);                             \
+                    __tx_async_uram_load<bTCFG, bTileTCFG, log2ElementSizeB>((void *)((long)b + (ldb * n_i + k_i) * (1 << log2ElementSizeB)), bTile);                             \
                     __tx_fence();                                                                                                                                                 \
                     /* Compute C = C + A x B */                                                                                                                                   \
                     matmulFunc<aTileTCFG, bTileTCFG, cTileTCFG>(aTile, bTile, cTile);                                                                                             \
@@ -140,7 +140,7 @@ static inline void updateKTile(long kTile)
                     }                                                                                                                                                             \
                 }                                                                                                                                                                 \
                 /* Store C */                                                                                                                                                     \
-                __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)));                                \
+                __tx_async_uram_store<cTileTCFG, cTCFG, log2ElementSizeC>(cTile, (void *)((long)c + (ldc * n_i + m_i) * (1 << log2ElementSizeC)));                                \
                 if (n_left < nTile)                                                                                                                                               \
                 {                                                                                                                                                                 \
                     updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, A_T>(nTile);                                                                                \

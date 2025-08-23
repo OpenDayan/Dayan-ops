@@ -7,7 +7,7 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram_a = 0x0;
+const uint64_t uram_a = 0x0;
 
 static inline void config_dims_and_strides_get_rows(int m0){
     // move m0 elements every time
@@ -48,9 +48,9 @@ __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c,
             printf("[ERROR] invalid row_idx value: %d",row_idx);
             return 0;
         }
-        __tx_async_nram_load<aTCSR, aTCSR, 2>((void *)((long)a + row_idx * m0 * sizeof(float)), (void *)nram_a);
+        __tx_async_uram_load<aTCSR, aTCSR, 2>((void *)((long)a + row_idx * m0 * sizeof(float)), (void *)uram_a);
         __tx_fence();
-        __tx_async_nram_store<cTCSR, cTCSR, 2>((void *)nram_a, (void *)((long)c + p * m0 * sizeof(float)));
+        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram_a, (void *)((long)c + p * m0 * sizeof(float)));
         __tx_fence();
     }
     return 0;

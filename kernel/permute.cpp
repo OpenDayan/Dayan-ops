@@ -7,7 +7,7 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram_a = 0x0;
+const uint64_t uram_a = 0x0;
 
 static inline void config_dims_and_strides_permute(int bs, int h, int n, int m){
     __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(m);
@@ -39,9 +39,9 @@ __device__ void permute_f32_2_1(void *a, void *res, int bs, int h, int n, int m)
                 // Copy a[i][j][k][:] to res[i][k][j][:]
                 uint64_t a_idx = i * i_stride + j * n * m + k * m;
                 uint64_t res_idx = i * i_stride + k * h * m + j * m;
-                __tx_async_nram_load<aTCSR, aTCSR, 2>((void *)((long)a + a_idx * sizeof(float)), (void*)nram_a);
+                __tx_async_uram_load<aTCSR, aTCSR, 2>((void *)((long)a + a_idx * sizeof(float)), (void*)uram_a);
                 __tx_fence();
-                __tx_async_nram_store<cTCSR, cTCSR, 2>((void*)nram_a, (void *)((long)res + res_idx * sizeof(float)));
+                __tx_async_uram_store<cTCSR, cTCSR, 2>((void*)uram_a, (void *)((long)res + res_idx * sizeof(float)));
                 __tx_fence();
             }
         }

@@ -11,14 +11,14 @@ const long cTCSR = 2;
 const long dTCSR = 3;
 const long oneTCSR = 4;
 
-const uint64_t nram0 = 0x0100000;
-const uint64_t nram1 = 0x0200000;
-const uint64_t nram2 = 0x0300000;
-const uint64_t nram3 = 0x0400000;
-const uint64_t nram4 = 0x0500000;
-const uint64_t nram5 = 0x0600000;
-const uint64_t nram6 = 0x0700000;
-const uint64_t nram7 = 0x0800000;
+const uint64_t uram0 = 0x0100000;
+const uint64_t uram1 = 0x0200000;
+const uint64_t uram2 = 0x0300000;
+const uint64_t uram3 = 0x0400000;
+const uint64_t uram4 = 0x0500000;
+const uint64_t uram5 = 0x0600000;
+const uint64_t uram6 = 0x0700000;
+const uint64_t uram7 = 0x0800000;
 
 template<int TCSR_ID>
 static inline void config_tcsr_vector(int m) {
@@ -54,14 +54,14 @@ static inline void rope_yarn(
     float theta_extrap = theta / ff;
     float theta_interp = freq_scale * theta_extrap;
     float cos, sin;
-    __tx_async_nram_load<oneTCSR, oneTCSR, 2>(&theta_interp, rama);
+    __tx_async_uram_load<oneTCSR, oneTCSR, 2>(&theta_interp, rama);
     __tx_fence();
     __tx_sfu_cos_fp32<oneTCSR, oneTCSR>(rama, ramb);
     __tx_fence();
     __tx_sfu_sin_fp32<oneTCSR, oneTCSR>(rama, ramc);
     __tx_fence();
-    __tx_async_nram_store<oneTCSR, oneTCSR, 2>(ramb, &cos);
-    __tx_async_nram_store<oneTCSR, oneTCSR, 2>(ramc, &sin);
+    __tx_async_uram_store<oneTCSR, oneTCSR, 2>(ramb, &cos);
+    __tx_async_uram_store<oneTCSR, oneTCSR, 2>(ramc, &sin);
     __tx_fence();
     cos_cache[i] = cos * mscale;
     sin_cache[i] = sin * mscale * sin_sign;
@@ -99,27 +99,27 @@ __device__ long rope_f32_i32_f32(float* a, int* b, float* res,
         float* res1_ptr = &res[head_offset + vec_len];
 
         // load stage
-        __tx_async_nram_load<aTCSR, aTCSR, 2>(x0_ptr, (void*)nram0);
-        __tx_async_nram_load<bTCSR, bTCSR, 2>(x1_ptr, (void*)nram1);
-        __tx_async_nram_load<cTCSR, cTCSR, 2>(pos_cos, (void*)nram2);
-        __tx_async_nram_load<dTCSR, dTCSR, 2>(pos_sin, (void*)nram3);
+        __tx_async_uram_load<aTCSR, aTCSR, 2>(x0_ptr, (void*)uram0);
+        __tx_async_uram_load<bTCSR, bTCSR, 2>(x1_ptr, (void*)uram1);
+        __tx_async_uram_load<cTCSR, cTCSR, 2>(pos_cos, (void*)uram2);
+        __tx_async_uram_load<dTCSR, dTCSR, 2>(pos_sin, (void*)uram3);
         __tx_fence();
 
         // compute stage
-        __tx_fp_mul_fp32<aTCSR, cTCSR, aTCSR, 0b0000>((void*)nram0, (void*)nram2, (void*)nram4);  // buf1 = x0 * cos
-        __tx_fp_mul_fp32<bTCSR, dTCSR, bTCSR, 0b0000>((void*)nram1, (void*)nram3, (void*)nram5);  // buf2 = x1 * sin
-        __tx_fp_mul_fp32<aTCSR, dTCSR, aTCSR, 0b0000>((void*)nram0, (void*)nram3, (void*)nram6);  // buf3 = x0 * sin
-        __tx_fp_mul_fp32<bTCSR, cTCSR, bTCSR, 0b0000>((void*)nram1, (void*)nram2, (void*)nram7);  // buf4 = x1 * cos
+        __tx_fp_mul_fp32<aTCSR, cTCSR, aTCSR, 0b0000>((void*)uram0, (void*)uram2, (void*)uram4);  // buf1 = x0 * cos
+        __tx_fp_mul_fp32<bTCSR, dTCSR, bTCSR, 0b0000>((void*)uram1, (void*)uram3, (void*)uram5);  // buf2 = x1 * sin
+        __tx_fp_mul_fp32<aTCSR, dTCSR, aTCSR, 0b0000>((void*)uram0, (void*)uram3, (void*)uram6);  // buf3 = x0 * sin
+        __tx_fp_mul_fp32<bTCSR, cTCSR, bTCSR, 0b0000>((void*)uram1, (void*)uram2, (void*)uram7);  // buf4 = x1 * cos
         __tx_fence();
 
-        __tx_fp_sub_fp32<aTCSR, aTCSR, aTCSR, 0b0000>((void*)nram4, (void*)nram5, (void*)nram0);  // res0 = buf1 - buf2
-        __tx_fp_add_fp32<aTCSR, aTCSR, aTCSR, 0b0000>((void*)nram6, (void*)nram7, (void*)nram1);  // res1 = buf3 + buf4
+        __tx_fp_sub_fp32<aTCSR, aTCSR, aTCSR, 0b0000>((void*)uram4, (void*)uram5, (void*)uram0);  // res0 = buf1 - buf2
+        __tx_fp_add_fp32<aTCSR, aTCSR, aTCSR, 0b0000>((void*)uram6, (void*)uram7, (void*)uram1);  // res1 = buf3 + buf4
         __tx_fence();
 
         // store stage
         // fill res[i][j][k][:prope.n_dims]
-        __tx_async_nram_store<aTCSR, aTCSR, 2>((void*)nram0, res0_ptr);
-        __tx_async_nram_store<aTCSR, aTCSR, 2>((void*)nram1, res1_ptr);
+        __tx_async_uram_store<aTCSR, aTCSR, 2>((void*)uram0, res0_ptr);
+        __tx_async_uram_store<aTCSR, aTCSR, 2>((void*)uram1, res1_ptr);
         __tx_fence();
 
         // fill remain res[i][j][k][prope.n_dims:]

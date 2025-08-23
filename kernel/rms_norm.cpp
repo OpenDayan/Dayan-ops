@@ -70,8 +70,8 @@ __device__ long rms_norm_f32(float *x, float *y, int b, int h, int n, int m, flo
         const float* x_ptr = &x[head_offset];
         float* y_ptr = &y[head_offset];
 
-        __tx_async_nram_load<aTCSR, aTCSR, 2>((float*)x_ptr, XTile);
-        __tx_async_nram_load<oneTCFG, oneTCFG, 2>(&m0, mram);
+        __tx_async_uram_load<aTCSR, aTCSR, 2>((float*)x_ptr, XTile);
+        __tx_async_uram_load<oneTCFG, oneTCFG, 2>(&m0, mram);
         __tx_fence();
 
         __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0>(XTile, XTile, mid);
@@ -91,7 +91,7 @@ __device__ long rms_norm_f32(float *x, float *y, int b, int h, int n, int m, flo
         __tx_fp_mul_fp32<aTCSR, oneTCFG, cTCSR, 0b0001>(XTile, norm, YTile);
         __tx_fence();
         
-        __tx_async_nram_store<cTCSR, cTCSR, 2>(YTile, (float*)y_ptr);
+        __tx_async_uram_store<cTCSR, cTCSR, 2>(YTile, (float*)y_ptr);
         __tx_fence();
       }
     }

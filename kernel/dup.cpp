@@ -7,13 +7,13 @@ const long aTCSR = 0;
 const long bTCSR = 1;
 const long cTCSR = 2;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t uram0 = 0x1000000;
+const uint64_t uram1 = 0x2000000;
+const uint64_t uram2 = 0x3000000;
 
 #define aTile 1024
-const uint64_t nram_a = 0x0;
-const uint64_t nram_res = 0x20000; //128KB
+const uint64_t uram_a = 0x0;
+const uint64_t uram_res = 0x20000; //128KB
 
 static inline void configTCSRa_cont(int a_bs, int a_h, int a_n, int a_m){
     __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(a_m);
@@ -106,17 +106,17 @@ __device__ void dup_cont_f32_cont_f32(void *a, void *res,
     for(num_elem_copied = 0; num_elem_copied + elem_per_tile <= total_elem_num; num_elem_copied += elem_per_tile){
         void *a_ptr = (char*)a + num_elem_copied * sizeof(float);
         void *res_ptr = (char*)res + num_elem_copied * sizeof(float);
-        __tx_async_nram_load<aTCSR, aTCSR, 2>(a_ptr, (void*)nram_a);
+        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_ptr, (void*)uram_a);
         __tx_fence();
-        __tx_async_nram_store<aTCSR, aTCSR, 2>((void*)nram_a, res_ptr);
+        __tx_async_uram_store<aTCSR, aTCSR, 2>((void*)uram_a, res_ptr);
         __tx_fence();
     }
     if(total_elem_num - num_elem_copied > 0){
         void *a_ptr = (char*)a + num_elem_copied * sizeof(float);
         void *res_ptr = (char*)res + num_elem_copied * sizeof(float);
-        __tx_async_nram_load<bTCSR, bTCSR, 2>(a_ptr, (void*)nram_a);
+        __tx_async_uram_load<bTCSR, bTCSR, 2>(a_ptr, (void*)uram_a);
         __tx_fence();
-        __tx_async_nram_store<bTCSR, bTCSR, 2>((void*)nram_a, res_ptr);
+        __tx_async_uram_store<bTCSR, bTCSR, 2>((void*)uram_a, res_ptr);
         __tx_fence();
     }
 }
@@ -129,11 +129,11 @@ __device__ void dup_cont_f32_cont_bf16(void *a, void *res,
     // 一次性处理
     // configTCSRa_cont(a_bs, a_h, a_n, a_m);
     // configTCSRc_cont(res_bs, res_h, res_n, res_m);
-    // __tx_async_nram_load<aTCSR, aTCSR, 2>(a, (void*)nram0);
+    // __tx_async_uram_load<aTCSR, aTCSR, 2>(a, (void*)uram0);
     // __tx_fence();
-    // __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram0, (void *)nram1); // 连续和不连续的不一样
+    // __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)uram0, (void *)uram1); // 连续和不连续的不一样
     // __tx_fence();
-    // __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, res);
+    // __tx_async_uram_store<cTCSR, cTCSR, 1>((void*)uram1, res);
     // __tx_fence();
 
     // 分块处理，LCS软流水
@@ -143,48 +143,48 @@ __device__ void dup_cont_f32_cont_bf16(void *a, void *res,
     int last_elem_tile_num = (total_elem_num % elem_per_tile == 0) ? elem_per_tile : (total_elem_num % elem_per_tile);
     configTCSR_Tile_cont(elem_per_tile, last_elem_tile_num);
     // L(1)
-    __tx_async_nram_load<aTCSR, aTCSR, 2>(a, (void*)nram_a);
+    __tx_async_uram_load<aTCSR, aTCSR, 2>(a, (void*)uram_a);
     __tx_fence();
     // C(1)
-    __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram_a, (void *)nram_res);
+    __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)uram_a, (void *)uram_res);
     if(total_op_num > 1){
         if(total_op_num > 2){
             // L(2)
-            __tx_async_nram_load<aTCSR, aTCSR, 2>((void*)((char*)a + elem_per_tile * sizeof(float)), (void*)(nram_a + elem_per_tile * sizeof(float)));
+            __tx_async_uram_load<aTCSR, aTCSR, 2>((void*)((char*)a + elem_per_tile * sizeof(float)), (void*)(uram_a + elem_per_tile * sizeof(float)));
             for(int i = 2; i < total_op_num - 1; i++){
                 // store(i-2), convert(i-1), load(i), i = 2,...,total_op_num - 2
                 // S(1), C(2), L(3), ... , S(N-3), C(N-2), L(N-1)
                 __tx_fence();
-                __tx_async_nram_store<aTCSR, aTCSR, 1>((void*)(nram_res + (i % 2) * elem_per_tile * sizeof(float)), 
+                __tx_async_uram_store<aTCSR, aTCSR, 1>((void*)(uram_res + (i % 2) * elem_per_tile * sizeof(float)), 
                                                 (void*)((char*)res + (i - 2) * elem_per_tile * sizeof(uint16_t)));
-                __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)(nram_a + ((i - 1) % 2) * elem_per_tile * sizeof(float)), 
-                                                (void *)(nram_res + ((i - 1) % 2) * elem_per_tile * sizeof(float)));
-                __tx_async_nram_load<aTCSR, aTCSR, 2>((void*)((char*)a + i * elem_per_tile * sizeof(float)), 
-                                                (void*)(nram_a + (i % 2) * elem_per_tile * sizeof(float)));
+                __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)(uram_a + ((i - 1) % 2) * elem_per_tile * sizeof(float)), 
+                                                (void *)(uram_res + ((i - 1) % 2) * elem_per_tile * sizeof(float)));
+                __tx_async_uram_load<aTCSR, aTCSR, 2>((void*)((char*)a + i * elem_per_tile * sizeof(float)), 
+                                                (void*)(uram_a + (i % 2) * elem_per_tile * sizeof(float)));
             }
             // 最后一次的长度不一定一样，单独load
             __tx_fence();
             // S(N-2)
-            __tx_async_nram_store<aTCSR, aTCSR, 1>((void*)nram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
+            __tx_async_uram_store<aTCSR, aTCSR, 1>((void*)uram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
                                             (void*)((char*)res + (total_op_num - 3) * elem_per_tile * sizeof(uint16_t)));// 这个-3不行吧
             // C(N-1)     
-            __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)nram_a + ((total_op_num) % 2) * elem_per_tile * sizeof(float), 
-                                            (void *)nram_res + ((total_op_num) % 2) * elem_per_tile * sizeof(float)); 
+            __tx_convert_fp32_bf16_round<aTCSR, aTCSR>((void *)uram_a + ((total_op_num) % 2) * elem_per_tile * sizeof(float), 
+                                            (void *)uram_res + ((total_op_num) % 2) * elem_per_tile * sizeof(float)); 
         }     
         // L(N)               
-        __tx_async_nram_load<bTCSR, bTCSR, 2>((void*)((char*)a + (total_op_num - 1) * elem_per_tile * sizeof(float)), 
-                                        (void*)nram_a + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float));
+        __tx_async_uram_load<bTCSR, bTCSR, 2>((void*)((char*)a + (total_op_num - 1) * elem_per_tile * sizeof(float)), 
+                                        (void*)uram_a + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float));
         __tx_fence();
         // S(N-1)
-        __tx_async_nram_store<aTCSR, aTCSR, 1>((void*)nram_res + (total_op_num % 2) * elem_per_tile * sizeof(float), 
+        __tx_async_uram_store<aTCSR, aTCSR, 1>((void*)uram_res + (total_op_num % 2) * elem_per_tile * sizeof(float), 
                                         (void*)((char*)res + (total_op_num - 2) * elem_per_tile * sizeof(uint16_t)));
         // C(N)
-        __tx_convert_fp32_bf16_round<bTCSR, bTCSR>((void *)nram_a + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
-                                        (void *)nram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float));                                     
+        __tx_convert_fp32_bf16_round<bTCSR, bTCSR>((void *)uram_a + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
+                                        (void *)uram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float));                                     
         __tx_fence();
     }
     // S(N)
-    __tx_async_nram_store<bTCSR, bTCSR, 1>((void*)nram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
+    __tx_async_uram_store<bTCSR, bTCSR, 1>((void*)uram_res + ((total_op_num - 1) % 2) * elem_per_tile * sizeof(float), 
                                         (void*)((char*)res + (total_op_num - 1) * elem_per_tile * sizeof(uint16_t)));
     __tx_fence();
 }
@@ -198,11 +198,11 @@ __device__ void dup_cont_f32_no_cont_bf16(void *a, void *res,
     configTCSRa_cont(a_bs, a_h, a_n, a_m);
     configTCSRc_no_cont(res_bs, res_h, res_n, res_m, 
                 (res_nb3/sizeof(uint16_t)), (res_nb2/sizeof(uint16_t)), (res_nb1/sizeof(uint16_t)), (res_nb0/sizeof(uint16_t)));
-    __tx_async_nram_load<aTCSR, aTCSR, 2>(a, (void*)nram0);
+    __tx_async_uram_load<aTCSR, aTCSR, 2>(a, (void*)uram0);
     __tx_fence();
-    __tx_convert_fp32_bf16_round<aTCSR, cTCSR>((void *)nram0, (void *)nram1); // 连续和不连续的不一样
+    __tx_convert_fp32_bf16_round<aTCSR, cTCSR>((void *)uram0, (void *)uram1); // 连续和不连续的不一样
     __tx_fence();
-    __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, res);
+    __tx_async_uram_store<cTCSR, cTCSR, 1>((void*)uram1, res);
     __tx_fence();
 }
 
@@ -216,10 +216,10 @@ __device__ void dup_no_cont_f32_no_cont_bf16(void *a, void *res,
                 (a_nb3/sizeof(float)), (a_nb2/sizeof(float)), (a_nb1/sizeof(float)), (a_nb0/sizeof(float)));
     configTCSRc_no_cont(res_bs, res_h, res_n, res_m, 
                 (res_nb3/sizeof(uint16_t)), (res_nb2/sizeof(uint16_t)), (res_nb1/sizeof(uint16_t)), (res_nb0/sizeof(uint16_t)));
-    __tx_async_nram_load<aTCSR, aTCSR, 2>(a, (void*)nram0);
+    __tx_async_uram_load<aTCSR, aTCSR, 2>(a, (void*)uram0);
     __tx_fence();
-    __tx_convert_fp32_bf16_round<aTCSR, cTCSR>((void *)nram0, (void *)nram1); // 连续和不连续的不一样
+    __tx_convert_fp32_bf16_round<aTCSR, cTCSR>((void *)uram0, (void *)uram1); // 连续和不连续的不一样
     __tx_fence();
-    __tx_async_nram_store<cTCSR, cTCSR, 1>((void*)nram1, res);
+    __tx_async_uram_store<cTCSR, cTCSR, 1>((void*)uram1, res);
     __tx_fence();
 }

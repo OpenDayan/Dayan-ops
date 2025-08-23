@@ -78,8 +78,8 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
           const float* x_ptr = &x[head_offset];
           float* y_ptr = &y[head_offset];
 
-          __tx_async_nram_load<aTCSR, aTCSR, 2>((float*)x_ptr, XTile);
-          __tx_async_nram_load<oneTCFG, oneTCFG, 2>(&minus_one, minusone);
+          __tx_async_uram_load<aTCSR, aTCSR, 2>((float*)x_ptr, XTile);
+          __tx_async_uram_load<oneTCFG, oneTCFG, 2>(&minus_one, minusone);
           __tx_fence();
 
           __tx_fp_mul_fp32<aTCSR, oneTCFG, cTCSR, 0b0001>(XTile, minusone, mid1);    //mid1 = -x
@@ -93,7 +93,7 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
           __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(XTile, mid2, YTile);         //y = x/(1+e^(-x))^(1/2)
           __tx_fence();
 
-          __tx_async_nram_store<cTCSR, cTCSR, 2>(YTile, (float*)y_ptr);
+          __tx_async_uram_store<cTCSR, cTCSR, 2>(YTile, (float*)y_ptr);
           __tx_fence();
         }
       }

@@ -86,7 +86,7 @@ static inline void updateKTile(long kTile) {
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);                                 \
     __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);                                 \
                                                                                \
-    /* NRAM TCFGs */                                                           \
+    /* URAM TCFGs */                                                           \
     __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM0>(kTile);                         \
     __tx_tcsr_write<aTileTCFG * 8 + TCSR_STRIDE0>(1);                          \
     __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM1>(iTile);                         \
@@ -133,7 +133,7 @@ static inline void updateKTile(long kTile) {
         }                                                                      \
         __tx_fence();                                                          \
         /* Load C */                                                           \
-        __tx_async_nram_load<cTCFG, cTileTCFG, log2ElementSizeC>(              \
+        __tx_async_uram_load<cTCFG, cTileTCFG, log2ElementSizeC>(              \
             (void *)((uint64_t)c + (ldc * i + j) * (1 << log2ElementSizeC)), \
             (void *)cTile);                                                    \
         updateKTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG,      \
@@ -145,12 +145,12 @@ static inline void updateKTile(long kTile) {
                         B_T>(k_left);                                          \
           }                                                                    \
           /* load A */                                                         \
-          __tx_async_nram_load<aTCFG, aTileTCFG, log2ElementSizeA>(            \
+          __tx_async_uram_load<aTCFG, aTileTCFG, log2ElementSizeA>(            \
               (void *)((uint64_t)a +                                           \
                        (lda * i + k) * (1 << log2ElementSizeA)),             \
               (void *)aTile);                                                  \
           /* load B */                                                         \
-          __tx_async_nram_load<bTCFG, bTileTCFG, log2ElementSizeB>(            \
+          __tx_async_uram_load<bTCFG, bTileTCFG, log2ElementSizeB>(            \
               (void *)(B_T ? ((uint64_t)b +                                    \
                               (ldb * j + k) * (1 << log2ElementSizeB))       \
                            : ((uint64_t)b +                                    \
@@ -163,7 +163,7 @@ static inline void updateKTile(long kTile) {
           __tx_fence();                                                        \
         }                                                                      \
         /* Store C */                                                          \
-        __tx_async_nram_store<cTileTCFG, cTCFG, log2ElementSizeC>(             \
+        __tx_async_uram_store<cTileTCFG, cTCFG, log2ElementSizeC>(             \
             (void *)(cTile + acc_en_read_full_addr),                           \
             (void *)((uint64_t)c +                                             \
                      (ldc * i + j) * (1 << log2ElementSizeC)));              \

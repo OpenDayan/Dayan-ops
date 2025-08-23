@@ -7,9 +7,9 @@
 const long aTCSR = 0;
 const long bTCSR = 1;
 
-const uint64_t nram0 = 0x1000000;
-const uint64_t nram1 = 0x2000000;
-const uint64_t nram2 = 0x3000000;
+const uint64_t uram0 = 0x1000000;
+const uint64_t uram1 = 0x2000000;
+const uint64_t uram2 = 0x3000000;
 
 static inline void config_dims_and_strides(TCFG *tcsr) {
   __tx_tcsr_write<aTCSR * 8 + TCSR_DIM0>(tcsr[0].dim0);
@@ -35,13 +35,13 @@ __device__ void tx_convert_fp32_s32_round(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_s32_round<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_s32_round<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 2>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -49,13 +49,13 @@ __device__ void tx_convert_fp32_s32_floor(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_s32_floor<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_s32_floor<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 2>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -63,13 +63,13 @@ __device__ void tx_convert_fp32_s32_ceil(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_s32_ceil<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_s32_ceil<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 2>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -77,13 +77,13 @@ __device__ void tx_convert_fp32_e4m3_round(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 0>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 0>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_e4m3_round<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_e4m3_round<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 0>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 0>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -91,13 +91,13 @@ __device__ void tx_convert_fp32_fp16_round(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 1>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 1>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_fp16_round<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_fp16_round<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 1>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 1>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -105,13 +105,13 @@ __device__ void tx_convert_fp32_bf16_round(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 1>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 1>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_fp32_bf16_round<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_fp32_bf16_round<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 1>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 1>((void *)uram1, output);
   __tx_fence();
 }
 
@@ -119,12 +119,12 @@ __device__ void tx_convert_s32_fp32(void *input, void *output,
                                       TCFG *tcsr) {
 
   config_dims_and_strides(tcsr);
-  __tx_async_nram_load<aTCSR, aTCSR, 2>(input, (void *)nram0);
-  __tx_async_nram_load<bTCSR, bTCSR, 2>(output, (void *)nram1);
+  __tx_async_uram_load<aTCSR, aTCSR, 2>(input, (void *)uram0);
+  __tx_async_uram_load<bTCSR, bTCSR, 2>(output, (void *)uram1);
   __tx_fence();
-  __tx_convert_s32_fp32<0, 1>((void *)nram0, (void *)nram1);
+  __tx_convert_s32_fp32<0, 1>((void *)uram0, (void *)uram1);
   __tx_fence();
 
-  __tx_async_nram_store<bTCSR, bTCSR, 2>((void *)nram1, output);
+  __tx_async_uram_store<bTCSR, bTCSR, 2>((void *)uram1, output);
   __tx_fence();
 }
