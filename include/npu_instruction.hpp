@@ -500,6 +500,15 @@ namespace NPUInstBuilder {
         ((long)rs1, (long)rs2, (long)rs3);
     }
 
+    template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2, long tcfgrs3>
+    __attribute__((always_inline))
+    static inline void __tx_conv(void* rs1, void* rs2, void* rs3)
+    {
+        NPUInstBuilder::__custom_64b_instruction3r<
+        (basetype << 56ul) | (rs1type << 50ul) | (rs2type << 44ul) | (rs3type << 43ul) | (tcfgrs1 << 32ul) | (tcfgrs2 << 35ul) | (tcfgrs3 << 38ul)>
+        ((long)rs1, (long)rs2, (long)rs3);
+    }
+
     enum __TX_ELEM_DTYPE_ENUM {
         TX_SUBBYTE_FLOAT = 0,
         TX_U8   = 0b1000000,
@@ -725,6 +734,24 @@ __attribute__((always_inline))
 static inline void __tx_matmul_fix_s8_s8_s32(void* rs1, void* rs2, void* rs3)
 {
     NPUInstBuilder::__tx_matmul<0b00000010, 7, 7, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_conv_float_f32_f32_f32(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_conv<0b101, 0b10, 0b10, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_conv_float_fp16_fp16_f32(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_conv<0b101, 0b00, 0b00, 0b0, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
+}
+
+template <long tcfgrs1, long tcfgrs2, long tcfgrs3>
+__attribute__((always_inline))
+static inline void __tx_conv_float_fp16_fp16_fp16(void* rs1, void* rs2, void* rs3) {
+    NPUInstBuilder::__tx_conv<0b101, 0b00, 0b00, 0b1, tcfgrs1, tcfgrs2, tcfgrs3>(rs1, rs2, rs3);
 }
 
 template <long tcfgrs1, long tcfgrs3, long log2w>
