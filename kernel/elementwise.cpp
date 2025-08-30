@@ -57,8 +57,6 @@ static inline bool needs_broadcast(int a_dim0, int a_dim1, int a_dim2, int a_dim
 
 __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void *c_ptr,
                                              int ne0, int ne1, int ne2, int ne3) {
-    long total_elements = (long)ne3 * ne2 * ne1 * ne0;
-    
     int stride_dim1 = ne0;
     int stride_dim2 = ne0 * ne1;
     int stride_dim3 = ne0 * ne1 * ne2;
@@ -67,109 +65,79 @@ __device__ long kernel_add_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
         for (int j = 0; j < ne2; ++j) {
             for (int k = 0; k < ne1; ++k) {
                 int total_chunks = (ne0 + MTile - 1) / MTile;
-                
-                if (total_chunks == 1) {
-                    int current_chunk = ne0;
-                    
-                    config_tcsr_vector<aTCSR>(current_chunk);
-                    config_tcsr_vector<bTCSR>(current_chunk);
-                    config_tcsr_vector<cTCSR>(current_chunk);
+                if (total_chunks == 0) continue;
+                long base_offset = (long)i * stride_dim3 + (long)j * stride_dim2 + (long)k * stride_dim1;
 
-                    long offset = i * stride_dim3 + j * stride_dim2 + k * stride_dim1;
-                    float* a_elem_ptr = (float*)a_ptr + offset;
-                    float* b_elem_ptr = (float*)b_ptr + offset;
-                    float* c_elem_ptr = (float*)c_ptr + offset;
+                // 加载第0个块
+                int chunk_0_size = (ne0 > MTile) ? MTile : ne0;
+                config_tcsr_vector<aTCSR>(chunk_0_size);
+                config_tcsr_vector<bTCSR>(chunk_0_size);
+                float* a_chunk_0_ptr = (float*)a_ptr + base_offset;
+                float* b_chunk_0_ptr = (float*)b_ptr + base_offset;
+                __tx_async_uram_load<aTCSR, aTCSR, 2>(a_chunk_0_ptr, (void *)uram0);
+                __tx_async_uram_load<bTCSR, bTCSR, 2>(b_chunk_0_ptr, (void *)uram1);
 
-                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
-                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
+                // 流水线循环
+                for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
+                    int current_buffer_idx = chunk_idx % 2;
+                    int next_buffer_idx = (chunk_idx + 1) % 2;
+                    int prev_buffer_idx = (chunk_idx - 1 + 2) % 2;
+
+                    // 加载下一个块
+                    if (chunk_idx < total_chunks - 1) {
+                        int next_chunk_size = (ne0 - (chunk_idx + 1) * MTile > MTile) ? MTile : (ne0 - (chunk_idx + 1) * MTile);
+                        config_tcsr_vector<aTCSR>(next_chunk_size);
+                        config_tcsr_vector<bTCSR>(next_chunk_size);
+                        
+                        long next_offset = base_offset + (chunk_idx + 1) * MTile;
+                        float* a_next_ptr = (float*)a_ptr + next_offset;
+                        float* b_next_ptr = (float*)b_ptr + next_offset;
+
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_next_ptr, (void *)(uram0 + next_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_next_ptr, (void *)(uram1 + next_buffer_idx * MTile * sizeof(float)));
+                    }
+
                     __tx_fence();
 
-                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)uram0, (void *)uram1, (void *)uram2);
-                    __tx_fence();
-                    
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
-                    __tx_fence();
-                    
-                } else {                    
-                    // 加载第0块数据
-                    int chunk_0_size = (ne0 > MTile) ? MTile : ne0;
-                    config_tcsr_vector<aTCSR>(chunk_0_size);
-                    config_tcsr_vector<bTCSR>(chunk_0_size);
-                    config_tcsr_vector<cTCSR>(chunk_0_size);
-                    
-                    long offset_0 = i * stride_dim3 + j * stride_dim2 + k * stride_dim1;
-                    float* a_elem_ptr_0 = (float*)a_ptr + offset_0;
-                    float* b_elem_ptr_0 = (float*)b_ptr + offset_0;
-                    
-                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
-                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
-                    
-                    // 计算第0块，同时加载第1块
-                    if (total_chunks > 1) {
-                        int chunk_1_size = ((ne0 - MTile) > MTile) ? MTile : (ne0 - MTile);
+                    // 存储上一个块的结果
+                    if (chunk_idx > 0) {
+                        int prev_chunk_size = (ne0 - (chunk_idx - 1) * MTile > MTile) ? MTile : (ne0 - (chunk_idx - 1) * MTile);
+                        config_tcsr_vector<cTCSR>(prev_chunk_size);
                         
-                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(uram1 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(uram2 + 0 * MTile * sizeof(float)));
-
-                        config_tcsr_vector<aTCSR>(chunk_1_size);
-                        config_tcsr_vector<bTCSR>(chunk_1_size);
-                        
-                        long offset_1 = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + MTile;
-                        float* a_elem_ptr_1 = (float*)a_ptr + offset_1;
-                        float* b_elem_ptr_1 = (float*)b_ptr + offset_1;
-                        
-                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
-                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
+                        long prev_offset = base_offset + (chunk_idx - 1) * MTile;
+                        float* c_prev_ptr = (float*)c_ptr + prev_offset;
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)), c_prev_ptr);
                     }
                     
-                    for (int chunk_idx = 2; chunk_idx < total_chunks; chunk_idx++) {
-                        __tx_fence();
-                        
-                        long c_offset_prev = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (chunk_idx - 2) * MTile;
-                        float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
-                        
-                        int prev_buffer_idx = (chunk_idx - 1) % 2;
-                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)));
-                        
-                        int current_chunk_size = ((ne0 - chunk_idx * MTile) > MTile) ? MTile : (ne0 - chunk_idx * MTile);
-                        int current_buffer_idx = chunk_idx % 2;
-                        
-                        config_tcsr_vector<aTCSR>(current_chunk_size);
-                        config_tcsr_vector<bTCSR>(current_chunk_size);
-                        
-                        long offset_curr = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + chunk_idx * MTile;
-                        float* a_elem_ptr_curr = (float*)a_ptr + offset_curr;
-                        float* b_elem_ptr_curr = (float*)b_ptr + offset_curr;
-                        
-                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
-                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
-                    }
+                    // 计算当前块
+                    int current_chunk_size = (ne0 - chunk_idx * MTile > MTile) ? MTile : (ne0 - chunk_idx * MTile);
+                    config_tcsr_vector<aTCSR>(current_chunk_size);
+                    config_tcsr_vector<bTCSR>(current_chunk_size);
+                    config_tcsr_vector<cTCSR>(current_chunk_size);
                     
-                    __tx_fence();
-                    
-                    long c_offset_second_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 2) * MTile;
-                    float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
-                    
-                    int last_buffer_idx = 1;
-                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(uram2 + last_buffer_idx * MTile * sizeof(float)));
-                    
-                    long c_offset_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 1) * MTile;
-                    float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
-                    __tx_fence();
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
-                    __tx_fence();
+                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
+                        (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)),
+                        (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)),
+                        (void *)(uram2 + current_buffer_idx * MTile * sizeof(float))
+                    );
                 }
+
+                // 存储最后一个块的结果
+                __tx_fence();
+                
+                int last_chunk_idx = total_chunks - 1;
+                int last_buffer_idx = last_chunk_idx % 2;
+                int last_chunk_size = (ne0 - last_chunk_idx * MTile > MTile) ? MTile : (ne0 - last_chunk_idx * MTile);
+                config_tcsr_vector<cTCSR>(last_chunk_size);
+                
+                long last_offset = base_offset + last_chunk_idx * MTile;
+                float* c_last_ptr = (float*)c_ptr + last_offset;
+                __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_last_ptr);
+                
+                __tx_fence();
             }
         }
     }
-
     return 0;
 }
 
@@ -471,10 +439,9 @@ __device__ long kernel_add_fp32(void *a_ptr, void *b_ptr, void *c_ptr,
     }
 }
 
+
 __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void *c_ptr,
                                              int ne0, int ne1, int ne2, int ne3) {
-    long total_elements = (long)ne3 * ne2 * ne1 * ne0;
-    
     int stride_dim1 = ne0;
     int stride_dim2 = ne0 * ne1;
     int stride_dim3 = ne0 * ne1 * ne2;
@@ -483,111 +450,82 @@ __device__ long kernel_mul_fp32_without_broadcast(void *a_ptr, void *b_ptr, void
         for (int j = 0; j < ne2; ++j) {
             for (int k = 0; k < ne1; ++k) {
                 int total_chunks = (ne0 + MTile - 1) / MTile;
-                
-                if (total_chunks == 1) {
-                    int current_chunk = ne0;
+                if (total_chunks == 0) continue;
+                long base_offset = (long)i * stride_dim3 + (long)j * stride_dim2 + (long)k * stride_dim1;
+
+                // 加载第0个块
+                int chunk_0_size = (ne0 > MTile) ? MTile : ne0;
+                config_tcsr_vector<aTCSR>(chunk_0_size);
+                config_tcsr_vector<bTCSR>(chunk_0_size);
+                float* a_chunk_0_ptr = (float*)a_ptr + base_offset;
+                float* b_chunk_0_ptr = (float*)b_ptr + base_offset;
+                __tx_async_uram_load<aTCSR, aTCSR, 2>(a_chunk_0_ptr, (void *)uram0);
+                __tx_async_uram_load<bTCSR, bTCSR, 2>(b_chunk_0_ptr, (void *)uram1);
+
+                // 流水线循环
+                for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
+                    int current_buffer_idx = chunk_idx % 2;
+                    int next_buffer_idx = (chunk_idx + 1) % 2;
                     
-                    config_tcsr_vector<aTCSR>(current_chunk);
-                    config_tcsr_vector<bTCSR>(current_chunk);
-                    config_tcsr_vector<cTCSR>(current_chunk);
+                    int prev_buffer_idx = (chunk_idx - 1 + 2) % 2;
 
-                    long offset = i * stride_dim3 + j * stride_dim2 + k * stride_dim1;
-                    float* a_elem_ptr = (float*)a_ptr + offset;
-                    float* b_elem_ptr = (float*)b_ptr + offset;
-                    float* c_elem_ptr = (float*)c_ptr + offset;
+                    // 1. 加载下一个块
+                    if (chunk_idx < total_chunks - 1) {
+                        int next_chunk_size = (ne0 - (chunk_idx + 1) * MTile > MTile) ? MTile : (ne0 - (chunk_idx + 1) * MTile);
+                        config_tcsr_vector<aTCSR>(next_chunk_size);
+                        config_tcsr_vector<bTCSR>(next_chunk_size);
+                        
+                        long next_offset = base_offset + (chunk_idx + 1) * MTile;
+                        float* a_next_ptr = (float*)a_ptr + next_offset;
+                        float* b_next_ptr = (float*)b_ptr + next_offset;
 
-                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr, (void *)uram0);
-                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr, (void *)uram1);
+                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_next_ptr, (void *)(uram0 + next_buffer_idx * MTile * sizeof(float)));
+                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_next_ptr, (void *)(uram1 + next_buffer_idx * MTile * sizeof(float)));
+                    }
+
                     __tx_fence();
 
-                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)uram0, (void *)uram1, (void *)uram2);
-                    __tx_fence();
-                    
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
-                    __tx_fence();
-                    
-                } else {
-                    int chunk_0_size = (ne0 > MTile) ? MTile : ne0;
-                    config_tcsr_vector<aTCSR>(chunk_0_size);
-                    config_tcsr_vector<bTCSR>(chunk_0_size);
-                    config_tcsr_vector<cTCSR>(chunk_0_size);
-                    
-                    long offset_0 = i * stride_dim3 + j * stride_dim2 + k * stride_dim1;
-                    float* a_elem_ptr_0 = (float*)a_ptr + offset_0;
-                    float* b_elem_ptr_0 = (float*)b_ptr + offset_0;
-                    
-                    __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_0, (void *)(uram0 + 0 * MTile * sizeof(float)));
-                    __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_0, (void *)(uram1 + 0 * MTile * sizeof(float)));
-                    
-                    // 计算第0块，同时加载第1块
-                    if (total_chunks > 1) {
-                        int chunk_1_size = ((ne0 - MTile) > MTile) ? MTile : (ne0 - MTile);
+                    // 2. 存储上一个块的结果
+                    if (chunk_idx > 0) {
+                        int prev_chunk_size = (chunk_idx == 1 && ne0 < MTile) ? ne0 : ((chunk_idx-1 == total_chunks - 1) ? (ne0 - (chunk_idx-1)*MTile) : MTile);
+                        config_tcsr_vector<cTCSR>(prev_chunk_size);
                         
-                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(uram1 + 0 * MTile * sizeof(float)), 
-                                                                      (void *)(uram2 + 0 * MTile * sizeof(float)));
-
-                        config_tcsr_vector<aTCSR>(chunk_1_size);
-                        config_tcsr_vector<bTCSR>(chunk_1_size);
-                        
-                        long offset_1 = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + MTile;
-                        float* a_elem_ptr_1 = (float*)a_ptr + offset_1;
-                        float* b_elem_ptr_1 = (float*)b_ptr + offset_1;
-                        
-                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_1, (void *)(uram0 + 1 * MTile * sizeof(float)));
-                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_1, (void *)(uram1 + 1 * MTile * sizeof(float)));
+                        long prev_offset = base_offset + (chunk_idx - 1) * MTile;
+                        float* c_prev_ptr = (float*)c_ptr + prev_offset;
+                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)), c_prev_ptr);
                     }
                     
-                    for (int chunk_idx = 2; chunk_idx < total_chunks; chunk_idx++) {
-                        __tx_fence();
-                        
-                        long c_offset_prev = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (chunk_idx - 2) * MTile;
-                        float* c_elem_ptr_prev = (float*)c_ptr + c_offset_prev;
-                        __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + ((chunk_idx - 2) % 2) * MTile * sizeof(float)), c_elem_ptr_prev);
-                        
-                        int prev_buffer_idx = (chunk_idx - 1) % 2;
-                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), 
-                                                                      (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float)));
-                        
-                        int current_chunk_size = ((ne0 - chunk_idx * MTile) > MTile) ? MTile : (ne0 - chunk_idx * MTile);
-                        int current_buffer_idx = chunk_idx % 2;
-                        
-                        config_tcsr_vector<aTCSR>(current_chunk_size);
-                        config_tcsr_vector<bTCSR>(current_chunk_size);
-                        
-                        long offset_curr = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + chunk_idx * MTile;
-                        float* a_elem_ptr_curr = (float*)a_ptr + offset_curr;
-                        float* b_elem_ptr_curr = (float*)b_ptr + offset_curr;
-                        
-                        __tx_async_uram_load<aTCSR, aTCSR, 2>(a_elem_ptr_curr, (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)));
-                        __tx_async_uram_load<bTCSR, bTCSR, 2>(b_elem_ptr_curr, (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)));
-                    }
+                    // 3. 计算当前块
+                    int current_chunk_size = (ne0 - chunk_idx * MTile > MTile) ? MTile : (ne0 - chunk_idx * MTile);
+                    config_tcsr_vector<aTCSR>(current_chunk_size);
+                    config_tcsr_vector<bTCSR>(current_chunk_size);
+                    config_tcsr_vector<cTCSR>(current_chunk_size);
                     
-                    __tx_fence();
-                    
-                    long c_offset_second_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 2) * MTile;
-                    float* c_elem_ptr_second_last = (float*)c_ptr + c_offset_second_last;
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + 0 * MTile * sizeof(float)), c_elem_ptr_second_last);
-                    
-                    int last_buffer_idx = 1;
-                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), 
-                                                                  (void *)(uram2 + last_buffer_idx * MTile * sizeof(float)));
-                    
-                    long c_offset_last = i * stride_dim3 + j * stride_dim2 + k * stride_dim1 + (total_chunks - 1) * MTile;
-                    float* c_elem_ptr_last = (float*)c_ptr + c_offset_last;
-                    __tx_fence();
-                    __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_elem_ptr_last);
-                    __tx_fence();
+                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
+                        (void *)(uram0 + current_buffer_idx * MTile * sizeof(float)),
+                        (void *)(uram1 + current_buffer_idx * MTile * sizeof(float)),
+                        (void *)(uram2 + current_buffer_idx * MTile * sizeof(float))
+                    );
                 }
+
+                // 存储最后一个块的结果
+                __tx_fence();
+                
+                int last_chunk_idx = total_chunks - 1;
+                int last_buffer_idx = last_chunk_idx % 2;
+                int last_chunk_size = (ne0 - last_chunk_idx * MTile > MTile) ? MTile : (ne0 - last_chunk_idx * MTile);
+                config_tcsr_vector<cTCSR>(last_chunk_size);
+                
+                long last_offset = base_offset + last_chunk_idx * MTile;
+                float* c_last_ptr = (float*)c_ptr + last_offset;
+                __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)(uram2 + last_buffer_idx * MTile * sizeof(float)), c_last_ptr);
+                
+                __tx_fence();
             }
         }
     }
-
     return 0;
 }
-
 
 __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c_ptr,
                                 int psrc0_ne0, int psrc0_ne1, int psrc0_ne2, int psrc0_ne3,
@@ -648,34 +586,34 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 
                     uint8_t current_broadcast = (psrc1_ne0 == 1) ? (broadcast | 0b0001) : broadcast;
                         
-#define CALL_TX_FP_ADD_FP32(broadcast_val)                                     \
+#define CALL_TX_FP_MUL_FP32(broadcast_val)                                     \
   case broadcast_val:                                                          \
     __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)uram0, (void *)uram1, (void *)uram2); \
     break;
 
                     switch (current_broadcast) {
-                        CALL_TX_FP_ADD_FP32(0b0000)
-                        CALL_TX_FP_ADD_FP32(0b0001)
-                        CALL_TX_FP_ADD_FP32(0b0010)
-                        CALL_TX_FP_ADD_FP32(0b0011)
-                        CALL_TX_FP_ADD_FP32(0b0100)
-                        CALL_TX_FP_ADD_FP32(0b0101)
-                        CALL_TX_FP_ADD_FP32(0b0110)
-                        CALL_TX_FP_ADD_FP32(0b0111)
-                        CALL_TX_FP_ADD_FP32(0b1000)
-                        CALL_TX_FP_ADD_FP32(0b1001)
-                        CALL_TX_FP_ADD_FP32(0b1010)
-                        CALL_TX_FP_ADD_FP32(0b1011)
-                        CALL_TX_FP_ADD_FP32(0b1100)
-                        CALL_TX_FP_ADD_FP32(0b1101)
-                        CALL_TX_FP_ADD_FP32(0b1110)
-                        CALL_TX_FP_ADD_FP32(0b1111)
+                        CALL_TX_FP_MUL_FP32(0b0000)
+                        CALL_TX_FP_MUL_FP32(0b0001)
+                        CALL_TX_FP_MUL_FP32(0b0010)
+                        CALL_TX_FP_MUL_FP32(0b0011)
+                        CALL_TX_FP_MUL_FP32(0b0100)
+                        CALL_TX_FP_MUL_FP32(0b0101)
+                        CALL_TX_FP_MUL_FP32(0b0110)
+                        CALL_TX_FP_MUL_FP32(0b0111)
+                        CALL_TX_FP_MUL_FP32(0b1000)
+                        CALL_TX_FP_MUL_FP32(0b1001)
+                        CALL_TX_FP_MUL_FP32(0b1010)
+                        CALL_TX_FP_MUL_FP32(0b1011)
+                        CALL_TX_FP_MUL_FP32(0b1100)
+                        CALL_TX_FP_MUL_FP32(0b1101)
+                        CALL_TX_FP_MUL_FP32(0b1110)
+                        CALL_TX_FP_MUL_FP32(0b1111)
                     default:
                         printf("[KERNEL] ERROR: Unsupported broadcast pattern: %d\n", current_broadcast);
                         return -1;
                     }
 
-#undef CALL_TX_FP_ADD_FP32
+#undef CALL_TX_FP_MUL_FP32
 
                     __tx_fence();
                     __tx_async_uram_store<cTCSR, cTCSR, 2>((void *)uram2, c_elem_ptr);
@@ -713,33 +651,33 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
                     if (total_chunks > 1) {
                         int chunk_1_size = ((psrc0_ne0 - MTile) > MTile) ? MTile : (psrc0_ne0 - MTile);
                         
-#define CALL_TX_FP_ADD_FP32_PIPELINE(broadcast_val)                            \
+#define CALL_TX_FP_MUL_FP32_PIPELINE(broadcast_val)                            \
   case broadcast_val:                                                          \
     __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + 0 * MTile * sizeof(float)), (void *)(uram1 + 0 * MTile * sizeof(float)), (void *)(uram2 + 0 * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0000)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0001)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0010)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0011)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0100)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0101)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0110)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b0111)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1000)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1001)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1010)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1011)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1100)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1101)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1110)
-                            CALL_TX_FP_ADD_FP32_PIPELINE(0b1111)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0000)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0001)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0010)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0011)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0100)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0101)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0110)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b0111)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1000)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1001)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1010)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1011)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1100)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1101)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1110)
+                            CALL_TX_FP_MUL_FP32_PIPELINE(0b1111)
                         default:
                             return -1;
                         }
 
-#undef CALL_TX_FP_ADD_FP32_PIPELINE
+#undef CALL_TX_FP_MUL_FP32_PIPELINE
 
                         config_tcsr_vector<aTCSR>(chunk_1_size);
                         config_tcsr_vector<bTCSR>(chunk_1_size);
@@ -772,33 +710,33 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 
                         int prev_buffer_idx = (chunk_idx - 1) % 2;
                         
-#define CALL_TX_FP_ADD_FP32_MAIN(broadcast_val)                                \
+#define CALL_TX_FP_MUL_FP32_MAIN(broadcast_val)                                \
   case broadcast_val:                                                          \
     __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + prev_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + prev_buffer_idx * MTile * sizeof(float))); \
     break;
 
                         switch (current_broadcast) {
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0000)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0001)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0010)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0011)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0100)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0101)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0110)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b0111)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1000)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1001)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1010)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1011)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1100)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1101)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1110)
-                            CALL_TX_FP_ADD_FP32_MAIN(0b1111)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0000)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0001)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0010)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0011)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0100)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0101)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0110)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b0111)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1000)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1001)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1010)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1011)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1100)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1101)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1110)
+                            CALL_TX_FP_MUL_FP32_MAIN(0b1111)
                         default:
                             return -1;
                         }
 
-#undef CALL_TX_FP_ADD_FP32_MAIN
+#undef CALL_TX_FP_MUL_FP32_MAIN
 
                         int current_chunk_size = ((psrc0_ne0 - chunk_idx * MTile) > MTile) ? MTile : (psrc0_ne0 - chunk_idx * MTile);
                         int current_buffer_idx = chunk_idx % 2;
@@ -834,33 +772,33 @@ __device__ long kernel_mul_fp32_with_broadcast(void *a_ptr, void *b_ptr, void *c
 
                     int last_buffer_idx = 1;
                     
-#define CALL_TX_FP_ADD_FP32_LAST(broadcast_val)                                \
+#define CALL_TX_FP_MUL_FP32_LAST(broadcast_val)                                \
   case broadcast_val:                                                          \
     __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, broadcast_val>((void *)(uram0 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram1 + last_buffer_idx * MTile * sizeof(float)), (void *)(uram2 + last_buffer_idx * MTile * sizeof(float))); \
     break;
 
                     switch (current_broadcast) {
-                        CALL_TX_FP_ADD_FP32_LAST(0b0000)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0001)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0010)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0011)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0100)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0101)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0110)
-                        CALL_TX_FP_ADD_FP32_LAST(0b0111)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1000)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1001)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1010)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1011)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1100)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1101)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1110)
-                        CALL_TX_FP_ADD_FP32_LAST(0b1111)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0000)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0001)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0010)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0011)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0100)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0101)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0110)
+                        CALL_TX_FP_MUL_FP32_LAST(0b0111)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1000)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1001)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1010)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1011)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1100)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1101)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1110)
+                        CALL_TX_FP_MUL_FP32_LAST(0b1111)
                     default:
                         return -1;
                     }
 
-#undef CALL_TX_FP_ADD_FP32_LAST
+#undef CALL_TX_FP_MUL_FP32_LAST
                     
                     // 存储最后一个chunk的结果
                     long c_offset_last = i * a_stride_dim3 + j * a_stride_dim2 + k * a_stride_dim1 + (total_chunks - 1) * MTile;
