@@ -105,6 +105,42 @@ uint16_t fp32_to_bf16(float f) {
     return res;
 }
 
+uint16_t fp32_to_bf16_round(float f) {
+
+    uint32_t x = 0;
+    memcpy(&x, &f, sizeof(float));
+    uint32_t sign = x & 0x80000000;
+    int32_t exponent = (x >> 23) & 0xFF;
+    // uint32_t mantissa = x & 0x007FFFFF;
+
+    if (exponent == 0xFF) {
+        return (x >> 16) | 0x007F;
+    }
+
+    if (exponent == 0) {
+        return (x >> 16) & 0x8000;
+    }
+
+    uint32_t truncated = x >> 16;
+    uint32_t round_bit = (x >> 15) & 1;
+    uint32_t sticky_bits = x & 0x7FFF;
+    // Round
+    if (round_bit && (sticky_bits || (truncated & 1)))
+        truncated += 1;
+    // // Ceil
+    // if (!sign && (round_bit || sticky_bits))
+    //     truncated += 1;
+    // // Floor
+    // if (sign && (round_bit || sticky_bits))
+    //     truncated += 1;
+
+    if ((truncated & 0x7F80) == 0x7F80) {
+        truncated = (truncated & 0x8000) | 0x7F80;
+    }
+
+    return (uint16_t)truncated;
+}
+
 union fp32_int32 {
     float f;
     uint32_t bits;
@@ -263,73 +299,22 @@ void matmul_bf16_f32_f32(std::vector<uint16_t>& a, std::vector<float>& b, std::v
             int j0 = j / rj;
 
             // b[i][j][:][:] * a[i0][j0][:][:]^T
-            for (int p = 0; p < m; ++p)
+            for (int p = 0; p < m; ++p) {
                 for (int l = 0; l < n; ++l) {
-                    double val = 0.0;
+                    float val = 0.0;
                     // res[i][j][p][l] = b[i][j][p][:] * a[i0][j0][l][:]^T
                     for (int x = 0; x < k; ++x) {
                         uint16_t ea = a[(i0*psrc0.nb[3] + j0*psrc0.nb[2] + l*psrc0.nb[1] + x*psrc0.nb[0]) / sizeof(uint16_t)];
                         float eb = b[(i*psrc1.nb[3] + j*psrc1.nb[2] + p*psrc1.nb[1] + x*psrc1.nb[0]) / sizeof(float)];
-                        // b[...] is converted to bf16 then converted to fp32
-                        val += (double)(bf16_to_fp32(ea) * bf16_to_fp32(fp32_to_bf16(eb)));
+                        val += bf16_to_fp32(ea) * bf16_to_fp32(fp32_to_bf16_round(eb));
                     }
-                    // double to float cast
                     res[i*h*m*n + j*m*n + p*n + l] = val;
                 }
+            }
         }
 }
 
 void matmul_e4m3q_f32_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::vector<float>& res,
-                   TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
-    int bs = psrc1.ne[3];
-    int h = psrc1.ne[2];
-
-    assert(psrc1.ne[3] == psrc0.ne[3]);
-    assert(psrc1.ne[2] == psrc0.ne[2]);
-
-    // src0 shape: (bs0, h0, n, k)
-    // src1 shape: (bs, h, m, k)
-    // dst shape: (bs, h, m, n)
-    int n = psrc0.ne[1];
-    int m = psrc1.ne[1];
-    int k = psrc1.ne[0];
-    assert(psrc1.ne[0] == psrc0.ne[0]);
-    assert(k % QK == 0);
-    // rowsize = sizeof block scales + sizeof block data
-    int row_size = (k/QK)*sizeof(float) + k;
-
-    for (int i = 0; i < bs; ++i)
-        for (int j = 0; j < h; ++j) {
-            for (int p = 0; p < m; ++p)
-                for (int l = 0; l < n; ++l) {
-                    float dot_sum = 0.0; // DOT SUM
-
-                    // vector-dot loop
-                    for (int ib = 0; ib < k/QK; ++ib) {
-                        float block_sum = 0.0f; // BLOCK_SUM
-
-                        // get A block (fp8)
-                        block_e4m3_q * a_block_fp8 = (block_e4m3_q *)(a.data() + i*h*n*row_size + j*n*row_size + l*row_size + ib*sizeof(block_e4m3_q));
-
-                        // in-block loop
-                        for (int x = 0; x < QK; ++x) {
-                            float ea = e4m3q_to_float(a_block_fp8->data[x]);
-                            float eb = b[i*h*m*k + j*m*k + p*k + (ib*QK + x)];
-                            block_sum += ea * eb;
-                        }
-
-                        // add block sum to dot sum (with scaling)
-                        float scale_a = a_block_fp8->scale;
-                        dot_sum += scale_a * block_sum;
-                    }
-
-                    // vector-dot result
-                    res[i*h*m*n + j*m*n + p*n + l] = dot_sum;
-                }
-        }
-}
-
-void matmul_e4m3q_e4m3q_f32(std::vector<uint8_t>& a, std::vector<float>& b, std::vector<float>& res,
                             TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
     int bs = psrc1.ne[3];
     int h = psrc1.ne[2];
@@ -386,7 +371,6 @@ void matmul_e4m3q_e4m3q_f32(std::vector<uint8_t>& a, std::vector<float>& b, std:
                 }
         }
 }
-
 
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
@@ -455,8 +439,6 @@ void kernel_matmul_e4m3q(
     int h0 = psrc0.ne[2];
 
     // dim(0) and dim(1) only broadcast from src0 to src1
-    int rbs = bs / psrc0.ne[3];
-    int rj = h / psrc0.ne[2];
     assert(bs >= psrc0.ne[3]);
     assert(h >= psrc0.ne[2]);
     assert(bs == 1);
@@ -471,31 +453,134 @@ void kernel_matmul_e4m3q(
     int n = psrc1.ne[1];
     int k = psrc1.ne[0];
     assert(psrc1.ne[0] == psrc0.ne[0]);
-    // Convert src1 to e4m3q
-    std::vector<uint8_t> b_e4m3q(bs * h * m * k * (QK + sizeof(float)) / QK);
-    for (int64_t i13 = 0; i13 < bs; ++i13) {
-        for (int64_t i12 = 0; i12 < h; ++i12) {
-            for (int64_t i11 = 0; i11 < n; ++i11) {
-                float_to_e4m3q(b.data() + (
-                                i13 * psrc1.nb[3]
-                              + i12 * psrc1.nb[2]
-                              + i11 * psrc1.nb[1]
-                            )/sizeof(float),
-                            (bloc_fp8<4>*)(b_e4m3q.data() + (
-                                i13 * (psrc1.nb[3] / sizeof(float)) * (QK + sizeof(float)) / QK
-                              + i12 * (psrc1.nb[2] / sizeof(float)) * (QK + sizeof(float)) / QK
-                              + i11 * (psrc1.nb[1] / sizeof(float)) * (QK + sizeof(float)) / QK
-                            )/sizeof(uint8_t)),
-                            k);
-            }
-        }
-    }
 
     // Call Kernel
     host_gmma_e4m3q_fp32_AT_QK256(
-        a.data(), b_e4m3q.data(), res.data(),
+        a.data(), b.data(), res.data(),
         m, n, k,
         psrc1.ne[0] * (QK + sizeof(float)) / QK, psrc0.ne[0] * (QK + sizeof(float)) / QK, pdst.nb[1] / sizeof(float)
+    );
+}
+
+size_t tensor_nbytes_bf16(const TensorParams& tensor) {
+    for (int i = 0; i < 4; ++i) {
+        if (tensor.ne[i] <= 0) {
+            return 0;
+        }
+    }
+    size_t nbytes;
+    nbytes = sizeof(uint16_t);
+    for (int i = 0; i < 4; ++i) {
+        nbytes += (tensor.ne[i] - 1)*(tensor.nb[i]);
+    }
+    return nbytes;
+}
+
+size_t tensor_nbytes_fp32(const TensorParams& tensor) {
+    for (int i = 0; i < 4; ++i) {
+        if (tensor.ne[i] <= 0) {
+            return 0;
+        }
+    }
+    size_t nbytes;
+    nbytes = sizeof(float);
+    for (int i = 0; i < 4; ++i) {
+        nbytes += (tensor.ne[i] - 1)*(tensor.nb[i]);
+    }
+    return nbytes;
+}
+int host_gmma_bf16_fp32_AT_QK256(
+    void *a, void *b, void *c,
+    int m, int n, int k,
+    int lda, int ldb, int ldc,
+    int g, int h,
+    int stride_g, int stride_h,
+    size_t nbytes_a, size_t nbytes_b, size_t nbytes_c)
+{
+    printf("\nm:%d, n:%d, k:%d, g:%d, h:%d\n", m, n, k, g, h);
+    printf("lda:%d, ldb:%d, ldc:%d, stride_g:%d, stride_h:%d\n", lda, ldb, ldc, stride_g, stride_h);
+    for(int t = 0; t < 10; ++t) {
+        printf("[%d] ", ((uint16_t *)a)[t]);
+    }
+    static struct NPUKernelDesc *gmma_bf16_fp32_AT_QK256_desc = NULL;
+    if (gmma_bf16_fp32_AT_QK256_desc == NULL)
+    {
+        ssize_t err = 0;
+        printf("[INFO] Initializing Runtime..\n");
+        err = npu_runtime_init(&runtime);
+        if (err != NPU_SUCCESS) {
+          printf("[ERROR] Failed to initialize Runtime: err=%d\n", err);
+          exit(-1);
+        }
+        printf("[INFO] Runtime initialized successfully.\n");
+        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        if (err != NPU_SUCCESS) {
+          printf("Failed to load kernel set: err=%d\n", err);
+          npu_runtime_deinit(&runtime);
+          exit(-1);
+        }
+        printf("[INFO] Kernel set loaded successfully.\n");
+        err = npu_runtime_get_kernel_desc(&runtime, "gmma_bf16_fp32_AT_QK256", &gmma_bf16_fp32_AT_QK256_desc);
+        if (err != NPU_SUCCESS) {
+          printf("Failed to get kernel description: err=%d\n", err);
+          npu_runtime_deinit(&runtime);
+          exit(-1);
+        }
+        printf("[INFO] Loaded gmma_bf16_fp32_AT_QK256 kernel desc successfully.\n");
+    }
+    // static address allocation
+    uint64_t a_dev = 0x81000000;
+    uint64_t b_dev = 0x83000000;
+    uint64_t c_dev = 0x85000000;
+    // Copy data to device
+    ssize_t ret = 0;
+    ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, nbytes_a); // a
+    if (ret < 0)
+        printf("[ERROR] Failed to write a to device at 0x%lx: err=%d\n", a_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, nbytes_b); // b
+    if (ret < 0)
+        printf("[ERROR] Failed to write b to device at 0x%lx: err=%d\n", b_dev, ret);
+    ret = npu_memcpy_to_dev(&runtime.dev_state, c_dev, c, nbytes_c);   // c
+    if (ret < 0)
+        printf("[ERROR] Failed to write c to device at 0x%lx: err=%d\n", c_dev, ret);
+    int kernel_ret;
+    npu_runtime_kernel_start(&runtime, gmma_bf16_fp32_AT_QK256_desc, &kernel_ret, 13,
+                             a_dev, b_dev, c_dev,
+                             (uint64_t)m, (uint64_t)n, (uint64_t)k,
+                             (uint64_t)lda, (uint64_t)ldb, (uint64_t)ldc,
+                             (uint64_t)g, (uint64_t)h,
+                             (uint64_t)stride_g, (uint64_t)stride_h);
+    npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, nbytes_c); // c
+    return kernel_ret;
+}
+
+void kernel_matmul_bf16_f32_f32(
+    std::vector<uint16_t>& a, std::vector<float>& b, std::vector<float>& res,
+    TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst) {
+    int bs = psrc1.ne[3];
+    int h = psrc1.ne[2];
+    int h0 = psrc0.ne[2];
+
+    assert(bs >= psrc0.ne[3]);
+    assert(h >= psrc0.ne[2]);
+    assert(pdst.nb[0] == sizeof(float));
+
+    // src0 shape: (bs0, h0, m, k)
+    // src1 shape: (bs, h, n, k)
+    // dst shape: (bs, h, n, m)
+    int m = psrc0.ne[1];
+    int n = psrc1.ne[1];
+    int k = psrc1.ne[0];
+    assert(psrc1.ne[0] == psrc0.ne[0]);
+
+    // Call Kernel
+    host_gmma_bf16_fp32_AT_QK256(
+        a.data(), b.data(), res.data(),
+        m, n, k,
+        psrc0.nb[1] / sizeof(uint16_t), psrc1.nb[1] / sizeof(float), pdst.nb[1] / sizeof(float),
+        psrc0.ne[2], psrc1.ne[2],
+        psrc0.nb[2] / sizeof(uint16_t), psrc1.nb[2] / sizeof(float),
+        tensor_nbytes_bf16(psrc0), tensor_nbytes_fp32(psrc1), tensor_nbytes_fp32(pdst)
     );
 }
 
@@ -519,11 +604,11 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // FIXME: RUN KERNEL HERE
             //
             // --------------------------------------
-            // kernel_matmul_bf16_f32_f32(data_a, data_b, result_data, ...);
+            kernel_matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
             // --------------------------------------
             //
             // FIXME: CPU reference
-            matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            // matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else if (psrc0.type == "fp8_e4m3_q") {
             // TODO: pass
@@ -542,7 +627,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // --------------------------------------
             //
             // FIXME: CPU reference
-            // matmul_e4m3q_e4m3q_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            // matmul_e4m3q_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else {
             std::cerr << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
@@ -550,7 +635,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         }
 
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 1e-3;
+        const float epsilon = 0;
         bool all_match = true;
 
         int bs = pdst.ne[3];

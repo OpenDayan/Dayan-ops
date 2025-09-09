@@ -190,6 +190,149 @@ __attribute__((always_inline)) static inline long gmma_e4m3q_fp32_AT(void *a, vo
     return 0;
 }
 
+#define log2ElementSizeBF16 (1)
+#define log2ElementSizeFP32 (2)
+
+template <long mTile, long nTile, long kTile, long Q_K>
+__attribute__((always_inline)) static inline long gmma_bf16_fp32_AT(void *a, void *b, void *c,
+                                                                     int m, int n, int k,
+                                                                     int lda, int ldb, int ldc,
+                                                                     int g, int h,
+                                                                     int stride_g, int stride_h)
+{
+    /* Setup TCFGs for compute */
+    if ((kTile != Q_K))
+    {
+        printf("Not supported: Q_K != kTile\n");
+        return -1;
+    }
+
+    const long aTCFG = 0;
+    const long bTCFG = 1;
+    const long cTCFG = 2;
+    const long aTileTCFG = 3;
+    const long bTileTCFG = 4;
+    const long cTileTCFG = 5;
+    /* __tx_tcsr_write is alias for __tx_tcsr_xchg_nmask */
+    /* Mem TCFGs */
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM0>(mTile);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE0>(lda);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM1>(kTile);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_STRIDE1>(1);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<aTCFG * 8 + TCSR_DIM3>(1);
+
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM0>(kTile);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM1>(nTile);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_STRIDE1>(ldb);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<bTCFG * 8 + TCSR_DIM3>(1);
+
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM0>(mTile);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM1>(nTile);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_STRIDE1>(ldc);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<cTCFG * 8 + TCSR_DIM3>(1);
+
+    /* URAM TCFGs */
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM0>(mTile);
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_STRIDE0>(kTile);
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM1>(kTile);
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_STRIDE1>(1);
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<aTileTCFG * 8 + TCSR_DIM3>(1);
+
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_DIM0>(kTile);
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_DIM1>(nTile);
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_STRIDE1>(kTile);
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<bTileTCFG * 8 + TCSR_DIM3>(1);
+
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_DIM0>(mTile);
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_DIM1>(nTile);
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_STRIDE1>(mTile);
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<cTileTCFG * 8 + TCSR_DIM3>(1);
+
+    /* Scratchpad for the tile */
+    void *aTile = 0;
+    void *bTile = (void *)((long)aTile + mTile * kTile * sizeof(uint16_t)); // addr = 16384
+    void *cPartitialTile = (void *)((long)bTile + kTile * nTile * sizeof(float)); // addr = 49152
+    void *bTileBF16 = (void *)((long)cPartitialTile + mTile * nTile * sizeof(float)); // addr = 53248
+    // void *cTile = (void *)((long)cPartitialTile + mTile * nTile * sizeof(float));
+    float* cF = (float*)c;
+    // memset(cF, 0, sizeof(float) * ldc * n);
+    // printf("Addr A: 0x%x, B: 0x%x, C: 0x%x\n", a, b, c);
+    // printf("M: %d N: %d K: %d\n", m, n, k);
+    // printf("LDA: %d LDB: %d LDC: %d stride_g: %d stride_h: %d\n", lda, ldb, ldc, stride_g, stride_h);
+    int rh = h / g;
+
+    for (long h_i = 0; h_i < h; h_i += 1) {
+        long g_i = h_i / rh;
+        for (long m_i = 0; m_i < m; m_i += mTile)
+        {
+            long m_left = m - m_i;
+            int realMTile = mTile;
+            if (m_left < mTile)
+            {
+                realMTile = m_left;
+            }
+            updateMTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realMTile);
+            for (long n_i = 0; n_i < n; n_i += nTile)
+            {
+                long n_left = n - n_i;
+                int realNTile = nTile;
+                if (n_left < nTile)
+                {
+                    realNTile = n_left;
+                }
+                updateNTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realNTile);
+                __tx_fence(); /* Load C */
+
+                for (long k_i = 0; k_i < k; k_i += kTile)
+                {
+                    long k_left = k - k_i;
+                    int realKTile = kTile;
+                    if (k_left < kTile)
+                    {
+                        realKTile = k_left;
+                    }
+                    updateKTile<aTCFG, bTCFG, cTCFG, aTileTCFG, bTileTCFG, cTileTCFG, true>(realKTile);
+                    memset(kernel_buffer, 0, sizeof(float) * realMTile * realNTile);
+                    __tx_fence();
+                    __tx_async_uram_load<cTileTCFG, cTileTCFG, log2ElementSizeFP32>(kernel_buffer, cPartitialTile);
+                    __tx_async_uram_load<aTCFG, aTileTCFG, log2ElementSizeBF16>((void *)((long)a + (stride_g * g_i + lda * m_i + k_i) * (1 << log2ElementSizeBF16)), aTile);
+                    __tx_async_uram_load<bTCFG, bTileTCFG, log2ElementSizeFP32>((void *)((long)b + (stride_h * h_i + ldb * n_i + k_i) * (1 << log2ElementSizeFP32)), bTile);
+                    __tx_fence();
+                    __tx_convert_fp32_bf16_round<bTileTCFG, bTileTCFG>(bTile, bTileBF16); /* convert B tile */
+                    __tx_fence(); /* Compute C = C + A x B */
+                    __tx_matmul_float_bf16_bf16_f32<aTileTCFG, bTileTCFG, cTileTCFG>(aTile, bTileBF16, cPartitialTile);
+                    __tx_fence();
+                    __tx_async_uram_store<cTileTCFG, cTileTCFG, log2ElementSizeFP32>(cPartitialTile, kernel_buffer);
+                    __tx_fence();
+                    // Scale for the C tile
+                    cF = (float *)((long)c + (h_i * n * ldc) * (1 << log2ElementSizeFP32));
+                    for(int m_ii = 0 ; m_ii < realMTile; m_ii += 1) {
+                        for(int n_ii = 0 ; n_ii < realNTile; n_ii += 1) {
+                            long real_m = m_i + m_ii;
+                            long real_n = n_i + n_ii;
+                            cF[ldc * real_n + real_m] += kernel_buffer[m_ii + n_ii * mTile];
+                        }
+                    }
+                }
+                __tx_fence();
+            }
+        }
+    }
+    __tx_fence();
+    return 0;
+}
+
+
 __device__ long gmma_e4m3q_fp32_AT_QK32(void *a, void *b, void *c,
                                               int m, int n, int k,
                                               int lda, int ldb, int ldc)
@@ -202,4 +345,13 @@ __device__ long gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c,
                                               int lda, int ldb, int ldc)
 {
     return gmma_e4m3q_fp32_AT<32, 32, 256, 256>(a, b, c, m, n, k, lda, ldb, ldc);
+}
+
+__device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c,
+                                        int m, int n, int k,
+                                        int lda, int ldb, int ldc,
+                                        int g, int h,
+                                        int stride_g, int stride_h)
+{
+    return gmma_bf16_fp32_AT<32, 32, 256, 256>(a, b, c, m, n, k, lda, ldb, ldc, g, h, stride_g, stride_h);
 }
