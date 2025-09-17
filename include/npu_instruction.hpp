@@ -666,7 +666,7 @@ namespace NPUInstBuilder {
         TX_INT32_SUB = 5,
         TX_INT32_MUL = 6,
     };
-    template <long vb, long vrs2, long type, long vrs1>
+    template <long vb, long vrs2, long op, long vrs1>
     __attribute__((always_inline))
     static inline void __tx_vec_vv_int32_op(void)
     {
@@ -674,7 +674,25 @@ namespace NPUInstBuilder {
             (0b100001ul << 26ul) | 
             (vb << 25ul)         |
             (vrs2 << 15ul)       |
-            (type << 12ul)       |
+            (op << 12ul)       |
+            (vrs1 << 7ul)       
+        >();
+    }
+
+    enum __TX_VEC_VV_FLOAT32_OP_ENUM {
+        TX_FLOAT32_ADD = 0,
+        TX_FLOAT32_SUB = 1,
+        TX_FLOAT32_MUL = 2,
+    };
+    template <long vb, long vrs2, long op, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_vv_float32_op(void)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b110000ul << 26ul) | 
+            (vb << 25ul)         |
+            (vrs2 << 15ul)       |
+            (op << 12ul)       |
             (vrs1 << 7ul)       
         >();
     }
@@ -1091,6 +1109,33 @@ static inline void __tx_vec_vv_int32_bitwise(void)
         ((l_mask >> 3ul) << 20ul)     |
         (vrs2 << 15ul)                |
         ((l_mask & 0b111ul) << 12ul)  |
+        (vrs1 << 7ul)       
+    >();
+}
+
+#define GENERATE_TX_VEC_VV_FLOAT32_OP(opname, op) \
+template <long vb, long vrs2, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_vv_float32_##opname(void) { \
+    NPUInstBuilder::__tx_vec_vv_float32_op< \
+        vb, vrs2,  \
+        NPUInstBuilder::op, \
+        vrs1 \
+        >(); \
+}
+GENERATE_TX_VEC_VV_FLOAT32_OP(add,     TX_FLOAT32_ADD)
+GENERATE_TX_VEC_VV_FLOAT32_OP(sub,     TX_FLOAT32_SUB)
+GENERATE_TX_VEC_VV_FLOAT32_OP(mul,     TX_FLOAT32_MUL)
+template <long vb, long vrs2, long cmp_mask, long vrs1>
+__attribute__((always_inline))
+static inline void __tx_vec_vv_float32_cmp(void)
+{
+    NPUInstBuilder::__custom_32b_instruction0r<
+        (0b110000ul << 26ul) | 
+        (vb << 25ul)         |
+        (0b1ul << 20ul)      | 
+        (vrs2 << 15ul)       |
+        (cmp_mask << 12ul)   |
         (vrs1 << 7ul)       
     >();
 }
