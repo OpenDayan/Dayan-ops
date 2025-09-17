@@ -681,6 +681,66 @@ namespace NPUInstBuilder {
         >();
     }
 
+    enum __TX_VEC_V_INT32_OP_ENUM {
+        TX_VEC_V_INT32_CMP = 0,
+        TX_VEC_V_INT32_SLL = 1,
+        TX_VEC_V_INT32_SRA = 2,
+        TX_VEC_V_INT32_SRL = 3,
+        TX_VEC_V_INT32_REDUCE = 4,
+    };
+    template <long vb, long sft, long op, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_v_int32_op(void)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b1ul << 31ul)  |
+            (vb << 25ul)     |
+            (0b1ul << 20ul)  |
+            (op << 25ul)     |
+            (sft << 12ul)    | 
+            (vrs1 << 7ul)  
+        >();
+    }
+
+    enum __TX_VEC_V_FLOAT32_OP_ENUM {
+        TX_VEC_V_FLOAT32_CMP = 0,
+        TX_VEC_V_FLOAT32_SFU = 1,
+        TX_VEC_V_FLOAT32_REDUCE = 2,
+    };
+    template <long vb, long op, long imm, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_v_float32_op(void)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b1ul << 31ul)  |
+            (vb << 25ul)     |
+            (0b1ul << 24ul)  |
+            (op << 18ul)     |
+            (imm << 12ul)    | 
+            (vrs1 << 7ul)     
+        >();
+    }
+
+    enum __TX_VEC_V_COMB_SEP_OP_ENUM {
+        COMB_2X2B = 0,
+        COMB_1X4B = 1,
+        SEP_2X2B = 2,
+        SEP_1X4B = 3,
+    };
+    template <long vb, long op, long imm, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_v_op(void)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b1ul << 31ul)     |
+            (vb << 25ul)        |
+            (0b1111ul << 20ul)  |
+            (op << 13ul)        |
+            (imm << 12ul)       | 
+            (vrs1 << 7ul)     
+        >();
+    }
+
     enum __TX_VEC_V_CVT_ENUM {
         FLOAT32_INT32 = 0,
         INT32_FLOAT32 = 1,
@@ -1145,22 +1205,100 @@ static inline void __tx_vec_vv_float32_cmp(void)
     >();
 }
 
-#define GENERATE_TX_VEC_V_CVT(typefrom, typeto) \
+template <long vb, long vrs2, long cond, long vrs1>
+__attribute__((always_inline))
+static inline void __tx_vec_vv_mu2x(void)
+{
+    NPUInstBuilder::__custom_32b_instruction0r<
+        (0b111111ul << 26ul) | 
+        (vb << 25ul)         |
+        (vrs2 << 15ul)       |
+        (cond << 12ul)       |
+        (vrs1 << 7ul)       
+    >();
+}
+
+template <long l_mask, long cond2, long cond1>
+__attribute__((always_inline))
+static inline void __tx_vec_cond_bitwise(void)
+{
+    NPUInstBuilder::__custom_32b_instruction0r<
+        (0b1ul << 31ul)      | 
+        (l_mask << 13ul)     |
+        (cond2 << 10ul)      | 
+        (cond1 << 7ul)     
+    >();
+}
+
+// NOTE: shift -> '<=>' in cmp
+//             -> 'reduce op' in reduce
+#define GENERATE_TX_VEC_V_INT32(opname, op) \
+template <long vb, long shift, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_v_int32_##opname(void) { \
+    NPUInstBuilder::__tx_vec_v_int32_op< \
+        vb, \
+        shift, \
+        NPUInstBuilder::op, \
+        vrs1 \
+    >(); \
+} 
+GENERATE_TX_VEC_V_INT32(cmp,     TX_VEC_V_INT32_CMP)
+GENERATE_TX_VEC_V_INT32(sll,     TX_VEC_V_INT32_SLL)
+GENERATE_TX_VEC_V_INT32(sra,     TX_VEC_V_INT32_SRA)
+GENERATE_TX_VEC_V_INT32(srl,     TX_VEC_V_INT32_SRL)
+GENERATE_TX_VEC_V_INT32(reduce,  TX_VEC_V_INT32_REDUCE)
+
+#define GENERATE_TX_VEC_V(opname, op) \
+template <long vb, long imm, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_v_##opname(void) { \
+    NPUInstBuilder::__tx_vec_v_op< \
+        vb, \
+        NPUInstBuilder::op, \
+        imm, \
+        vrs1 \
+    >(); \
+} 
+GENERATE_TX_VEC_V(comb_2x2b,    COMB_2X2B)
+GENERATE_TX_VEC_V(comb_1x4b,    COMB_1X4B)
+GENERATE_TX_VEC_V(sep_2x2b,     SEP_2X2B)
+GENERATE_TX_VEC_V(sep_1x4b,     SEP_1X4B)
+
+// NOTE: imm -> '<=>' in cmp
+//           -> 'sfu op' in sfu
+//           -> 'reduce op' in reduce
+#define GENERATE_TX_VEC_V_FLOAT32(opname, op) \
+template <long vb, long imm, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_v_float32_##opname(void) { \
+    NPUInstBuilder::__tx_vec_v_float32_op< \
+        vb, \
+        NPUInstBuilder::op, \
+        imm, \
+        vrs1 \
+    >(); \
+} 
+GENERATE_TX_VEC_V_FLOAT32(cmp,        TX_VEC_V_FLOAT32_CMP)
+GENERATE_TX_VEC_V_FLOAT32(sfu,        TX_VEC_V_FLOAT32_SFU)
+GENERATE_TX_VEC_V_FLOAT32(reduce,     TX_VEC_V_FLOAT32_REDUCE)
+
+#define GENERATE_TX_VEC_V_CVT(typefromname, typetoname, typefrom, typeto) \
 template <long vb, long vrs1> \
 __attribute__((always_inline)) \
-static inline void __tx_vec_v_cvt_##typefrom##_##typeto(void) { \
+static inline void __tx_vec_v_cvt_##typefromname##_##typetoname(void) { \
     NPUInstBuilder::__tx_vec_v_cvt< \
         vb, \
         NPUInstBuilder::typefrom##_##typeto, \
         vrs1 \
     >(); \
 }
-GENERATE_TX_VEC_V_CVT(FLOAT32, INT32)
-GENERATE_TX_VEC_V_CVT(INT32, FLOAT32)
-GENERATE_TX_VEC_V_CVT(FLOAT32, FP16)
-GENERATE_TX_VEC_V_CVT(FP16, FLOAT32)
-GENERATE_TX_VEC_V_CVT(FLOAT32, E4M3)
-GENERATE_TX_VEC_V_CVT(E4M3, FLOAT32)
+GENERATE_TX_VEC_V_CVT(float32, int32, FLOAT32, INT32)
+GENERATE_TX_VEC_V_CVT(int32, float32, INT32, FLOAT32)
+GENERATE_TX_VEC_V_CVT(float32, fp16, FLOAT32, FP16)
+GENERATE_TX_VEC_V_CVT(fp16, float32, FP16, FLOAT32)
+GENERATE_TX_VEC_V_CVT(float32, e4m3, FLOAT32, E4M3)
+GENERATE_TX_VEC_V_CVT(e4m3, float32, E4M3, FLOAT32)
 
 #define MAT_MASK (0b1ul << 28ul)
 __attribute__((always_inline))
