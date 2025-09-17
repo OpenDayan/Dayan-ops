@@ -4,7 +4,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <ostream>
-#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -22,13 +21,8 @@ int main(int argc, char** argv) {
     std::cerr << "Failed to initialize Runtime: " << err << std::endl;
     return -1;
   }
-
   std::cout << "Runtime initialized successfully." << std::endl;
 
-  // Get L2 cache info
-  // test_get_l2_info(&runtime.dev_state);
-
-  // Perform operations with the device
   err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
   if (err != NPU_SUCCESS) {
     std::cerr << "Failed to load kernel set: " << err << std::endl;
@@ -38,10 +32,11 @@ int main(int argc, char** argv) {
 
   std::cout << "Kernel set loaded successfully." << std::endl;
 
-  test_dump_mem(&runtime.dev_state, 0x80020000, 0x20);  // profiler
+  test_dump_mem(&runtime.dev_state, runtime.kernel_set_desc.perf, 0x10);  // profiler
+  test_dump_mem(&runtime.dev_state, 0x81000000, 0x100); // args tester
 
   struct NPUKernelDesc *kernel_desc;
-  err = npu_runtime_get_kernel_desc(&runtime, "kernel_trap_testsuit", &kernel_desc);
+  err = npu_runtime_get_kernel_desc(&runtime, "tx_unit_tcsr_write_read", &kernel_desc);
   if (err != NPU_SUCCESS) {
     std::cerr << "Failed to get kernel description: " << err << std::endl;
     npu_runtime_deinit(&runtime);
@@ -51,16 +46,28 @@ int main(int argc, char** argv) {
   int kernel_ret;
 
   err = npu_runtime_kernel_start(&runtime, kernel_desc, &kernel_ret, 0);
-  printf("ret:%d\n", kernel_ret);
+
+  std::cout << "Kernel return value: " << kernel_ret << std::endl;
+  
   if (err != NPU_SUCCESS) {
     std::cerr << "Failed to start kernel: " << err << std::endl;
     npu_runtime_deinit(&runtime);
     return -1;
   }
 
-  test_dump_mem(&runtime.dev_state, 0x80020000, 0x20);  // profiler
+  std::cout << "Kernel run successfully." << std::endl;
+
+  test_dump_mem(&runtime.dev_state, runtime.kernel_set_desc.perf, 0x10);  // profiler
+  test_dump_mem(&runtime.dev_state, 0x81000000, 0x100); // args tester
 
   npu_runtime_deinit(&runtime);
+
+
+  if(kernel_ret != 0) {
+    std::cout << "Test passed!" << std::endl;
+  } else {
+    std::cout << "Test failed!" << std::endl;
+  }
 
   return 0;
 }

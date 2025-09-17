@@ -1,6 +1,6 @@
-target   := generated/int_mat_size.gen generated/e4m3_mat_size.gen generated/e4m3q_mat_size.gen
-target   += generated/elementwise_int_size.gen generated/elementwise_float_size.gen generated/convert_size.gen
-target   += generated/sfu_size.gen
+# target   := generated/int_mat_size.gen generated/e4m3_mat_size.gen generated/e4m3q_mat_size.gen
+# target   += generated/elementwise_int_size.gen generated/elementwise_float_size.gen generated/convert_size.gen
+# target   += generated/sfu_size.gen
 .PHONY: all
 
 all: generated $(target)

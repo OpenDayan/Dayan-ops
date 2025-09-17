@@ -625,6 +625,12 @@ static inline void __tx_lsu_dma_store(void* rs1, void* rs2) {
             (LSU_MASK | (0b001ul << 12ul))>((long)rs1, (long)rs2);
 }
 
+enum __TX_UNIT_ENUM {
+    UNIT_MAT = 0,
+    UNIT_VEC = 1,
+    UNIT_LSU = 2
+};
+
 #define CONFIG_MASK (unit << 25ul) | (tcsrid << 15ul)
 template <long unit, long tcsrid>
 __attribute__((always_inline))

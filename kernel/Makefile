@@ -1,5 +1,5 @@
 INCLUDES := -I../include/
-target   := unit_tcsr_write_read.o
+target   := test_instr_kernels.o
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $<
