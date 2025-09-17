@@ -589,22 +589,6 @@ namespace NPUInstBuilder {
         ((long)rs1, (long)rs2, (long)rs3);
     }
 
-    #define MAT_MASK (0b1ul << 28ul)
-    __attribute__((always_inline))
-    static inline void __tx_mat_mma(void* rs1, void* rs2, void* rs3)
-    {
-        NPUInstBuilder::__custom_32b_instruction3r<
-        MAT_MASK>
-        ((long)rs1, (long)rs2, (long)rs3);
-    }
-    __attribute__((always_inline))
-    static inline void __tx_mat_mm(void* rs1, void* rs2, void* rs3)
-    {
-        NPUInstBuilder::__custom_32b_instruction3r<
-        MAT_MASK | (0b1ul << 12ul)>
-        ((long)rs1, (long)rs2, (long)rs3);
-    }
-
     template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2, long tcfgrs3>
     __attribute__((always_inline))
     static inline void __tx_conv(void* rs1, void* rs2, void* rs3)
@@ -693,6 +677,27 @@ namespace NPUInstBuilder {
             (vb << 25ul)         |
             (vrs2 << 15ul)       |
             (op << 12ul)       |
+            (vrs1 << 7ul)       
+        >();
+    }
+
+    enum __TX_VEC_V_CVT_ENUM {
+        FLOAT32_INT32 = 0,
+        INT32_FLOAT32 = 1,
+        FLOAT32_FP16  = 2,
+        FP16_FLOAT32  = 3,
+        FLOAT32_E4M3  = 4,
+        E4M3_FLOAT32  = 5,
+    };
+    template <long vb, long type, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_v_cvt(long& rd)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b100000ul << 26ul) | 
+            (vb << 25ul)         |
+            (type << 12ul)       |
+            (0b11111ul << 20ul)  |
             (vrs1 << 7ul)       
         >();
     }
@@ -1138,6 +1143,39 @@ static inline void __tx_vec_vv_float32_cmp(void)
         (cmp_mask << 12ul)   |
         (vrs1 << 7ul)       
     >();
+}
+
+#define GENERATE_TX_VEC_V_CVT(typefrom, typeto) \
+template <long vb, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_v_cvt_##typefrom##_##typeto(void) { \
+    NPUInstBuilder::__tx_vec_v_cvt< \
+        vb, \
+        NPUInstBuilder::typefrom##_##typeto, \
+        vrs1 \
+    >(); \
+}
+GENERATE_TX_VEC_V_CVT(FLOAT32, INT32)
+GENERATE_TX_VEC_V_CVT(INT32, FLOAT32)
+GENERATE_TX_VEC_V_CVT(FLOAT32, FP16)
+GENERATE_TX_VEC_V_CVT(FP16, FLOAT32)
+GENERATE_TX_VEC_V_CVT(FLOAT32, E4M3)
+GENERATE_TX_VEC_V_CVT(E4M3, FLOAT32)
+
+#define MAT_MASK (0b1ul << 28ul)
+__attribute__((always_inline))
+static inline void __tx_mat_mma(void* rs1, void* rs2, void* rs3)
+{
+    NPUInstBuilder::__custom_32b_instruction3r<
+    MAT_MASK>
+    ((long)rs1, (long)rs2, (long)rs3);
+}
+__attribute__((always_inline))
+static inline void __tx_mat_mm(void* rs1, void* rs2, void* rs3)
+{
+    NPUInstBuilder::__custom_32b_instruction3r<
+    MAT_MASK | (0b1ul << 12ul)>
+    ((long)rs1, (long)rs2, (long)rs3);
 }
 
 __attribute__((always_inline))
