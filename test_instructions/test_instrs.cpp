@@ -12,6 +12,33 @@
 
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
 
+static inline long run_instr_test(struct NPURuntimeState *runtime, std::string test_name) {
+
+  std::cout << "Running " << test_name << "..." << std::endl;
+
+  struct NPUKernelDesc *kernel_desc;
+  ssize_t err = npu_runtime_get_kernel_desc(runtime, test_name.c_str(), &kernel_desc);
+  if (err != NPU_SUCCESS) {
+    std::cerr << "Failed to get kernel description: " << test_name << std::endl;
+    return -1;
+  }
+
+  int kernel_ret;
+  err = npu_runtime_kernel_start(runtime, kernel_desc, &kernel_ret, 0);
+  
+  if (err != NPU_SUCCESS) {
+    std::cerr << "Failed to start kernel: " << test_name << std::endl;
+    return -1;
+  }
+
+  if(kernel_ret == 0) {
+    std::cout << "Test " << test_name << " passed!" << std::endl;
+  } else {
+    std::cout << "Test " << test_name << " failed!" << std::endl;
+  }
+  return kernel_ret;
+}
+
 int main(int argc, char** argv) {
   std::cout << "Initializing Runtime..." << std::endl;
   struct NPURuntimeState runtime = {0};
@@ -32,42 +59,11 @@ int main(int argc, char** argv) {
 
   std::cout << "Kernel set loaded successfully." << std::endl;
 
-  test_dump_mem(&runtime.dev_state, runtime.kernel_set_desc.perf, 0x10);  // profiler
-  test_dump_mem(&runtime.dev_state, 0x81000000, 0x100); // args tester
+  run_instr_test(&runtime, "tx_unit_tcsr_write_read");
 
-  struct NPUKernelDesc *kernel_desc;
-  err = npu_runtime_get_kernel_desc(&runtime, "tx_unit_tcsr_write_read", &kernel_desc);
-  if (err != NPU_SUCCESS) {
-    std::cerr << "Failed to get kernel description: " << err << std::endl;
-    npu_runtime_deinit(&runtime);
-    return -1;
-  }
-
-  int kernel_ret;
-
-  err = npu_runtime_kernel_start(&runtime, kernel_desc, &kernel_ret, 0);
-
-  std::cout << "Kernel return value: " << kernel_ret << std::endl;
-  
-  if (err != NPU_SUCCESS) {
-    std::cerr << "Failed to start kernel: " << err << std::endl;
-    npu_runtime_deinit(&runtime);
-    return -1;
-  }
-
-  std::cout << "Kernel run successfully." << std::endl;
-
-  test_dump_mem(&runtime.dev_state, runtime.kernel_set_desc.perf, 0x10);  // profiler
-  test_dump_mem(&runtime.dev_state, 0x81000000, 0x100); // args tester
+  std::cout << "All Instr Test Finished." << std::endl;
 
   npu_runtime_deinit(&runtime);
-
-
-  if(kernel_ret != 0) {
-    std::cout << "Test passed!" << std::endl;
-  } else {
-    std::cout << "Test failed!" << std::endl;
-  }
 
   return 0;
 }
