@@ -562,6 +562,16 @@ namespace NPUInstBuilder {
             ::"r"(rs1), "i"(encoding)
         );
     }
+    template <long encoding>
+    __attribute__((always_inline))
+    static inline void __custom_32b_instruction0r(void)
+    {
+        asm volatile (
+            ".align 2\n"
+            ".insn 4, %0 | 0xb\n"
+            ::"i"(encoding)
+        );
+    }
     template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2, long tcfgrs3>
     __attribute__((always_inline))
     static inline void __tx_matmul(void* rs1, void* rs2, void* rs3, long& rd)
@@ -645,6 +655,28 @@ namespace NPUInstBuilder {
             (tcfgrs2 << 35ul)      |
             (tcfgrs1 << 32ul)
         >((long)rs1, (long)rs2, (long)rs3);
+    }
+
+    enum __TX_VEC_VV_INT32_OP_ENUM {
+        TX_INT32_ROL = 0,
+        TX_INT32_SLL = 1,
+        TX_INT32_SRA = 2,
+        TX_INT32_SRL = 3,
+        TX_INT32_ADD = 4,
+        TX_INT32_SUB = 5,
+        TX_INT32_MUL = 6,
+    };
+    template <long vb, long vrs2, long type, long vrs1>
+    __attribute__((always_inline))
+    static inline void __tx_vec_vv_int32_op(void)
+    {
+        NPUInstBuilder::__custom_32b_instruction0r<
+            (0b100001ul << 26ul) | 
+            (vb << 25ul)         |
+            (vrs2 << 15ul)       |
+            (type << 12ul)       |
+            (vrs1 << 7ul)       
+        >();
     }
 
     enum __TX_FP_OP_ENUM{
@@ -1016,6 +1048,51 @@ __attribute__((always_inline))
 static inline void __tx_vec_v_scatter64_mask(long rs) {
     NPUInstBuilder::__custom_32b_instruction1r_pos2<
         VEC_STORE_MASK | (0b101ul << 25ul) | (cond << 12ul) | (vrs1 << 7ul)>(rs);
+}
+
+#define GENERATE_TX_VEC_VV_INT32_OP(opname, op) \
+template <long vb, long vrs2, long vrs1> \
+__attribute__((always_inline)) \
+static inline void __tx_vec_vv_int32_##opname(void) { \
+    NPUInstBuilder::__tx_vec_vv_int32_op< \
+        vb, vrs2,  \
+        NPUInstBuilder::op, \
+        vrs1 \
+        >(); \
+}
+GENERATE_TX_VEC_VV_INT32_OP(rol,     TX_INT32_ROL)
+GENERATE_TX_VEC_VV_INT32_OP(sll,     TX_INT32_SLL)
+GENERATE_TX_VEC_VV_INT32_OP(sra,     TX_INT32_SRA)
+GENERATE_TX_VEC_VV_INT32_OP(srl,     TX_INT32_SRL)
+GENERATE_TX_VEC_VV_INT32_OP(add,     TX_INT32_ADD)
+GENERATE_TX_VEC_VV_INT32_OP(sub,     TX_INT32_SUB)
+GENERATE_TX_VEC_VV_INT32_OP(mul,     TX_INT32_MUL)
+template <long vb, long vrs2, long cmp_mask, long vrs1>
+__attribute__((always_inline))
+static inline void __tx_vec_vv_int32_cmp(void)
+{
+    NPUInstBuilder::__custom_32b_instruction0r<
+        (0b100001ul << 26ul) | 
+        (vb << 25ul)         |
+        (0b1ul << 20ul)      | 
+        (vrs2 << 15ul)       |
+        (cmp_mask << 12ul)   |
+        (vrs1 << 7ul)       
+    >();
+}
+template <long vb, long vrs2, long l_mask, long vrs1>
+__attribute__((always_inline))
+static inline void __tx_vec_vv_int32_bitwise(void)
+{
+    NPUInstBuilder::__custom_32b_instruction0r<
+        (0b100001ul << 26ul)          | 
+        (vb << 25ul)                  |
+        (0b1ul << 21ul)               | 
+        ((l_mask >> 3ul) << 20ul)     |
+        (vrs2 << 15ul)                |
+        ((l_mask & 0b111ul) << 12ul)  |
+        (vrs1 << 7ul)       
+    >();
 }
 
 __attribute__((always_inline))
