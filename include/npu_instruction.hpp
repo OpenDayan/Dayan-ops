@@ -686,9 +686,9 @@ static inline void __tx_unit_sb_get(long rs1, long& rd) {
 #define VEC_LOAD_MASK (0b1ul << 30ul) | (vb << 25ul)
 template <long vb>
 __attribute__((always_inline))
-static inline void __tx_vec_v_load(long rs) {
+static inline void __tx_vec_v_load(void* rs) {
     NPUInstBuilder::__custom_32b_instruction1r_pos2<
-        VEC_LOAD_MASK | (0b000ul << 15ul)>(rs);
+        VEC_LOAD_MASK | (0b000ul << 15ul)>((long)rs);
 }
 template <long vb>
 __attribute__((always_inline))
@@ -718,9 +718,9 @@ static inline void __tx_vec_v_gather64_mask(long rs) {
 #define VEC_STORE_MASK (0b1ul << 30ul) | (vrs2 << 15ul)
 template <long vrs2>
 __attribute__((always_inline))
-static inline void __tx_vec_v_store(long rs) {
+static inline void __tx_vec_v_store(void* rs) {
     NPUInstBuilder::__custom_32b_instruction1r_pos2<
-        VEC_STORE_MASK | (0b010ul << 25ul)>(rs);
+        VEC_STORE_MASK | (0b010ul << 25ul)>((long)rs);
 }
 template <long vrs2, long cond>
 __attribute__((always_inline))
