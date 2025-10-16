@@ -611,19 +611,40 @@ namespace NPUInstBuilder {
             (vrs1 << 7ul)       
         >();
     }
+
+    #define LSU_MASK (0b1ul << 29ul) | (group << 20ul)
+    enum __TX_LSU_MEM_TYPE_ENUM {
+        URAM = 0,
+        DRAM = 1,
+    };
+    template <long group, long from, long to>
+    __attribute__((always_inline))
+    static inline void __tx_lsu_dma(void* rs1, void* rs2)
+    {
+        NPUInstBuilder::__custom_32b_instruction2r<
+            LSU_MASK |
+            (group << 20ul)|
+            (from << 13ul) |
+            (to << 12ul)
+        >((long)rs1, (long)rs2);
+    }
 }
 
-#define LSU_MASK (0b1ul << 29ul)
-__attribute__((always_inline))
-static inline void __tx_lsu_dma_load(void* rs1, void* rs2) {
-        NPUInstBuilder::__custom_32b_instruction2r<
-            LSU_MASK>((long)rs1, (long)rs2);
+#define LSU_MASK (0b1ul << 29ul) | (group << 20ul)
+#define GENERATE_TX_LSU_DMA(fromname, toname, from, to) \
+template <long group> \
+__attribute__((always_inline)) \
+static inline void __tx_lsu_dma_##fromname##2##toname(void* rs1, void* rs2) { \
+    NPUInstBuilder::__tx_lsu_dma< \
+        group, \
+        NPUInstBuilder::from, \
+        NPUInstBuilder::to \
+        >(rs1, rs2); \
 }
-__attribute__((always_inline))
-static inline void __tx_lsu_dma_store(void* rs1, void* rs2) {
-        NPUInstBuilder::__custom_32b_instruction2r<
-            (LSU_MASK | (0b001ul << 12ul))>((long)rs1, (long)rs2);
-}
+GENERATE_TX_LSU_DMA(u, u, URAM, URAM)
+GENERATE_TX_LSU_DMA(u, d, URAM, DRAM)
+GENERATE_TX_LSU_DMA(d, u, DRAM, URAM)
+GENERATE_TX_LSU_DMA(d, d, DRAM, DRAM)
 
 enum __TX_UNIT_ENUM {
     UNIT_MAT = 0,

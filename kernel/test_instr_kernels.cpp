@@ -22,20 +22,30 @@ static inline long test_one_tcsr_reg(void) {
     return writeMask & ~clearMask; // 返回可读写的位掩码
 }
 
-static inline long test_load_add_store(void *addr) {
-    __tx_vec_v_load<0>(addr);
-    __tx_vec_v_load<0>(addr);
-    __tx_vec_vv_int32_add<0, 1, 0>();
-    __tx_vec_v_store<2>(addr);
-    return 0;
-}
-
-__device__ long tx_unit_tcsr_write_read(void){
+__device__ long tx_unit_tcsr_write_read(void) {
     long ret = 0xfffff; // 至少有 20 位可读写位
-    ret &= test_one_tcsr_reg<UNIT_MAT, 0>();
-    ret &= test_one_tcsr_reg<UNIT_MAT, 1>();
-    ret &= test_one_tcsr_reg<UNIT_MAT, 2>();
-    test_load_add_store(0);
+    ret &= test_one_tcsr_reg<UNIT_VEC, 0>();
+    ret &= test_one_tcsr_reg<UNIT_VEC, 1>();
+    ret &= test_one_tcsr_reg<UNIT_VEC, 2>();
     return ret == 0xfffff ? 0 : -1;
 }
 
+__device__ void tx_load_add_store_test(void) {
+    __tx_unit_tcsr_write<UNIT_VEC, 0>(4);
+    __tx_unit_tcsr_write<UNIT_VEC, 1>(4);
+    void* a = (void* )0x80000040;
+    __tx_vec_v_load<0>(a);
+    __tx_vec_v_load<0>(a);
+    __tx_vec_vv_int32_add<0, 1, 0>();
+    void* b = (void* )0x80000080;
+    __tx_vec_v_store<0>(b);
+    __tx_unit_tcsr_write<UNIT_VEC, 0>(4);
+    __tx_unit_tcsr_write<UNIT_VEC, 1>(4);
+}
+
+__device__ void tx_lsu_dma_test(void* a, void *b) {
+    __tx_lsu_dma_u2u<0>(a, b);
+    __tx_lsu_dma_u2d<0>(a, b);
+    __tx_lsu_dma_d2u<0>(a, b);
+    __tx_lsu_dma_d2d<0>(a, b);
+}
