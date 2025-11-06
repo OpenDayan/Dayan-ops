@@ -47,7 +47,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .ONESHELL:
-testDbg:
+test:
 	export QEMU="/workspace/npu-qemu/build/qemu-system-riscv64"
 	export QEMU_FLAGS="-bios /workspace/npu-firmware/bl0/bootrom.elf -machine rvtng-v0 -nographic -m 4096"
 	setsid ./run_bg.sh $$$$ &
