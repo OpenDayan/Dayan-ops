@@ -45,3 +45,10 @@ $(KERNEL_PACK):
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+.ONESHELL:
+testDbg:
+	export QEMU="/workspace/npu-qemu/build/qemu-system-riscv64"
+	export QEMU_FLAGS="-bios /workspace/npu-firmware/bl0/bootrom.elf -machine rvtng-v0 -nographic -m 4096"
+	setsid ./run_bg.sh $$$$ &
+	exec gdb-multiarch -q /workspace/npu-kernels/general_entry_fpga.elf -ex "target remote localhost:1234" -ex "b *0x80000000"

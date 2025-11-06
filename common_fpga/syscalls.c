@@ -71,6 +71,7 @@ void setStats(int enable)
 
 void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 {
+  clear_csr(mie, 8); // disable software interrupt
   __perf_counter[1]++;
   entry_args.ret = code;
   __asm__ __volatile__(".insn 0xfc000073":::"memory"); // CFLUSH.D.L1
