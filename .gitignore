@@ -9,3 +9,4 @@
 *.packed.c
 build
 example_trace
+.qemu_log

@@ -46,8 +46,11 @@ $(KERNEL_PACK):
 clean:
 	rm -rf $(BUILD_DIR)
 
+qemu:
+	umount /tmp/virtual_npu; /workspace/npu-qemu/build/qemu-system-riscv64 -monitor null -bios /workspace/npu-firmware/bl0/bootrom.elf -machine rvtng-v0 -nographic -m 4096 -S -s
+
 .ONESHELL:
-test:
+gdb:
 	export QEMU="/workspace/npu-qemu/build/qemu-system-riscv64"
 	export QEMU_FLAGS="-bios /workspace/npu-firmware/bl0/bootrom.elf -machine rvtng-v0 -nographic -m 4096"
 	setsid ./run_bg.sh $$$$ &
