@@ -59,7 +59,8 @@ int main(int argc, char** argv) {
 
   std::cout << "Kernel set loaded successfully." << std::endl;
 
-  run_instr_test(&runtime, "tx_unit_tcsr_write_read");
+  // run_instr_test(&runtime, "tx_vec_tcsr_write_read");
+  run_instr_test(&runtime, "tx_vec_base_test");
 
   std::cout << "All Instr Test Finished." << std::endl;
 

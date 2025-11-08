@@ -41,19 +41,19 @@
         },
         "tx_vec_sb_produce": {
             "base_type": "tcsr_sb_write",
-            "fixed_bits": "0b00001 00 0000000000 000 00000 0001011"
+            "fixed_bits": "0b00001 01 0000000000 000 00000 0001011"
         },
         "tx_vec_sb_bar": {
             "base_type": "tcsr_sb_read",
-            "fixed_bits": "0b00001 00 0000000000 101 00000 0001011"
+            "fixed_bits": "0b00001 01 0000000000 101 00000 0001011"
         },
         "tx_lsu_sb_produce": {
             "base_type": "tcsr_sb_write",
-            "fixed_bits": "0b00001 00 0000000000 000 00000 0001011"
+            "fixed_bits": "0b00001 10 0000000000 000 00000 0001011"
         },
         "tx_lsu_sb_bar": {
             "base_type": "tcsr_sb_read",
-            "fixed_bits": "0b00001 00 0000000000 101 00000 0001011"
+            "fixed_bits": "0b00001 10 0000000000 101 00000 0001011"
         },
 
         "tx_sb_reset": {
@@ -88,12 +88,12 @@
         },
 
         "tx_vec_v_store": {
-            "base_type": "lsu",
+            "base_type": "vec_ls",
             "fixed_bits": "0b010001 0 00000 00000 000 0 00 00 0001011",
             "var_bits": "STORE-BASE"
         },
         "tx_vec_s_store": {
-            "base_type": "lsu",
+            "base_type": "vec_ls",
             "fixed_bits": "0b010001 0 00000 00000 000 0 00 10 0001011",
             "var_bits": "STORE-BASE"
         },
@@ -174,7 +174,6 @@
         "void": {
             "inst_builder": ["BaseNPUInstBuilder::__custom_32b_instruction_void"],
             "params": [
-                {"rs2": "r"}
             ]
         }
     }

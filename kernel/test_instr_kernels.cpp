@@ -1,5 +1,6 @@
 #include "npu_instruction.hpp"
 #include "npu_kernel.h"
+#include "npu_vec_csr.hpp"
 #include <stdio.h>
 #include <string.h>
 
@@ -9,6 +10,8 @@
 
 // Note1：避免过度抽象封装，将重复的/结构性的代码段或者语句组织抽象为函数
 // 如若仅出现一次的代码段或者语句，没有必要单独抽象为一个函数
+
+extern int _uram[256 * 1024];
 
 template<long tcsrid>
 static inline long test_one_tcsr_reg(void) {
@@ -22,7 +25,7 @@ static inline long test_one_tcsr_reg(void) {
     return writeMask & ~clearMask; // 返回可读写的位掩码
 }
 
-__device__ long tx_unit_tcsr_write_read(void) {
+__device__ long tx_vec_tcsr_write_read(void) {
     long ret = 0xffffffff;ret &= test_one_tcsr_reg<0>();
     printf("0: %x\n", ret);
     ret = 0xffffffff;ret &= test_one_tcsr_reg<1>();
@@ -87,5 +90,30 @@ __device__ long tx_unit_tcsr_write_read(void) {
     printf("30: %x\n", ret);
     ret = 0xffffffff;ret &= test_one_tcsr_reg<31>();
     printf("31: %x\n", ret);
+    return 0;
+}
+
+static inline void vec_sb_bar(void) {
+    long some_val;
+    tx_vec_sb_bar(some_val);
+    tx_vec_sb_bar(some_val);
+}
+
+__device__ long tx_vec_base_test(void) {
+    _uram[0] = 1;
+    _uram[32 * 256] = 2;
+    // 配置寄存器
+    tx_vec_tcsr_write<VEC_BLOCK>(31);
+    tx_vec_tcsr_write<VEC_DIM0> (15);
+    tx_vec_tcsr_write<VEC_DIM1> (15);
+    tx_vec_tcsr_write<VEC_GROUPSEL>(0);
+    tx_vec_tcsr_write<VEC_DIM0VSTRIDE0> (128);
+    tx_vec_tcsr_write<VEC_DIM1VSTRIDE0> (16 * 128);
+    tx_vec_v_load<0, 0>(0);           // 0
+    tx_vec_v_load<1, 0>(32 * 1024);  // 1
+    tx_vec_vv_int32_x<0, 1, 17>();    // 2
+    tx_vec_v_store<1, 0>(64 * 1024); // 3
+    vec_sb_bar();                     // 4
+    printf("result: %d\n", _uram[64 * 256]);
     return 0;
 }

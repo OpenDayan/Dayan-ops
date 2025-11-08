@@ -21,6 +21,9 @@ ENTRY(_start)
 SECTIONS
 {
 
+  . = 0x10000000;
+  _uram = .;
+
   /* text: test code section */
   . = 0x80000000;
   .text.init : { *(.text.init) }

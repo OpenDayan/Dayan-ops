@@ -1,11 +1,24 @@
 {
     "files.associations": {
+        "*.rasi": "css",
+        "*.bbmodel": "json",
+        "*.sublime-snippet": "xml",
+        "*.hbs": "html",
+        "*.ejs": "html",
+        "*.emu": "html",
+        "lesskey": "lesskey",
+        "*.Xresources": "xdefaults",
+        "i3/config": "i3",
+        "i3/*.conf": "i3",
+        "polybar/config": "ini",
+        "polybar/*.conf": "ini",
         "*.S": "loongarch",
         "*.inc": "c",
         "*.x": "rust",
         "*.bsv": "bluespec",
         "*.gen": "c",
         "random": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "iostream": "cpp"
     }
 }

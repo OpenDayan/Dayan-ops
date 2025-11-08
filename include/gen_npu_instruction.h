@@ -63,25 +63,25 @@ static inline void tx_mat_sb_bar(long& rd) {
 
 __attribute__((always_inline))
 static inline void tx_vec_sb_produce(long rd) {
-    constexpr long encoding = 0b00001000000000000000000000001011;
+    constexpr long encoding = 0b00001010000000000000000000001011;
     BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_write<encoding>(rd);
 }
 
 __attribute__((always_inline))
 static inline void tx_vec_sb_bar(long& rd) {
-    constexpr long encoding = 0b00001000000000000101000000001011;
+    constexpr long encoding = 0b00001010000000000101000000001011;
     BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_read<encoding>(rd);
 }
 
 __attribute__((always_inline))
 static inline void tx_lsu_sb_produce(long rd) {
-    constexpr long encoding = 0b00001000000000000000000000001011;
+    constexpr long encoding = 0b00001100000000000000000000001011;
     BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_write<encoding>(rd);
 }
 
 __attribute__((always_inline))
 static inline void tx_lsu_sb_bar(long& rd) {
-    constexpr long encoding = 0b00001000000000000101000000001011;
+    constexpr long encoding = 0b00001100000000000101000000001011;
     BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_read<encoding>(rd);
 }
 
@@ -126,28 +126,28 @@ static inline void tx_vec_const_load(long rs2) {
 
 template <long vrs2, long sel>
 __attribute__((always_inline))
-static inline void tx_vec_v_store(long rd, long rs1) {
+static inline void tx_vec_v_store(long rs2) {
     constexpr long encoding = (0b01000100000000000000000000001011) | ((vrs2 & 31) << 15) | ((sel & 3) << 9);
-    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+    BaseNPUInstBuilder::__custom_32b_instruction_vec_ls<encoding>(rs2);
 }
 
 template <long vrs2, long sel>
 __attribute__((always_inline))
-static inline void tx_vec_s_store(long rd, long rs1) {
+static inline void tx_vec_s_store(long rs2) {
     constexpr long encoding = (0b01000100000000000000000100001011) | ((vrs2 & 31) << 15) | ((sel & 3) << 9);
-    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+    BaseNPUInstBuilder::__custom_32b_instruction_vec_ls<encoding>(rs2);
 }
 
 template <long vb, long vrs1, long vrs2>
 __attribute__((always_inline))
-static inline void tx_vec_vv_int32_x(long rs2) {
+static inline void tx_vec_vv_int32_x() {
     constexpr long encoding = (0b10000100000000000000000000001011) | ((vb & 1) << 25) | ((vrs1 & 31) << 15) | ((vrs2 & 31) << 7);
-    BaseNPUInstBuilder::__custom_32b_instruction_void<encoding>(rs2);
+    BaseNPUInstBuilder::__custom_32b_instruction_void<encoding>();
 }
 
 template <long vb, long vrs1, long vrs2, long lut>
 __attribute__((always_inline))
-static inline void tx_vec_vv_int32_bitwise(long rs2) {
+static inline void tx_vec_vv_int32_bitwise() {
     constexpr long encoding = (0b10000100001000000000000000001011) | ((vb & 1) << 25) | ((vrs1 & 31) << 15) | ((vrs2 & 31) << 7) | ((lut & 7) << 12) | ((lut & 1) << 20);
-    BaseNPUInstBuilder::__custom_32b_instruction_void<encoding>(rs2);
+    BaseNPUInstBuilder::__custom_32b_instruction_void<encoding>();
 }

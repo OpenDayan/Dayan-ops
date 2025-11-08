@@ -2,29 +2,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "cppdbg",
-      "request": "launch",
-      "name": "Launch ELF Program",
-      "program": "${workspaceFolder}/${input:selectElfFile}",
+      "name": "kernel-qemu-debug",
+      "type": "gdb",
+      "request": "attach",
+      "executable": "${workspaceFolder}/general_entry_fpga.elf",
       "cwd": "${workspaceFolder}",
-      "stopAtEntry": true,
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb"
-    }
-  ],
-  "inputs": [
-    {
-      "type": "pickString",
-      "id": "selectElfFile",
-      "description": "Select the ELF file to debug",
-      "options": [
-        "load_store_test.elf",
-        "matmul_at_test.elf",
-        "matmul_e4m3_at_test.elf",
-        "matmul_e4m3q_at_test.elf",
-        "matmul_test.elf",
-        "tcsr_xchg_test.elf"
-      ]
+      "remote": true,
+      "stopAtConnect": true,
+      "target": "127.0.0.1:1234",
+      "gdbpath": "gdb-multiarch",
+      "preLaunchTask": "PreRun",
+      "postDebugTask": "Terminate PreRun Task"
     }
   ]
 }
