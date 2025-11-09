@@ -100,8 +100,10 @@ static inline void vec_sb_bar(void) {
 }
 
 __device__ long tx_vec_base_test(void) {
-    _uram[0] = 1;
-    _uram[32 * 256] = 2;
+    for(int i = 0 ; i < (16 * 16 * 32); i++) {
+        _uram[32 * 256 - 1 - i] = i + 1;
+        _uram[32 * 256 + i] = i + 1;
+    }
     // 配置寄存器
     tx_vec_tcsr_write<VEC_BLOCK>(31);
     tx_vec_tcsr_write<VEC_DIM0> (15);
@@ -114,6 +116,10 @@ __device__ long tx_vec_base_test(void) {
     tx_vec_vv_int32_x<0, 1, 17>();    // 2
     tx_vec_v_store<1, 0>(64 * 1024); // 3
     vec_sb_bar();                     // 4
-    printf("result: %d\n", _uram[64 * 256]);
+    for(int i = 0 ; i < (16 * 16 * 32); i++) {
+        if(_uram[64 * 256 + i] != 8193) {
+            printf("dbg: _uram[64 * 256 + %d] == %d\n", i, _uram[64 * 256 + i]);
+        }
+    }
     return 0;
 }
