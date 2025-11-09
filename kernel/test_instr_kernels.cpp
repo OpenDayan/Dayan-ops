@@ -111,13 +111,19 @@ __device__ long tx_vec_base_test(void) {
     tx_vec_tcsr_write<VEC_GROUPSEL>(0);
     tx_vec_tcsr_write<VEC_DIM0VSTRIDE0> (128);
     tx_vec_tcsr_write<VEC_DIM1VSTRIDE0> (16 * 128);
-    tx_vec_v_load<0, 0>(0);           // 0
-    tx_vec_v_load<1, 0>(32 * 1024);  // 1
-    tx_vec_vv_int32_x<0, 1, 17>();    // 2
-    tx_vec_v_store<1, 0>(64 * 1024); // 3
-    vec_sb_bar();                     // 4
+
+    // 理论可 INT 满吞吐，LSU 满吞吐（非分离 LSU）
+    tx_vec_v_load<0, 0>(0);           // load a
+    tx_vec_v_load<1, 0>(32 * 1024);   // load b
+    tx_vec_vv_int32_x<0, 1, 17>();    // c = a + b
+    tx_vec_vv_int32_x<1, 2, 17>();    // d = a + b
+    tx_vec_vv_int32_x<0, 1, 17>();    // e = c + d
+    tx_vec_v_store<1, 0>(64 * 1024);  // store e
+
+    // 实测 INT 吞吐： 75%~
+    vec_sb_bar();                     // bar
     for(int i = 0 ; i < (16 * 16 * 32); i++) {
-        if(_uram[64 * 256 + i] != 8193) {
+        if(_uram[64 * 256 + i] != 16386) {
             printf("dbg: _uram[64 * 256 + %d] == %d\n", i, _uram[64 * 256 + i]);
         }
     }
