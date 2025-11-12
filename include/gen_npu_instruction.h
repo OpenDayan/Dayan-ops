@@ -151,3 +151,31 @@ static inline void tx_vec_vv_int32_bitwise() {
     constexpr long encoding = (0b10000100001000000000000000001011) | ((vb & 1) << 25) | ((vrs1 & 31) << 15) | ((vrs2 & 31) << 7) | ((lut & 7) << 12) | ((lut & 1) << 20);
     BaseNPUInstBuilder::__custom_32b_instruction_void<encoding>();
 }
+
+template <long group>
+__attribute__((always_inline))
+static inline void tx_lsu_dma_u2u(long rd, long rs1) {
+    constexpr long encoding = (0b00100000000000000000000000001011) | ((group & 7) << 20);
+    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+}
+
+template <long group>
+__attribute__((always_inline))
+static inline void tx_lsu_dma_u2d(long rd, long rs1) {
+    constexpr long encoding = (0b00100000000000000001000000001011) | ((group & 7) << 20);
+    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+}
+
+template <long group>
+__attribute__((always_inline))
+static inline void tx_lsu_dma_d2u(long rd, long rs1) {
+    constexpr long encoding = (0b00100000000000000010000000001011) | ((group & 7) << 20);
+    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+}
+
+template <long group>
+__attribute__((always_inline))
+static inline void tx_lsu_dma_d2d(long rd, long rs1) {
+    constexpr long encoding = (0b00100000000000000011000000001011) | ((group & 7) << 20);
+    BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
+}

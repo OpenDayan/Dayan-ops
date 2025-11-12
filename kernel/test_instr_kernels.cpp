@@ -1,6 +1,7 @@
 #include "npu_instruction.hpp"
 #include "npu_kernel.h"
 #include "npu_vec_csr.hpp"
+#include "npu_mat_csr.hpp"
 #include <stdio.h>
 #include <string.h>
 
@@ -14,7 +15,7 @@
 extern int _uram[256 * 1024];
 
 template<long tcsrid>
-static inline long test_one_tcsr_reg(void) {
+static inline long test_one_vec_tcsr_reg(void) {
     long mask = 0xffffffffffffffffll;
     long writeMask, clearMask;
     tx_vec_tcsr_write<tcsrid>(0);
@@ -26,69 +27,69 @@ static inline long test_one_tcsr_reg(void) {
 }
 
 __device__ long tx_vec_tcsr_write_read(void) {
-    long ret = 0xffffffff;ret &= test_one_tcsr_reg<0>();
+    long ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<0>();
     printf("0: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<1>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<1>();
     printf("1: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<2>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<2>();
     printf("2: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<3>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<3>();
     printf("3: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<4>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<4>();
     printf("4: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<5>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<5>();
     printf("5: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<6>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<6>();
     printf("6: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<7>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<7>();
     printf("7: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<8>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<8>();
     printf("8: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<9>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<9>();
     printf("9: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<10>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<10>();
     printf("10: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<11>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<11>();
     printf("11: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<12>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<12>();
     printf("12: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<13>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<13>();
     printf("13: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<14>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<14>();
     printf("14: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<15>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<15>();
     printf("15: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<16>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<16>();
     printf("16: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<17>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<17>();
     printf("17: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<18>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<18>();
     printf("18: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<19>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<19>();
     printf("19: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<20>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<20>();
     printf("20: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<21>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<21>();
     printf("21: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<22>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<22>();
     printf("22: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<23>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<23>();
     printf("23: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<24>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<24>();
     printf("24: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<25>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<25>();
     printf("25: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<26>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<26>();
     printf("26: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<27>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<27>();
     printf("27: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<28>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<28>();
     printf("28: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<29>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<29>();
     printf("29: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<30>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<30>();
     printf("30: %x\n", ret);
-    ret = 0xffffffff;ret &= test_one_tcsr_reg<31>();
+    ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<31>();
     printf("31: %x\n", ret);
     return 0;
 }
@@ -106,11 +107,11 @@ __device__ long tx_vec_base_test(void) {
     }
     // 配置寄存器
     tx_vec_tcsr_write<VEC_BLOCK>(31);
-    tx_vec_tcsr_write<VEC_DIM0> (15);
-    tx_vec_tcsr_write<VEC_DIM1> (15);
+    tx_vec_tcsr_write<VEC_DIM0> (255);
+    tx_vec_tcsr_write<VEC_DIM1> (2);
     tx_vec_tcsr_write<VEC_GROUPSEL>(0);
     tx_vec_tcsr_write<VEC_DIM0VSTRIDE0> (128);
-    tx_vec_tcsr_write<VEC_DIM1VSTRIDE0> (16 * 128);
+    tx_vec_tcsr_write<VEC_DIM1VSTRIDE0> (0);
 
     // 理论可 INT 满吞吐，LSU 满吞吐（非分离 LSU）
     tx_vec_v_load<0, 0>(0);           // load a
@@ -126,6 +127,137 @@ __device__ long tx_vec_base_test(void) {
         if(_uram[64 * 256 + i] != 16386) {
             printf("dbg: _uram[64 * 256 + %d] == %d\n", i, _uram[64 * 256 + i]);
         }
+    }
+    return 0;
+}
+
+
+template<long tcsrid>
+static inline long test_one_lsu_tcsr_reg(void) {
+    long mask = 0xffffffffffffffffll;
+    long writeMask, clearMask;
+    tx_lsu_tcsr_write<tcsrid>(0);
+    tx_lsu_tcsr_write<tcsrid>(mask);
+    tx_lsu_tcsr_read<tcsrid>(writeMask);
+    tx_lsu_tcsr_write<tcsrid>(0);
+    tx_lsu_tcsr_read<tcsrid>(clearMask);
+    return writeMask & ~clearMask; // 返回可读写的位掩码
+}
+
+static inline void lsu_sb_bar(void) {
+    long some_val;
+    tx_lsu_sb_bar(some_val);
+    tx_lsu_sb_bar(some_val);
+}
+
+__device__ long tx_lsu_tcsr_write_read(void) {
+    long ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<0>();
+    printf("0: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<1>();
+    printf("1: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<2>();
+    printf("2: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<3>();
+    printf("3: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<4>();
+    printf("4: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<5>();
+    printf("5: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<6>();
+    printf("6: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<7>();
+    printf("7: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<8>();
+    printf("8: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<9>();
+    printf("9: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<10>();
+    printf("10: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<11>();
+    printf("11: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<12>();
+    printf("12: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<13>();
+    printf("13: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<14>();
+    printf("14: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<15>();
+    printf("15: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<16>();
+    printf("16: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<17>();
+    printf("17: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<18>();
+    printf("18: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<19>();
+    printf("19: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<20>();
+    printf("20: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<21>();
+    printf("21: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<22>();
+    printf("22: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<23>();
+    printf("23: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<24>();
+    printf("24: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<25>();
+    printf("25: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<26>();
+    printf("26: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<27>();
+    printf("27: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<28>();
+    printf("28: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<29>();
+    printf("29: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<30>();
+    printf("30: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<31>();
+    printf("31: %x\n", ret);
+    return 0;
+}
+
+__device__ long tx_lsu_base_transpose_test(void) {
+    // 初始化输入矩阵 128x64
+    uint16_t *uram_in = (uint16_t*)&_uram[0 / 4];
+    uint16_t *uram_out = (uint16_t*)&_uram[128*64*2 / 4];
+    for(int y = 0 ; y < 128; y ++) {
+        for(int x = 0; x < 64; x++) {
+            uram_in[x + y * 64] = x + y * 64;
+            uram_out[x + y * 64] = 0;
+        }
+    }
+    
+    // 配置寄存器
+    tx_lsu_tcsr_write<MAT_BLOCK>(31);
+    tx_lsu_tcsr_write<MAT_DIM0>(1);
+    tx_lsu_tcsr_write<MAT_DIM1>(3);
+    tx_lsu_tcsr_write<MAT_DIM2>(0);
+
+    tx_lsu_tcsr_write<MAT_INBLOCKSTRIDE>(32 * 2 * 2);
+    tx_lsu_tcsr_write<MAT_INDIM0STRIDE>(32 * 2);
+    tx_lsu_tcsr_write<MAT_INDIM1STRIDE>(32 * 2 * 2 * 32);
+
+    tx_lsu_tcsr_write<MAT_OUTBLOCKSTRIDE>(32 * 2 * 4);
+    tx_lsu_tcsr_write<MAT_OUTDIM0STRIDE>(32 * 2 * 4 * 32);
+    tx_lsu_tcsr_write<MAT_OUTDIM1STRIDE>(32 * 2);
+
+    tx_lsu_tcsr_write<MAT_BLOCKTRANSPOSE>(1);
+    tx_lsu_tcsr_write<MAT_BLOCKPADDING>(31);
+    tx_lsu_tcsr_write<MAT_REQUESTPADDING>(63);
+
+    // 发起请求
+    tx_lsu_dma_d2u<0>((long)uram_out, (long)uram_in);
+
+    // 同步
+    lsu_sb_bar();
+
+    for(int x = 0; x < 128; x++) {
+        for(int y = 0 ; y < 64; y ++) {
+            printf("%04x ", uram_out[x + y * 128]);
+        }
+        printf("\n");
     }
     return 0;
 }

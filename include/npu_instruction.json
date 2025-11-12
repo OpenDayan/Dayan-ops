@@ -72,12 +72,12 @@
         "tx_vec_v_load": {
             "base_type": "vec_ls",
             "fixed_bits": "0b010000 0 00000 00000 000 0 00 00 0001011",
-            "var_bits": "LOAD-BASE"
+            "var_bits": "VEC-LOAD-BASE"
         },
         "tx_vec_s_load": {
             "base_type": "vec_ls",
             "fixed_bits": "0b010000 0 00000 00001 000 0 00 00 0001011",
-            "var_bits": "LOAD-BASE"
+            "var_bits": "VEC-LOAD-BASE"
         },
         "tx_vec_const_load": {
             "base_type": "vec_ls",
@@ -90,12 +90,12 @@
         "tx_vec_v_store": {
             "base_type": "vec_ls",
             "fixed_bits": "0b010001 0 00000 00000 000 0 00 00 0001011",
-            "var_bits": "STORE-BASE"
+            "var_bits": "VEC-STORE-BASE"
         },
         "tx_vec_s_store": {
             "base_type": "vec_ls",
             "fixed_bits": "0b010001 0 00000 00000 000 0 00 10 0001011",
-            "var_bits": "STORE-BASE"
+            "var_bits": "VEC-STORE-BASE"
         },
 
         "tx_vec_vv_int32_x": {
@@ -112,17 +112,38 @@
             {"vrs2": [[7,  5]]},
             {"lut":  [[12, 3], [20, 1]]}
         ]
+        },
+
+        "tx_lsu_dma_u2u": {
+            "base_type": "lsu",
+            "fixed_bits": "0b001 000000 000 00000 000 00000 0001011",
+            "var_bits": "DMA-BASE"
+        },
+        "tx_lsu_dma_u2d": {
+            "base_type": "lsu",
+            "fixed_bits": "0b001 000000 000 00000 001 00000 0001011",
+            "var_bits": "DMA-BASE"
+        },
+        "tx_lsu_dma_d2u": {
+            "base_type": "lsu",
+            "fixed_bits": "0b001 000000 000 00000 010 00000 0001011",
+            "var_bits": "DMA-BASE"
+        },
+        "tx_lsu_dma_d2d": {
+            "base_type": "lsu",
+            "fixed_bits": "0b001 000000 000 00000 011 00000 0001011",
+            "var_bits": "DMA-BASE"
         }
     },
     "micros": {
         "TCSR": [
             {"tcsr_id": [[15, 10]]}
         ],
-        "LOAD-BASE": [
+        "VEC-LOAD-BASE": [
             {"vb": [[25, 1]]},
             {"sel": [[9, 2]]}
         ],
-        "STORE-BASE": [
+        "VEC-STORE-BASE": [
             {"vrs2": [[15, 5]]},
             {"sel":  [[9, 2]]}
         ],
@@ -130,6 +151,9 @@
             {"vb":   [[25, 1]]},
             {"vrs1": [[15, 5]]},
             {"vrs2": [[7,  5]]}
+        ],
+        "DMA-BASE": [
+            {"group": [[20, 3]]}
         ],
         "mat": {
             "inst_builder": ["BaseNPUInstBuilder::__custom_32b_instruction_mat"],
