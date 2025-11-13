@@ -1,7 +1,7 @@
 #include "npu_instruction.hpp"
 #include "npu_kernel.h"
 #include "npu_vec_csr.hpp"
-#include "npu_mat_csr.hpp"
+#include "npu_lsu_csr.hpp"
 #include <stdio.h>
 #include <string.h>
 
@@ -26,7 +26,7 @@ static inline long test_one_vec_tcsr_reg(void) {
     return writeMask & ~clearMask; // 返回可读写的位掩码
 }
 
-__device__ long tx_vec_tcsr_write_read(void) {
+__device__ long test_vec_tcsr_write_read(void) {
     long ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<0>();
     printf("0: %x\n", ret);
     ret = 0xffffffff;ret &= test_one_vec_tcsr_reg<1>();
@@ -94,13 +94,13 @@ __device__ long tx_vec_tcsr_write_read(void) {
     return 0;
 }
 
-static inline void vec_sb_bar(void) {
+static inline void _vec_sb_bar(void) {
     long some_val;
     tx_vec_sb_bar(some_val);
     tx_vec_sb_bar(some_val);
 }
 
-__device__ long tx_vec_base_test(void) {
+__device__ long test_vec_base_test(void) {
     for(int i = 0 ; i < (16 * 16 * 32); i++) {
         _uram[32 * 256 - 1 - i] = i + 1;
         _uram[32 * 256 + i] = i + 1;
@@ -122,7 +122,7 @@ __device__ long tx_vec_base_test(void) {
     tx_vec_v_store<1, 0>(64 * 1024);  // store e
 
     // 实测 INT 吞吐： 75%~
-    vec_sb_bar();                     // bar
+    _vec_sb_bar();                     // bar
     for(int i = 0 ; i < (16 * 16 * 32); i++) {
         if(_uram[64 * 256 + i] != 16386) {
             printf("dbg: _uram[64 * 256 + %d] == %d\n", i, _uram[64 * 256 + i]);
@@ -130,7 +130,6 @@ __device__ long tx_vec_base_test(void) {
     }
     return 0;
 }
-
 
 template<long tcsrid>
 static inline long test_one_lsu_tcsr_reg(void) {
@@ -144,13 +143,13 @@ static inline long test_one_lsu_tcsr_reg(void) {
     return writeMask & ~clearMask; // 返回可读写的位掩码
 }
 
-static inline void lsu_sb_bar(void) {
+static inline void _lsu_sb_bar(void) {
     long some_val;
     tx_lsu_sb_bar(some_val);
     tx_lsu_sb_bar(some_val);
 }
 
-__device__ long tx_lsu_tcsr_write_read(void) {
+__device__ long test_lsu_tcsr_write_read(void) {
     long ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<0>();
     printf("0: %x\n", ret);
     ret = 0xffffffff;ret &= test_one_lsu_tcsr_reg<1>();
@@ -218,7 +217,7 @@ __device__ long tx_lsu_tcsr_write_read(void) {
     return 0;
 }
 
-__device__ long tx_lsu_base_transpose_test(void) {
+__device__ long test_lsu_base_transpose_test(void) {
     // 初始化输入矩阵 128x64
     uint16_t *uram_in = (uint16_t*)&_uram[0 / 4];
     uint16_t *uram_out = (uint16_t*)&_uram[128*64*2 / 4];
@@ -230,28 +229,28 @@ __device__ long tx_lsu_base_transpose_test(void) {
     }
     
     // 配置寄存器
-    tx_lsu_tcsr_write<MAT_BLOCK>(31);
-    tx_lsu_tcsr_write<MAT_DIM0>(1);
-    tx_lsu_tcsr_write<MAT_DIM1>(3);
-    tx_lsu_tcsr_write<MAT_DIM2>(0);
+    tx_lsu_tcsr_write<LSU_BLOCK>(31);
+    tx_lsu_tcsr_write<LSU_DIM0>(1);
+    tx_lsu_tcsr_write<LSU_DIM1>(3);
+    tx_lsu_tcsr_write<LSU_DIM2>(0);
 
-    tx_lsu_tcsr_write<MAT_INBLOCKSTRIDE>(32 * 2 * 2);
-    tx_lsu_tcsr_write<MAT_INDIM0STRIDE>(32 * 2);
-    tx_lsu_tcsr_write<MAT_INDIM1STRIDE>(32 * 2 * 2 * 32);
+    tx_lsu_tcsr_write<LSU_INBLOCKSTRIDE>(32 * 2 * 2);
+    tx_lsu_tcsr_write<LSU_INDIM0STRIDE>(32 * 2);
+    tx_lsu_tcsr_write<LSU_INDIM1STRIDE>(32 * 2 * 2 * 32);
 
-    tx_lsu_tcsr_write<MAT_OUTBLOCKSTRIDE>(32 * 2 * 4);
-    tx_lsu_tcsr_write<MAT_OUTDIM0STRIDE>(32 * 2 * 4 * 32);
-    tx_lsu_tcsr_write<MAT_OUTDIM1STRIDE>(32 * 2);
+    tx_lsu_tcsr_write<LSU_OUTBLOCKSTRIDE>(32 * 2 * 4);
+    tx_lsu_tcsr_write<LSU_OUTDIM0STRIDE>(32 * 2 * 4 * 32);
+    tx_lsu_tcsr_write<LSU_OUTDIM1STRIDE>(32 * 2);
 
-    tx_lsu_tcsr_write<MAT_BLOCKTRANSPOSE>(1);
-    tx_lsu_tcsr_write<MAT_BLOCKPADDING>(31);
-    tx_lsu_tcsr_write<MAT_REQUESTPADDING>(63);
+    tx_lsu_tcsr_write<LSU_BLOCKTRANSPOSE>(1);
+    tx_lsu_tcsr_write<LSU_BLOCKPADDING>(31);
+    tx_lsu_tcsr_write<LSU_REQUESTPADDING>(63);
 
     // 发起请求
     tx_lsu_dma_u2u<0>((long)uram_out, (long)uram_in);
 
     // 同步
-    lsu_sb_bar();
+    _lsu_sb_bar();
 
     for(int x = 0; x < 128; x++) {
         for(int y = 0 ; y < 64; y ++) {
@@ -259,36 +258,5 @@ __device__ long tx_lsu_base_transpose_test(void) {
         }
         printf("\n");
     }
-    return 0;
-}
-
-static int test_named_label(void** state) {
-    if(*state) goto **state;
-    static int i;
-    for(i = 0; i < 100 ; i ++) {
-        *state = &&lb0;
-        return i;
-        lb0:
-        *state = &&lb1;
-        return i * 100;
-        lb1:
-        *state = &&lb2;
-        return i * 200;
-        lb2:
-        *state = &&lb3;
-        return i * 300;
-        lb3:
-    }
-    *state = NULL;
-    return 0;
-}
-
-__device__ long tx_test_corotine(void) {
-    int value = 0;
-    void* state = NULL;
-    do {
-        value = test_named_label(&state);
-        printf("Value: %lx, %x\n", state, value);
-    } while(state != NULL);
     return 0;
 }

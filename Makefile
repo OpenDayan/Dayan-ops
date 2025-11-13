@@ -1,6 +1,6 @@
 CROSS_COMPILE=riscv64-unknown-elf-
-CFLAGS=-g -Itestdata_gen -mcmodel=medany -std=gnu99 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g
-CXXFLAGS=-g -Itestdata_gen -mcmodel=medany -std=c++17 -Ofast -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g
+CFLAGS=-g -Itestdata_gen -mcmodel=medany -std=gnu99 -O1 -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g
+CXXFLAGS=-g -Itestdata_gen -mcmodel=medany -std=c++17 -O1 -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv64g -Wa,-march=rv64g
 LDFLAGS=-static -nostdlib
 
 CXX        := $(CROSS_COMPILE)g++
