@@ -248,7 +248,7 @@ __device__ long tx_lsu_base_transpose_test(void) {
     tx_lsu_tcsr_write<MAT_REQUESTPADDING>(63);
 
     // 发起请求
-    tx_lsu_dma_d2u<0>((long)uram_out, (long)uram_in);
+    tx_lsu_dma_u2u<0>((long)uram_out, (long)uram_in);
 
     // 同步
     lsu_sb_bar();
@@ -259,5 +259,36 @@ __device__ long tx_lsu_base_transpose_test(void) {
         }
         printf("\n");
     }
+    return 0;
+}
+
+static int test_named_label(void** state) {
+    if(*state) goto **state;
+    static int i;
+    for(i = 0; i < 100 ; i ++) {
+        *state = &&lb0;
+        return i;
+        lb0:
+        *state = &&lb1;
+        return i * 100;
+        lb1:
+        *state = &&lb2;
+        return i * 200;
+        lb2:
+        *state = &&lb3;
+        return i * 300;
+        lb3:
+    }
+    *state = NULL;
+    return 0;
+}
+
+__device__ long tx_test_corotine(void) {
+    int value = 0;
+    void* state = NULL;
+    do {
+        value = test_named_label(&state);
+        printf("Value: %lx, %x\n", state, value);
+    } while(state != NULL);
     return 0;
 }

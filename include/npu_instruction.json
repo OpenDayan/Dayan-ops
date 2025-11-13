@@ -56,17 +56,9 @@
             "fixed_bits": "0b00001 10 0000000000 101 00000 0001011"
         },
 
-        "tx_sb_reset": {
-            "base_type": "tcsr_sb_write",
-            "fixed_bits": "0b00001 11 0000000000 010 00000 0001011"
-        },
         "tx_sb_get_any": {
             "base_type": "tcsr_sb_read",
             "fixed_bits": "0b00001 11 0000000000 100 00000 0001011"
-        },
-        "tx_sb_get": {
-            "base_type": "sb_get",
-            "fixed_bits": "0b00001 11 0000100000 100 00000 0001011"
         },
 
         "tx_vec_v_load": {

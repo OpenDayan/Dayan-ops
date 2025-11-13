@@ -86,21 +86,9 @@ static inline void tx_lsu_sb_bar(long& rd) {
 }
 
 __attribute__((always_inline))
-static inline void tx_sb_reset(long rd) {
-    constexpr long encoding = 0b00001110000000000010000000001011;
-    BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_write<encoding>(rd);
-}
-
-__attribute__((always_inline))
 static inline void tx_sb_get_any(long& rd) {
     constexpr long encoding = 0b00001110000000000100000000001011;
     BaseNPUInstBuilder::__custom_32b_instruction_tcsr_sb_read<encoding>(rd);
-}
-
-__attribute__((always_inline))
-static inline void tx_sb_get(long& rd, long rs1) {
-    constexpr long encoding = 0b00001110000100000100000000001011;
-    BaseNPUInstBuilder::__custom_32b_instruction_sb_get<encoding>(rd, rs1);
 }
 
 template <long vb, long sel>
