@@ -16,13 +16,13 @@ OBJDUMP := $(CROSS_COMPILE)objdump
 PYTHON := python3
 
 # 编译选项
-CFLAGS := -g -mcmodel=medany -std=gnu99 -O1 -ffast-math \
+CFLAGS := -g -mcmodel=medany -std=gnu99 -O0 -ffast-math \
           -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
-          -march=rv64g -Wa,-march=rv64g
+          -fno-pic -march=rv64g -Wa,-march=rv64g
 
-CXXFLAGS := -g -mcmodel=medany -std=c++17 -O1 -ffast-math \
+CXXFLAGS := -g -mcmodel=medany -std=c++17 -O0 -ffast-math \
             -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
-            -march=rv64g -Wa,-march=rv64g
+            -fno-pic -march=rv64g -Wa,-march=rv64g
 
 CPPFLAGS := -I./include
 LDFLAGS := -static -nostdlib

@@ -152,9 +152,9 @@ _start:
   ld t1, 0(t0)
   addi t1, t1, 1
   sd t1, 0(t0)
-  sd sp, 16(t0)
-  sd tp, 24(t0)
-  sd gp, 32(t0)
+  sd sp, 8(t0)
+  sd tp, 16(t0)
+  sd gp, 24(t0)
 
   j _init
 

@@ -52,9 +52,8 @@ private:
     void config_tcsr() {
         long cur_checksum;
         if(last_checksum) {
-            tx_lsu_tcsr_read<GROUP * LSU_GROUPSZ + VEC_CKSUM>(cur_checksum);
+            tx_lsu_tcsr_read<GROUP * LSU_GROUPSZ + LSU_CHECKSUM>(cur_checksum);
             if(last_checksum == cur_checksum) {
-                tx_lsu_tcsr_write<VEC_GROUPSEL>(GROUP);
                 return;
             }
         } else {
@@ -69,8 +68,7 @@ private:
             tx_lsu_tcsr_write<GROUP * LSU_GROUPSZ + LSU_BLOCKPADDING>(0);
             tx_lsu_tcsr_write<GROUP * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
 
-            tx_lsu_tcsr_read<GROUP * LSU_GROUPSZ + VEC_CKSUM>(last_checksum);
-            tx_lsu_tcsr_write<VEC_GROUPSEL>(GROUP);
+            tx_lsu_tcsr_read<GROUP * LSU_GROUPSZ + LSU_CHECKSUM>(last_checksum);
         }
     }
 public:
