@@ -5,7 +5,7 @@
       "name": "kernel-qemu-debug",
       "type": "gdb",
       "request": "attach",
-      "executable": "${workspaceFolder}/general_entry_fpga.elf",
+      "executable": "${workspaceFolder}/bin/kernels_pack.elf",
       "cwd": "${workspaceFolder}",
       "remote": true,
       "stopAtConnect": true,

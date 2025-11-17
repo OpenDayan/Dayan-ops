@@ -12,7 +12,17 @@
       },
   
       "isBackground": true,
-      "problemMatcher": []
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": {
+          "regexp": "^(.*)$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^BUILD STARTING",  // 脚本中要输出这句话表示开始
+          "endsPattern": "^BUILD COMPLETE"     // 脚本中要输出这句话表示结束
+        }
+      }
     },
     {
       "label": "Terminate PreRun Task",

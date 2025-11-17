@@ -10,7 +10,7 @@
 #include "NPUDriver.h"
 #include "NPURuntime.h"
 
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 
 static inline long run_instr_test(struct NPURuntimeState *runtime, std::string test_name) {
 
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
   }
   std::cout << "Runtime initialized successfully." << std::endl;
 
-  err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+  err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
   if (err != NPU_SUCCESS) {
     std::cerr << "Failed to load kernel set: " << err << std::endl;
     npu_runtime_deinit(&runtime);

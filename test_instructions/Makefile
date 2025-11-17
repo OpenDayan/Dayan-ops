@@ -3,12 +3,12 @@ CC  := gcc
 
 BUILD_DIR := build
 RUNTIME_DIR := ../../npu-runtime
-KERNEL_PACK := ../general_entry_fpga.packed.c
+KERNEL_PACK := ../bin/kernels_pack.packed.c
 
 COMMON_SOURCES :=
 TEST_SOURCES := $(wildcard test_*.cpp)
 
-COMMON_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(COMMON_SOURCES)) $(BUILD_DIR)/general_entry_fpga.packed.o $(BUILD_DIR)/NPUDriver.o \
+COMMON_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(COMMON_SOURCES)) $(BUILD_DIR)/kernels_pack.packed.o $(BUILD_DIR)/NPUDriver.o \
                                                                          $(BUILD_DIR)/NPURuntime.o $(BUILD_DIR)/NPUMemoryManagement.o
 TEST_OBJECTS := $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(TEST_SOURCES))
 
@@ -33,7 +33,7 @@ $(BUILD_DIR)/NPURuntime.o: $(RUNTIME_DIR)/src/NPURuntime.c
 $(BUILD_DIR)/NPUMemoryManagement.o: $(RUNTIME_DIR)/src/NPUMemoryManagement.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/general_entry_fpga.packed.o: $(KERNEL_PACK)
+$(BUILD_DIR)/kernels_pack.packed.o: $(KERNEL_PACK)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: %.cpp
@@ -54,4 +54,4 @@ gdb:
 	export QEMU="/workspace/npu-qemu/build/qemu-system-riscv64"
 	export QEMU_FLAGS="-bios /workspace/npu-firmware/bl0/bootrom.elf -machine rvtng-v0 -nographic -m 4096"
 	setsid ./run_bg.sh $$$$ &
-	exec gdb-multiarch -q /workspace/npu-kernels/general_entry_fpga.elf -ex "target remote localhost:1234" -ex "b *0x80000000"
+	exec gdb-multiarch -q /workspace/npu-kernels/bin/kernels_pack.elf -ex "target remote localhost:1234" -ex "b *0x80000000"
