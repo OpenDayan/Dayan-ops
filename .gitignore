@@ -8,6 +8,7 @@
 *.bin
 *.packed.c
 build
+bin
 example_trace
 .qemu_log
 .vscode.prerun.name

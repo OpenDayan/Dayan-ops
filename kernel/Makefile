@@ -1,12 +1,39 @@
-INCLUDES := -I../include/
-target   := test_misc_kernels.o test_task_kernels.o
+# 源文件配置
+SRC_DIR := .
+SRC_FILES := $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*.S)
+OBJ_FILES := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c))
+OBJ_FILES += $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.cpp))
+OBJ_FILES += $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.S))
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $<
+# 包含目录
+INCLUDES := -I./include -I../include
 
-.PHONY: all clean
+# 默认目标
+all: $(OBJ_FILES)
+	@echo "main module built"
 
-all: $(target)
+# 汇编源文件编译规则
+$(BUILD_DIR)/%.o: %.S
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -c $< -o $@
+	@$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -MM -MT $@ $< > $(BUILD_DIR)/$*.d
 
+# C 源文件编译规则
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -c $< -o $@
+	@$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -MM -MT $@ $< > $(BUILD_DIR)/$*.d
+
+# C++ 源文件编译规则
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) -c $< -o $@
+	@$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) -MM -MT $@ $< > $(BUILD_DIR)/$*.d
+
+# 清理
 clean:
-	rm -rf *.o
+	rm -f $(OBJ_FILES) $(OBJ_FILES:.o=.d)
+	@echo "main module cleaned"
+
+# 包含依赖文件
+-include $(OBJ_FILES:.o=.d)
