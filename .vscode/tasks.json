@@ -19,8 +19,8 @@
         },
         "background": {
           "activeOnStart": true,
-          "beginsPattern": "^BUILD STARTING",  // 脚本中要输出这句话表示开始
-          "endsPattern": "^BUILD COMPLETE"     // 脚本中要输出这句话表示结束
+          "beginsPattern": "^BUILD STARTING",
+          "endsPattern": "^Runtime initialized successfully."
         }
       }
     },
