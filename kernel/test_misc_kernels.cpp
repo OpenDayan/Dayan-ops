@@ -260,3 +260,84 @@ __device__ long test_lsu_base_transpose_test(void) {
     }
     return 0;
 }
+
+template<long tcsrid>
+static inline long test_one_mat_tcsr_reg(void) {
+    long mask = 0xffffffffffffffffll;
+    long writeMask, clearMask;
+    tx_mat_tcsr_write<tcsrid>(0);
+    tx_mat_tcsr_write<tcsrid>(mask);
+    tx_mat_tcsr_read<tcsrid>(writeMask);
+    tx_mat_tcsr_write<tcsrid>(0);
+    tx_mat_tcsr_read<tcsrid>(clearMask);
+    return writeMask & ~clearMask; // 返回可读写的位掩码
+}
+
+__device__ long test_mat_tcsr_write_read(void) {
+    long ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<0>();
+    printf("0: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<1>();
+    printf("1: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<2>();
+    printf("2: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<3>();
+    printf("3: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<4>();
+    printf("4: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<5>();
+    printf("5: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<6>();
+    printf("6: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<7>();
+    printf("7: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<8>();
+    printf("8: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<9>();
+    printf("9: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<10>();
+    printf("10: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<11>();
+    printf("11: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<12>();
+    printf("12: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<13>();
+    printf("13: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<14>();
+    printf("14: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<15>();
+    printf("15: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<16>();
+    printf("16: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<17>();
+    printf("17: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<18>();
+    printf("18: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<19>();
+    printf("19: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<20>();
+    printf("20: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<21>();
+    printf("21: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<22>();
+    printf("22: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<23>();
+    printf("23: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<24>();
+    printf("24: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<25>();
+    printf("25: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<26>();
+    printf("26: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<27>();
+    printf("27: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<28>();
+    printf("28: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<29>();
+    printf("29: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<30>();
+    printf("30: %x\n", ret);
+    ret = 0xffffffff;ret &= test_one_mat_tcsr_reg<31>();
+    printf("31: %x\n", ret);
+    return 0;
+}
+
