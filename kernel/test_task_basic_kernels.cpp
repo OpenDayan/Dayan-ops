@@ -42,7 +42,7 @@ __device__ long test_calculated_goto(void) {
 }
 
 template<long tileSz, long GROUP>
-class MyTestNPUTask: NPUTask {
+class MyTestNPUTask: public NPUTask {
 private:
     char* src, *dst;
     char* uramBuf;
@@ -75,7 +75,7 @@ public:
     int32_t execute(int* err) {
         NPUBegin;
         for(i = 0; i < (size / tileSz); i ++) {
-            printf("%d: %d Round\n", i, (size / tileSz));
+            printf("%dGourp, %d: %d Round\n", GROUP, i, (size / tileSz));
             // 配置张量寄存器
             // 加载数据到 URAM
             config_tcsr();
@@ -93,12 +93,10 @@ public:
         return ((MyTestNPUTask*)p)->execute(err);
     }
     MyTestNPUTask(char* src, char* dst, char* uramBuf, long size):
-        src(src), dst(dst), uramBuf(uramBuf), size(size) {
-            func_ptr = wrapper;
-        };
+        NPUTask(wrapper), src(src), dst(dst), uramBuf(uramBuf), size(size) {};
 };
 
-__device__ long test_npu_task_dma(void) {
+__device__ long test_npu_task_basic_dma(void) {
     static int *inBuf  = (int*)0x90000000;
     static int *outBuf = (int*)0x91000000;
     memset(outBuf, 0, 1024 * 1024);
@@ -108,8 +106,8 @@ __device__ long test_npu_task_dma(void) {
     MyTestNPUTask<128 * 1024, 0> task0((char*)inBuf, (char*)outBuf, (char*)0x0, 1024 * 1024 / 2);
     MyTestNPUTask<128 * 1024, 1> task1(((char*)inBuf) + 1024 * 512, ((char*)outBuf) + 1024 * 512, (char*)(128 * 1024), 1024 * 1024 / 2);
     NPUTask *tasks[2] = {(NPUTask*) &task0, (NPUTask*) &task1};
-    NPUScheduler schedule(2);
-    schedule.scheduler(tasks);
+    NPUScheduler schedule(2, tasks);
+    schedule.scheduler();
     for(int i = 0; i < 1024 * 1024 / 4; i++) {
         if(outBuf[i] != i) {
             printf("Error@%d: %d\n", i, outBuf[i]);

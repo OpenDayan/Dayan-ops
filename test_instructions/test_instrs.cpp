@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   // run_instr_test(&runtime, "test_lsu_base_transpose_test");
   // run_instr_test(&runtime, "test_mat_tcsr_write_read");
   // run_instr_test(&runtime, "test_calculated_goto");
-  run_instr_test(&runtime, "test_npu_task_dma");
+  run_instr_test(&runtime, "test_npu_task_basic_dma");
 
   std::cout << "All Instr Test Finished." << std::endl;
 
