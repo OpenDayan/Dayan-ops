@@ -106,8 +106,10 @@ __device__ long test_npu_task_basic_dma(void) {
     MyTestNPUTask<128 * 1024, 0> task0((char*)inBuf, (char*)outBuf, (char*)0x0, 1024 * 1024 / 2);
     MyTestNPUTask<128 * 1024, 1> task1(((char*)inBuf) + 1024 * 512, ((char*)outBuf) + 1024 * 512, (char*)(128 * 1024), 1024 * 1024 / 2);
     NPUTask *tasks[2] = {(NPUTask*) &task0, (NPUTask*) &task1};
-    NPUScheduler schedule(2, tasks);
-    schedule.scheduler();
+    NPUScheduler sched(2, tasks);
+    task0.sched = &sched;
+    task1.sched = &sched;
+    sched.scheduler();
     for(int i = 0; i < 1024 * 1024 / 4; i++) {
         if(outBuf[i] != i) {
             printf("Error@%d: %d\n", i, outBuf[i]);

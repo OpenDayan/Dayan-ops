@@ -167,3 +167,10 @@ static inline void tx_lsu_dma_d2d(long rd, long rs1) {
     constexpr long encoding = (0b00100000000000000011000000001011) | ((group & 7) << 20);
     BaseNPUInstBuilder::__custom_32b_instruction_lsu<encoding>(rd, rs1);
 }
+
+template <long group>
+__attribute__((always_inline))
+static inline void tx_mat_mma(long rd, long rs1, long rs2) {
+    constexpr long encoding = (0b00010000000000000000000000001011) | ((group & 7) << 25);
+    BaseNPUInstBuilder::__custom_32b_instruction_mat<encoding>(rd, rs1, rs2);
+}

@@ -14,6 +14,13 @@
 #define NPUBegin         if(_state) goto *_state;
 #define NPUFinish(z)     return (z)
 
+#define NPUYield(z) \
+        do { \
+            sched->add_free_task(this); \
+            _state = &&CONCAT_LINE(_lb_); \
+            return z; CONCAT_LINE(_lb_):; \
+        } while (0)
+
 #define NPUDMABar(z) \
         do { \
             tx_lsu_sb_produce((long) this); \
@@ -35,6 +42,8 @@
             return z; CONCAT_LINE(_lb_):; \
         } while (0)
 
+class NPUScheduler;
+
 // 所有算子的基类
 class NPUTask : public NPUListNodeBase {
 protected:
@@ -42,6 +51,7 @@ protected:
     void* _state = 0;
     int32_t (*func_ptr)(NPUTask*p, int* err);
 public:
+    NPUScheduler* sched = 0;
     // 协程 Kernel：返回值含义为新创建的协程个数
     // TODO: 裸机环境下，没有 RTTI，不可使用虚函数。 Fix: 使用手动的虚函数表
     // virtual int32_t execute() = 0;
@@ -54,13 +64,6 @@ public:
         return func_ptr(this, err);
     }
     NPUTask(int32_t (*func_ptr)(NPUTask*p, int* err)): func_ptr(func_ptr) {};
-};
-
-// 虚拟资源管理类
-class NPUResource {
-protected:
-    int32_t state;      // 当前虚拟资源状态， 0: 空闲， 1: 未就绪， 2: 就绪
-    NPUListHead<NPUTask> wait_list; // 等待当前资源的 NPUTask 链表
 };
 
 // 算子调度器类
@@ -76,6 +79,9 @@ public:
             free_list.list_insert_tail(initTasks[i]);
         }
     };
+    inline void add_free_task(NPUTask* task) {
+        free_list.list_insert_tail(task);
+    }
     // 阻塞式调度，完成所有调度任务
     // 参数：初始 Task 列表
     int scheduler() {
@@ -100,6 +106,119 @@ public:
         }
         return 0;
     }
+};
+
+// 虚拟资源管理类
+class NPUResource {
+protected:
+    enum state_e {
+        FREE,
+        BUSY,
+        READY        
+    } state; // 当前虚拟资源状态， 0: 空闲， 1: 未就绪， 2: 就绪
+    int producer_count; // 生产者计数器
+    int consumer_count; // 消费者计数器
+    NPUListHead<NPUTask> wait_free_list; // 等待当前资源 FREE 的 NPUTask 链表
+    NPUListHead<NPUTask> wait_ready_list; // 等待当前资源 READY 的 NPUTask 链表
+    inline void release_free_list(NPUScheduler* sched) {
+        while(!wait_free_list.list_empty()) {
+            sched->add_free_task(wait_free_list.list_remove_head());
+        }
+    }
+    inline void release_ready_list(NPUScheduler* sched) {
+        while(!wait_ready_list.list_empty()) {
+            sched->add_free_task(wait_ready_list.list_remove_head());
+        }
+    }
+public:
+    NPUResource() {
+        state = FREE;
+        producer_count = 0;
+        consumer_count = 0;
+    }
+    inline state_e get_state() {
+        return state;
+    }
+    // 返回 1 时， yield
+    inline int wait_ready(NPUTask* cur, NPUScheduler* sched) {
+        if(state == READY) {
+            // sched->add_free_task(cur);
+            return 0;
+        } else {
+            // FREE or BUSY
+            wait_ready_list.list_insert_tail(cur);
+            return 1;
+        }
+    }
+    // 返回 1 时， yield
+    inline int wait_free(NPUTask* cur, NPUScheduler* sched) {
+        if(state == FREE) {
+            // sched->add_free_task(cur);
+            return 0;
+        } else {
+            // BUSY or READY
+            wait_free_list.list_insert_tail(cur);
+            return 1;
+        }
+    }
+    inline int allocate(NPUScheduler* sched, int producer, int consumer) {
+        if(state == FREE) {
+            // 成功
+            producer_count = producer;
+            consumer_count = consumer;
+            if(producer_count) state = BUSY;
+            else {
+                release_ready_list(sched);
+                state = READY;
+            }
+            return 0;
+        }
+        return 1;
+    }
+    inline void produce(NPUScheduler* sched) {
+        if(state != BUSY) {
+            printf("Error: produce resource when not busy.\n");
+            return;
+        }
+        producer_count--;
+        if(consumer_count == 0) {
+            release_ready_list(sched);
+            state = READY;
+        }
+    }
+    inline void consume(NPUScheduler* sched) {
+        if(state != READY) {
+            printf("Error: free resource when not ready.\n");
+            return;
+        }
+        consumer_count--;
+        if(consumer_count == 0) {
+            release_free_list(sched);
+            state = FREE;
+        }
+    }
+};
+
+#define NPUWaitFree(res) \
+        do { \
+            if(res->wait_free(this, sched)) { \
+                _state = &&CONCAT_LINE(_lb_); \
+                return 0; CONCAT_LINE(_lb_):; \
+            } \
+        } while (0)
+
+#define NPUWaitReady(res) \
+        do { \
+            if(res->wait_ready(this, sched)) { \
+                _state = &&CONCAT_LINE(_lb_); \
+                return 0; CONCAT_LINE(_lb_):; \
+            } \
+        } while (0)
+
+class NPUURAM : public NPUResource {
+public:
+    uint8_t *uram;
+    NPUURAM(uint8_t *uram): uram(uram) {};
 };
 
 #endif

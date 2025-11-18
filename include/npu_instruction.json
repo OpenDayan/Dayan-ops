@@ -125,6 +125,12 @@
             "base_type": "lsu",
             "fixed_bits": "0b001 000000 000 00000 011 00000 0001011",
             "var_bits": "DMA-BASE"
+        },
+
+        "tx_mat_mma": {
+            "base_type": "mat",
+            "fixed_bits": "0b0001 000 00000 00000 000 00000 0001011",
+            "var_bits": "MMA-BASE"
         }
     },
     "micros": {
@@ -146,6 +152,9 @@
         ],
         "DMA-BASE": [
             {"group": [[20, 3]]}
+        ],
+        "MMA-BASE": [
+            {"group": [[25, 3]]}
         ],
         "mat": {
             "inst_builder": ["BaseNPUInstBuilder::__custom_32b_instruction_mat"],
