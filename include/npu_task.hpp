@@ -181,7 +181,7 @@ public:
             return;
         }
         producer_count--;
-        if(consumer_count == 0) {
+        if(producer_count == 0) {
             release_ready_list(sched);
             state = READY;
         }

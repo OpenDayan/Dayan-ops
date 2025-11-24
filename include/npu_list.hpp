@@ -37,7 +37,7 @@ inline NPUListHead<T>::NPUListHead() noexcept {
 
 template<typename T>
 inline void NPUListHead<T>::list_insert_tail(T* p) noexcept {
-    auto node = static_cast<NPUListNodeBase*>(p);
+    auto node = (NPUListNodeBase*)p;
     node->next = nullptr;
     node->prev_next = last;
     *last = node;

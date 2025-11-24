@@ -2,6 +2,7 @@
 #include "npu_kernel.h"
 #include "npu_vec_csr.hpp"
 #include "npu_lsu_csr.hpp"
+#include "npu_mat_csr.hpp"
 #include "npu_task.hpp"
 #include <stdio.h>
 #include <string.h>
@@ -41,49 +42,66 @@ public:
         cM(M / tileM), cN(N / tileN), cK(K / tileK) {};
     MatmulPubState(const MatmulPubState& other)
         : M(other.M), N(other.N), K(other.K),
-          cM(other.cM), cN(other.cN), cK(other.cK),
           aBase(other.aBase), bBase(other.bBase), cBase(other.cBase),
-          aStride(other.aStride), bStride(other.bStride), cStride(other.cStride)
-    {}
+          aStride(other.aStride), bStride(other.bStride), cStride(other.cStride),
+          a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf),
+          cM(other.cM), cN(other.cN), cK(other.cK) {};
 private:
     // 内部状态
     void* advance_state = 0;
     // 循环变量
-    int block_row, block_col, m, n, k;
+    int block_row, block_col, m, n, k, rst_id, cur_id, cid;
 public:
     // 返回值表示当前任务是否已结束
-    inline bool advance(int &cur_m, int &cur_n, int &cur_k) {
+    inline bool advance(int &cur_m, int &cur_n, int &cur_k, int &a_buf_id, int &b_buf_id, int &c_buf_id) {
         if(advance_state) goto *advance_state;
+        cur_id = 0; cid = 0;
         for(k = 0; k < cK; k++) {
             if(ZT) {
                 // 列 -> 行 遍历顺序
                 for(block_col = 0; block_col < cN; block_col += 2) {
+                    rst_id = cur_id;
                     for(block_row = 0; block_row < cM; block_row += 2) {
                         for(m = block_row; (m < cM) && (m < block_row + 2); m ++) {
                             for(n = block_col; (n < cN) && (n < block_col + 2); n ++) {
                                 cur_m = m;
                                 cur_n = n;
                                 cur_k = k;
+                                a_buf_id = cur_id;
+                                b_buf_id = n & 0x1;
+                                c_buf_id = cid;
+                                cid ^= 0x1;
                                 advance_state = &&ZTNextLoop;
                                 return false; ZTNextLoop:;
                             }
+                            cur_id ^= 1;
                         }
+                        cur_id = rst_id;
                     }
+                    cur_id ^= 1;
                 }
             } else {
                 // 行 -> 列 遍历顺序
                 for(block_row = 0; block_row < cM; block_row += 2) {
+                    rst_id = cur_id;
                     for(block_col = 0; block_col < cN; block_col += 2) {
                         for(m = block_row; (m < cM) && (m < block_row + 2); m ++) {
                             for(n = block_col; (n < cN) && (n < block_col + 2); n ++) {
                                 cur_m = m;
                                 cur_n = n;
                                 cur_k = k;
+                                a_buf_id = m & 0x1;
+                                b_buf_id = cur_id;
+                                c_buf_id = cid;
+                                cur_id ^= 0x1;
+                                cid ^= 0x1;
                                 advance_state = &&ZNextLoop;
                                 return false; ZNextLoop:;
                             }
+                            cur_id = rst_id;
                         }
                     }
+                    cur_id ^= 1;
                 }
             }
         }
@@ -96,18 +114,23 @@ public:
 template<long GROUPBASE, long tileM, long tileN, long tileK, bool ZT>
 class MatmulProducerTask: public NPUTask {
 private:
-    int m, n, k; // 当前处理中的 m n k
+    long aCkSum, bCkSum, cCkSum;// tcsr 配置 cksum
     MatmulPubState<tileM, tileN, tileK, ZT> *s;
     inline void config_tcsr() {
         // Note: k and tileK should be aligned to 64-Bytes
         // 暂不考虑 K pad 问题。
-        tx_lsu_tcsr_write<(GROUPBASE + 0) * LSU_GROUPSZ + LSU_BLOCK>(0);
-        tx_lsu_tcsr_write<(GROUPBASE + 0) * LSU_GROUPSZ + LSU_DIM0>(tileK / 32); // tileK * 2 / 64B
-        tx_lsu_tcsr_write<(GROUPBASE + 0) * LSU_GROUPSZ + LSU_DIM1>(tileM);      // tileM
-        tx_lsu_tcsr_write<(GROUPBASE + 0) * LSU_GROUPSZ + LSU_DIM2>(0);
-        tx_lsu_tcsr_write<(GROUPBASE + 0) * LSU_GROUPSZ + LSU_INBLOCKSTRIDE>(0);
-
+        // A Configuration
+        set_lsu_matrix<GROUPBASE + 0>(aCkSum, tileM, tileK * 2, s->aStride, tileK * 2);
+        // B Configuration
+        set_lsu_matrix<GROUPBASE + 1>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
+        // C Configuration
+        set_lsu_matrix<GROUPBASE + 2>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
+        return;
     }
+    // 局部变量
+    int m, n, k; // 当前处理中的 m n k
+    NPUURAM *a, *b, *c;
+    int a_buf_id, b_buf_id, c_buf_id;
 public:
     MatmulProducerTask(MatmulPubState<tileM, tileN, tileK, ZT> *s):
         s(s), NPUTask(wrapper) {};
@@ -115,40 +138,47 @@ public:
         NPUBegin;
         while(1) {
             // 获取任务
-            if(s->advance(m, n, k)) break;
+            if(s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id)) break;
             // 获取并加载 URAM Buffer
-            NPUURAM *a, *b, *c;
             if(ZT) {
                 if(m == 0) {
                     // 负责加载 B Buffer
-                    int b_buf_id = n + k * s->cN; b = &(s->b_buf[b_buf_id & 0x1]);
+                    b = &(s->b_buf[b_buf_id]);
                     do { NPUWaitFree(b); } while(b->allocate(sched, 1, s->cM));
                 }
-                int a_buf_id = m + k * s->cM; a = &(s->a_buf[a_buf_id & 0x1]);
-                do { NPUWaitFree(a); } while(a->allocate(sched, 1, 1));
+                if((n % 2) == 0) {
+                    a = &(s->a_buf[a_buf_id]);
+                    do { NPUWaitFree(a); } while(a->allocate(sched, 1, (s->cN - n) > 2 ? 2 : (s->cN - n)));
+                }
             } else {
                 if(n == 0) {
                     // 负责加载 A Buffer
-                    int a_buf_id = m + k * s->cM; a = &(s->a_buf[a_buf_id & 0x1]);
+                    a = &(s->a_buf[a_buf_id]);
                     do { NPUWaitFree(a); } while(a->allocate(sched, 1, s->cN));
                 }
-                int b_buf_id = n + k * s->cN; b = &(s->b_buf[b_buf_id & 0x1]);
-                do { NPUWaitFree(b); } while(b->allocate(sched, 1, 1));
+                if((m % 2) == 0) {
+                    b = &(s->b_buf[b_buf_id]);
+                    do { NPUWaitFree(b); } while(b->allocate(sched, 1, (s->cM - m) > 2 ? 2 : (s->cM - m)));
+                }
             }
-            int c_buf_id = n + m * s->cN; c = &(s->c_buf[c_buf_id & 0x1]);
+            c = &(s->c_buf[c_buf_id & 0x1]);
             do { NPUWaitFree(c); } while(c->allocate(sched, 1, 1));
             config_tcsr();
             if(ZT) {
                 if(m == 0) {
                     tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
                 }
-                tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 + m * tileM * s->aStride);
+                if((n % 2) == 0) {
+                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 + m * tileM * s->aStride);
+                }
             }
             else {
                 if(n == 0) {
                     tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 + m * tileM * s->aStride);
                 }
-                tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
+                if((m % 2) == 0) {
+                    tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
+                }
             }
             tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram, s->cBase + n * tileN * 4 + m * tileM * s->cStride);
             NPUDMABar(0);
@@ -156,13 +186,17 @@ public:
                 if(m == 0) {
                     b->produce(sched);
                 }
-                a->produce(sched);
+                if((n % 2) == 0) {
+                    a->produce(sched);
+                }
             }
             else {
                 if(n == 0) {
                     a->produce(sched);
                 }
-                b->produce(sched);
+                if((m % 2) == 0) {
+                    b->produce(sched);
+                }
             }
             c->produce(sched);
             NPUYield(0); // 让出执行时间，执行其它纤程
@@ -179,10 +213,28 @@ public:
 template<long GROUPBASE, long tileM, long tileN, long tileK, bool ZT>
 class MatmulConsumerTask: public NPUTask {
 private:
-    int m, n, k; // 当前处理中的 m n k
+    long cCkSum;
     MatmulPubState<tileM, tileN, tileK, ZT> *s;
     inline void config_tcsr() {
+        // C Configuration
+        set_lsu_matrix<GROUPBASE + 3>(cCkSum, tileM, tileN * 4, tileN * 4, s->cStride);
+        // Matmul Configuration
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(tileM - 1);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(tileN - 1);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(tileK - 1);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASTRIDE>(tileK * 2);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSTRIDE>(tileK * 2);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSTRIDE>(tileN * 4);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(0);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_DATATYPE>(0);
     }
+    // 局部变量
+    NPUURAM *a, *b, *c;
+    int m, n, k; // 当前处理中的 m n k
+    int a_buf_id, b_buf_id, c_buf_id;
 public:
     MatmulConsumerTask(MatmulPubState<tileM, tileN, tileK, ZT> *s):
         s(s), NPUTask(wrapper) {};
@@ -190,15 +242,11 @@ public:
         NPUBegin;
         while(1) {
             // 获取一个任务, 注意，m n k 指切片下标
-            if(s->advance(m, n, k)) break;
+            if(s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id)) break;
             // 获取并加载 URAM Buffer
-            NPUURAM *a, *b, *c;
-            int a_buf_id = m + k * s->cM;
-            a = &(s->a_buf[a_buf_id & 0x1]);
-            int b_buf_id = n + k * s->cN;
-            b = &(s->b_buf[b_buf_id & 0x1]);
-            int c_buf_id = n + m * s->cN;
-            c = &(s->c_buf[c_buf_id & 0x1]);
+            a = &(s->a_buf[a_buf_id]);
+            b = &(s->b_buf[b_buf_id]);
+            c = &(s->c_buf[c_buf_id]);
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
@@ -228,14 +276,14 @@ __device__ long matmul_bf16_a_bt_c(
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
     uint64_t aStride, uint64_t bStride, uint64_t cStride
 ) {
-    const uint64_t tileM = 128, tileN = 128, tileK = 1024;
+    const uint64_t tileM = 128, tileN = 128, tileK = 512;
     NPUURAM buf[6] = {
-        NPUURAM(0x0ul),
-        NPUURAM(tileM * tileK * 2),
-        NPUURAM(tileM * tileK * 2 * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 4),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 4 + tileM * tileN * 4)
+        NPUURAM(0x0ul),             // 0    - 128K
+        NPUURAM(tileM * tileK * 2), // 128K - 256K
+        NPUURAM(tileM * tileK * 2 * 2),                     // 256K - 384K
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2), // 384K - 512K
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),                    // 512K - 576K
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4) // 576K - 640K
     };
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, false>(
@@ -256,6 +304,10 @@ __device__ long matmul_bf16_a_bt_c(
 
     // 创建一个调度器
     auto sched = NPUScheduler(4, tasks);
+
+    for(auto t : tasks) {
+        t->sched = &sched;
+    }
 
     // 开始执行 kernel
     sched.scheduler();

@@ -37,7 +37,8 @@
       "id": "testName",
       "description": "选择希望运行的 npu-kernel 测试用例",
       "options": [
-        "test_instructions/build/test_instrs"
+        "test_instructions/build/test_instrs",
+        "test_instructions/build/test_bf16_matmul",
       ],
       "type": "pickString"
     }
