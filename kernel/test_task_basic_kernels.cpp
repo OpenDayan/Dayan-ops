@@ -118,3 +118,7 @@ __device__ long test_npu_task_basic_dma(void) {
     }
     return 0;
 } 
+
+// Error@134528: 138624
+// 0x83600 -> 0x87600
+

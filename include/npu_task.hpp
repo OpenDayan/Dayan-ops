@@ -217,8 +217,8 @@ public:
 
 class NPUURAM : public NPUResource {
 public:
-    uint8_t *uram;
-    NPUURAM(uint8_t *uram): uram(uram) {};
+    uint64_t uram;
+    NPUURAM(uint64_t uram): uram(uram) {};
 };
 
 #endif
