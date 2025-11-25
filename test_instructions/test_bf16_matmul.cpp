@@ -54,10 +54,12 @@ int main(int argc, char** argv) {
 
   std::cout << "Kernel set loaded successfully." << std::endl;
 
-  // 初始化计算用矩阵 A = Random
+  // 初始化计算用矩阵 A = m, n == m * 128 + n
   for(int m = 0 ; m < M; m ++) {
     for(int k = 0 ; k < K; k++) {
-      A[m][k] = FP32ToBF16((((double)rand() / (double)RAND_MAX) - 0.5f) * 8.f);
+      // A[m][k] = FP32ToBF16((((double)rand() / (double)RAND_MAX) - 0.5f) * 8.f);
+      // A[m][k] = FP32ToBF16((float)(m * K + k));
+      A[m][k] = m * K + k;
     }
   }
 
@@ -105,13 +107,13 @@ int main(int argc, char** argv) {
 
   for(int m = 0; m < M; m++) {
     for(int n = 0; n < N; n++) {
-      auto diff = std::abs(C[m][n] - BF16ToFP32(A[m][n]));
-      if(diff > 0.1f) {
-        std::cout << "Diff @" << m << ", " << n << ": ref=" << BF16ToFP32(A[m][n]) << " dut=" << C[m][n] << std::endl;
+      auto diff = FP32ToBF16(C[m][n]) - A[m][n];
+      if(diff) {
+        std::cout << std::hex << "Diff @" << m << ", " << n << ": ref=" << A[m][n] << " dut=" << FP32ToBF16(C[m][n]) << std::endl;
         // return -1;
       }
-      fprintf(r, "%f ", BF16ToFP32(A[m][n]));
-      fprintf(f, "%f ", C[m][n]);
+      fprintf(r, "%04x ", A[m][n]);
+      fprintf(f, "%04x ", FP32ToBF16(C[m][n]));
     }
     fprintf(r, "\n");
     fprintf(f, "\n");

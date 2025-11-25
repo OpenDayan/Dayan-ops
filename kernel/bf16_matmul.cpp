@@ -222,9 +222,9 @@ private:
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(tileM - 1);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(tileN - 1);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(tileK - 1);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASTRIDE>(tileK * 2);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSTRIDE>(tileK * 2);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSTRIDE>(tileN * 4);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASTRIDE>(tileK * 2); // Stride A
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSTRIDE>(tileK * 2); // Stride B
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSTRIDE>(tileN * 4); // Stride C
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
@@ -252,6 +252,8 @@ public:
             NPUWaitReady(b);
             NPUWaitReady(a);
 
+            printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n",
+                m * tileM, n * tileN, m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
 
             NPUMatBar(0);
