@@ -10,4 +10,4 @@ make -j
 cd -
 echo "BUILD COMPLETE"
 
-$1
+$1 | tee .rpt

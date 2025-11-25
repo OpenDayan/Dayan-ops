@@ -7,6 +7,7 @@
 *.ipynb
 *.bin
 *.packed.c
+*.rpt
 build
 bin
 example_trace

@@ -101,7 +101,7 @@ public:
                             cur_id = rst_id;
                         }
                     }
-                    cur_id ^= 1;
+                    cur_id ^= 0x1;
                 }
             }
         }
@@ -136,34 +136,34 @@ public:
         s(s), NPUTask(wrapper) {};
     int32_t execute(int* err) {
         NPUBegin;
+        config_tcsr();
         while(1) {
             // 获取任务
             if(s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id)) break;
             // 获取并加载 URAM Buffer
+            c = &(s->c_buf[c_buf_id]);
+            do { NPUWaitFree(c); } while(c->allocate(sched, 1, 1));
             if(ZT) {
+                if((n % 2) == 0) {
+                    a = &(s->a_buf[a_buf_id]);
+                    do { NPUWaitFree(a); } while(a->allocate(sched, 1, (s->cN - n) > 2 ? 2 : (s->cN - n)));
+                }
                 if(m == 0) {
                     // 负责加载 B Buffer
                     b = &(s->b_buf[b_buf_id]);
                     do { NPUWaitFree(b); } while(b->allocate(sched, 1, s->cM));
                 }
-                if((n % 2) == 0) {
-                    a = &(s->a_buf[a_buf_id]);
-                    do { NPUWaitFree(a); } while(a->allocate(sched, 1, (s->cN - n) > 2 ? 2 : (s->cN - n)));
-                }
             } else {
+                if((m % 2) == 0) {
+                    b = &(s->b_buf[b_buf_id]);
+                    do { NPUWaitFree(b); } while(b->allocate(sched, 1, (s->cM - m) > 2 ? 2 : (s->cM - m)));
+                }
                 if(n == 0) {
                     // 负责加载 A Buffer
                     a = &(s->a_buf[a_buf_id]);
                     do { NPUWaitFree(a); } while(a->allocate(sched, 1, s->cN));
                 }
-                if((m % 2) == 0) {
-                    b = &(s->b_buf[b_buf_id]);
-                    do { NPUWaitFree(b); } while(b->allocate(sched, 1, (s->cM - m) > 2 ? 2 : (s->cM - m)));
-                }
             }
-            c = &(s->c_buf[c_buf_id & 0x1]);
-            do { NPUWaitFree(c); } while(c->allocate(sched, 1, 1));
-            config_tcsr();
             if(ZT) {
                 if(m == 0) {
                     tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
@@ -240,6 +240,7 @@ public:
         s(s), NPUTask(wrapper) {};
     int32_t execute(int* err) {
         NPUBegin;
+        config_tcsr();
         while(1) {
             // 获取一个任务, 注意，m n k 指切片下标
             if(s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id)) break;
@@ -251,7 +252,6 @@ public:
             NPUWaitReady(b);
             NPUWaitReady(a);
 
-            config_tcsr();
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
 
             NPUMatBar(0);
@@ -262,6 +262,7 @@ public:
             tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride, c->uram);
             NPUDMABar(0);
             c->consume(sched);
+            NPUYield(0);
         }
         NPUFinish(-1);
     }

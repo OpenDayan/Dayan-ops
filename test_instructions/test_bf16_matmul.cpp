@@ -100,8 +100,8 @@ int main(int argc, char** argv) {
 
   npu_memcpy_from_dev(&runtime.dev_state, C, dev_c, M * N * 4);
 
-  FILE* r = fopen("ref.mat", "w");
-  FILE* f = fopen("output.mat", "w");
+  FILE* r = fopen("ref.rpt", "w");
+  FILE* f = fopen("output.rpt", "w");
 
   for(int m = 0; m < M; m++) {
     for(int n = 0; n < N; n++) {
