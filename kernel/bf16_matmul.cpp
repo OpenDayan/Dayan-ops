@@ -279,41 +279,77 @@ __device__ long matmul_bf16_a_bt_c(
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
     uint64_t aStride, uint64_t bStride, uint64_t cStride
 ) {
-    const uint64_t tileM = 256, tileN = 128, tileK = 512;
-    NPUURAM buf[6] = {
-        NPUURAM(0x0ul),             // 0    - 128K
-        NPUURAM(tileM * tileK * 2), // 128K - 256K
-        NPUURAM(tileM * tileK * 2 * 2),                     // 256K - 384K
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2), // 384K - 512K
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),                    // 512K - 576K
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4) // 576K - 640K
-    };
-    // 创建两个 PubState，分别表示 Producer 以及 Consumer
-    auto pub_producer = MatmulPubState<tileM, tileN, tileK, false>(
-        M, N, K, aBase, bBase, cBase, aStride, bStride, cStride,
-        &buf[0], &buf[2], &buf[4]
-    );
-    auto pub_consumer = MatmulPubState<tileM, tileN, tileK, false>(pub_producer);
+    if(M <= N) {
+        const uint64_t tileM = 128, tileN = 256, tileK = 512;
+        NPUURAM buf[6] = {
+            NPUURAM(0x0ul),             // 0    - 128K
+            NPUURAM(tileM * tileK * 2), // 128K - 256K
+            NPUURAM(tileM * tileK * 2 * 2),                     // 256K - 384K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2), // 384K - 512K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),                    // 512K - 576K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4) // 576K - 640K
+        };
+        // 创建两个 PubState，分别表示 Producer 以及 Consumer
+        auto pub_producer = MatmulPubState<tileM, tileN, tileK, false>(
+            M, N, K, aBase, bBase, cBase, aStride, bStride, cStride,
+            &buf[0], &buf[2], &buf[4]
+        );
+        auto pub_consumer = MatmulPubState<tileM, tileN, tileK, false>(pub_producer);
 
-    // 创建四个 Task
-    auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, false> (&pub_producer);
-    auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, false> (&pub_producer);
-    auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, false> (&pub_consumer);
-    auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, false> (&pub_consumer);
-    NPUTask *tasks[4] = {
-        (NPUTask*) &task_producer0, (NPUTask*) &task_producer1,
-        (NPUTask*) &task_consumer0, (NPUTask*) &task_consumer1
-    };
+        // 创建四个 Task
+        auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, false> (&pub_producer);
+        auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, false> (&pub_producer);
+        auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, false> (&pub_consumer);
+        auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, false> (&pub_consumer);
+        NPUTask *tasks[4] = {
+            (NPUTask*) &task_producer0, (NPUTask*) &task_producer1,
+            (NPUTask*) &task_consumer0, (NPUTask*) &task_consumer1
+        };
+        // 创建一个调度器
+        auto sched = NPUScheduler(4, tasks);
 
-    // 创建一个调度器
-    auto sched = NPUScheduler(4, tasks);
+        for(auto t : tasks) {
+            t->sched = &sched;
+        }
 
-    for(auto t : tasks) {
-        t->sched = &sched;
+        // 开始执行 kernel
+        sched.scheduler();
+    } else { // M >= N
+        const uint64_t tileM = 256, tileN = 128, tileK = 512;
+        NPUURAM buf[6] = {
+            NPUURAM(0x0ul),             // 0    - 128K
+            NPUURAM(tileM * tileK * 2), // 128K - 256K
+            NPUURAM(tileM * tileK * 2 * 2),                     // 256K - 384K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2), // 384K - 512K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),                    // 512K - 576K
+            NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4) // 576K - 640K
+        };
+        // 创建两个 PubState，分别表示 Producer 以及 Consumer
+        auto pub_producer = MatmulPubState<tileM, tileN, tileK, true>(
+            M, N, K, aBase, bBase, cBase, aStride, bStride, cStride,
+            &buf[0], &buf[2], &buf[4]
+        );
+        auto pub_consumer = MatmulPubState<tileM, tileN, tileK, true>(pub_producer);
+
+        // 创建四个 Task
+        auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, true> (&pub_producer);
+        auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, true> (&pub_producer);
+        auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, true> (&pub_consumer);
+        auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, true> (&pub_consumer);
+        NPUTask *tasks[4] = {
+            (NPUTask*) &task_producer0, (NPUTask*) &task_producer1,
+            (NPUTask*) &task_consumer0, (NPUTask*) &task_consumer1
+        };
+        // 创建一个调度器
+        auto sched = NPUScheduler(4, tasks);
+
+        for(auto t : tasks) {
+            t->sched = &sched;
+        }
+
+        // 开始执行 kernel
+        sched.scheduler();
     }
-
-    // 开始执行 kernel
-    sched.scheduler();
 
     return 0;
 } 

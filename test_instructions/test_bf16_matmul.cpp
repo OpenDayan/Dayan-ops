@@ -12,7 +12,7 @@
 
 extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 
-const long M = 256, N = 1536, K = 1536;
+const long M = 1536, N = 256, K = 1536;
 uint16_t A[M][K];
 uint16_t B[N][K];
 float C[M][N];
@@ -54,23 +54,42 @@ int main(int argc, char** argv) {
 
   std::cout << "Kernel set loaded successfully." << std::endl;
 
-  // 初始化计算用矩阵 A = m, n == m * 128 + n
-  for(int m = 0 ; m < M; m ++) {
-    for(int k = 0 ; k < K; k++) {
-      // A[m][k] = FP32ToBF16((((double)rand() / (double)RAND_MAX) - 0.5f) * 8.f);
-      // A[m][k] = FP32ToBF16((float)(m * K + k));
-      A[m][k] = (m * K + k) & 0x7dff;
-      if(A[m][k] < 0x0080) {
-        A[m][k] = 0x0080;
+  if(N == K) {
+    // 初始化计算用矩阵 A = m, n == m * 128 + n
+    for(int m = 0 ; m < M; m ++) {
+      for(int k = 0 ; k < K; k++) {
+        // A[m][k] = FP32ToBF16((((double)rand() / (double)RAND_MAX) - 0.5f) * 8.f);
+        // A[m][k] = FP32ToBF16((float)(m * K + k));
+        A[m][k] = (m * K + k) & 0x7dff;
+        if(A[m][k] < 0x0080) {
+          A[m][k] = 0x0080;
+        }
       }
     }
-  }
 
-  // 初始化计算用矩阵 B = I
-  for(int n = 0 ; n < N; n ++) {
-    for(int k = 0 ; k < K; k++) {
-      if(n == k) B[n][k] = FP32ToBF16(1.f);
-      else B[n][k] = FP32ToBF16(0.f);
+    // 初始化计算用矩阵 B = I
+    for(int n = 0 ; n < N; n ++) {
+      for(int k = 0 ; k < K; k++) {
+        if(n == k) B[n][k] = FP32ToBF16(1.f);
+        else B[n][k] = FP32ToBF16(0.f);
+      }
+    }
+  } else if(M == K) {  // 初始化计算用矩阵 A = m, n == m * 128 + n
+    for(int n = 0 ; n < N; n ++) {
+      for(int k = 0 ; k < K; k++) {
+        B[n][k] = (n * K + k) & 0x7dff;
+        if(B[n][k] < 0x0080) {
+          B[n][k] = 0x0080;
+        }
+      }
+    }
+
+    // 初始化计算用矩阵 B = I
+    for(int m = 0 ; m < M; m ++) {
+      for(int k = 0 ; k < K; k++) {
+        if(m == k) A[m][k] = FP32ToBF16(1.f);
+        else A[m][k] = FP32ToBF16(0.f);
+      }
     }
   }
 
@@ -108,18 +127,35 @@ int main(int argc, char** argv) {
   FILE* r = fopen("ref.rpt", "w");
   FILE* f = fopen("output.rpt", "w");
 
-  for(int m = 0; m < M; m++) {
-    for(int n = 0; n < N; n++) {
-      auto diff = FP32ToBF16(C[m][n]) - A[m][n];
-      if(diff) {
-        std::cout << std::hex << "Diff @" << m << ", " << n << ": ref=" << A[m][n] << " dut=" << FP32ToBF16(C[m][n]) << std::endl;
-        // return -1;
+  if(N == K) {
+    for(int m = 0; m < M; m++) {
+      for(int n = 0; n < N; n++) {
+        auto diff = FP32ToBF16(C[m][n]) - A[m][n];
+        if(diff) {
+          std::cout << std::hex << "Diff @" << m << ", " << n << ": ref=" << A[m][n] << " dut=" << FP32ToBF16(C[m][n]) << std::endl;
+          // return -1;
+        }
+        fprintf(r, "%04x ", A[m][n]);
+        fprintf(f, "%04x ", FP32ToBF16(C[m][n]));
       }
-      fprintf(r, "%04x ", A[m][n]);
-      fprintf(f, "%04x ", FP32ToBF16(C[m][n]));
+      fprintf(r, "\n");
+      fprintf(f, "\n");
     }
-    fprintf(r, "\n");
-    fprintf(f, "\n");
+  } else if(M == K) {
+    for(int n = 0; n < N; n++) {
+      for(int m = 0; m < M; m++) {
+        auto diff = FP32ToBF16(C[m][n]) - B[n][m];
+        if(diff) {
+          std::cout << std::hex << "Diff @" << m << ", " << n << ": ref=" <<  B[n][m] << " dut=" << FP32ToBF16(C[m][n]) << std::endl;
+        }
+        fprintf(r, "%04x ", B[n][m]);
+        fprintf(f, "%04x ", FP32ToBF16(C[m][n]));
+      }
+      fprintf(r, "\n");
+      fprintf(f, "\n");
+    }
+  } else {
+    printf("Cannot Compare Result.\n");
   }
 
   npu_runtime_deinit(&runtime);
