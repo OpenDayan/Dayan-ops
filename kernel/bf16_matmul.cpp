@@ -16,6 +16,12 @@
 
 // Producer-Consumer 编程模型
 
+namespace {
+const int LSU_A = 0;
+const int LSU_B = 1;
+const int LSU_CLD = 2;
+const int LSU_CST = 3;
+
 // 全局生产者任务板
 template<long tileM, long tileN, long tileK, bool ZT>
 class MatmulPubState {
@@ -39,7 +45,7 @@ public:
         aBase(aBase), bBase(bBase), cBase(cBase),
         aStride(aStride), bStride(bStride), cStride(cStride),
         a_buf(a_buf), b_buf(b_buf), c_buf(c_buf),
-        cM(M / tileM), cN(N / tileN), cK(K / tileK) {};
+        cM((M + tileM - 1) / tileM), cN((N + tileN - 1) / tileN), cK((K + tileK - 1) / tileK) {};
     MatmulPubState(const MatmulPubState& other)
         : M(other.M), N(other.N), K(other.K),
           aBase(other.aBase), bBase(other.bBase), cBase(other.cBase),
@@ -120,11 +126,11 @@ private:
         // Note: k and tileK should be aligned to 64-Bytes
         // 暂不考虑 K pad 问题。
         // A Configuration
-        set_lsu_matrix<GROUPBASE + 0>(aCkSum, tileM, tileK * 2, s->aStride, tileK * 2);
+        set_lsu_matrix<GROUPBASE + LSU_A>(aCkSum, tileM, tileK * 2, s->aStride, tileK * 2);
         // B Configuration
-        set_lsu_matrix<GROUPBASE + 1>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
+        set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
         // C Configuration
-        set_lsu_matrix<GROUPBASE + 2>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
+        set_lsu_matrix<GROUPBASE + LSU_CLD>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
         return;
     }
     // 局部变量
@@ -164,22 +170,31 @@ public:
                     do { NPUWaitFree(a); } while(a->allocate(sched, 1, s->cN));
                 }
             }
+            // 注意，局部变量在下一个 bar 到来时就失效
+            long kLeft = s->K - tileK * k;
+            long mLeft = s->M - tileM * m;
+            long nLeft = s->N - tileN * n;
             if(ZT) {
                 if(m == 0) {
+                    // 更新 n 和 k
                     tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
                 }
                 if((n % 2) == 0) {
+                    // 更新 m 和 k
                     tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 + m * tileM * s->aStride);
                 }
             }
             else {
                 if(n == 0) {
+                    // 仅遍历一次，因此仅 m 为当前最后一行时检查
                     tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 + m * tileM * s->aStride);
                 }
                 if((m % 2) == 0) {
+                    // 多次遍历，因此每次 n 为第一列或者最后一列时检查
                     tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
                 }
             }
+            // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
             tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram, s->cBase + n * tileN * 4 + m * tileM * s->cStride);
             NPUDMABar(0);
             if(ZT) {
@@ -217,7 +232,7 @@ private:
     MatmulPubState<tileM, tileN, tileK, ZT> *s;
     inline void config_tcsr() {
         // C Configuration
-        set_lsu_matrix<GROUPBASE + 3>(cCkSum, tileM, tileN * 4, tileN * 4, s->cStride);
+        set_lsu_matrix<GROUPBASE + LSU_CST>(cCkSum, tileM, tileN * 4, tileN * 4, s->cStride);
         // Matmul Configuration
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(tileM - 1);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(tileN - 1);
@@ -256,6 +271,7 @@ public:
                 m * tileM, n * tileN, m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
 
+            // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
             NPUMatBar(0);
             // 释放 a b
             a->consume(sched);
@@ -273,6 +289,7 @@ public:
         return ((MatmulConsumerTask*)p)->execute(err);
     }
 };
+}
 
 __device__ long matmul_bf16_a_bt_c(
     uint64_t M, uint64_t N, uint64_t K,
