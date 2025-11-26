@@ -12,7 +12,7 @@
 
 extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 
-const long M = 128, N = 512, K = 512;
+const long M = 256, N = 1536, K = 1536;
 uint16_t A[M][K];
 uint16_t B[N][K];
 float C[M][N];
@@ -59,7 +59,10 @@ int main(int argc, char** argv) {
     for(int k = 0 ; k < K; k++) {
       // A[m][k] = FP32ToBF16((((double)rand() / (double)RAND_MAX) - 0.5f) * 8.f);
       // A[m][k] = FP32ToBF16((float)(m * K + k));
-      A[m][k] = m * K + k;
+      A[m][k] = (m * K + k) & 0x7dff;
+      if(A[m][k] < 0x0080) {
+        A[m][k] = 0x0080;
+      }
     }
   }
 

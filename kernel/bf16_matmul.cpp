@@ -279,7 +279,7 @@ __device__ long matmul_bf16_a_bt_c(
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
     uint64_t aStride, uint64_t bStride, uint64_t cStride
 ) {
-    const uint64_t tileM = 128, tileN = 128, tileK = 512;
+    const uint64_t tileM = 256, tileN = 128, tileK = 512;
     NPUURAM buf[6] = {
         NPUURAM(0x0ul),             // 0    - 128K
         NPUURAM(tileM * tileK * 2), // 128K - 256K
