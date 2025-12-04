@@ -83,9 +83,17 @@ distclean: clean
 # 帮助信息
 help:
 	@echo "Available targets:"
-	@echo "  all       - Build the project (default)"
-	@echo "  clean     - Remove object files and temporary files"
-	@echo "  distclean - Remove all generated files"
-	@echo "  objdump   - Dump ELF to assembly"
-	@echo "  pack      - Generate packed C file from ELF"
-	@echo "  help      - Show this help message"
+	@echo "  all          - Build the project (default)"
+	@echo "  clean        - Remove object files and temporary files"
+	@echo "  distclean    - Remove all generated files"
+	@echo "  objdump      - Dump ELF to assembly"
+	@echo "  pack         - Generate packed C file from ELF"
+	@echo "  help         - Show this help message"
+	@echo "  check-format - Check C/CPP file format"
+	@echo "  fix-format   - Fix   C/CPP file format"
+
+check-format: clean
+	tools/check-format
+
+fix-format: clean
+	tools/check-format -f
