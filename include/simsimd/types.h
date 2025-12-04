@@ -25,7 +25,8 @@
 //
 // - `SIMSIMD_PUBLIC` is used for functions that are part of the public API.
 // - `SIMSIMD_INTERNAL` is used for internal helper functions with unstable APIs.
-// - `SIMSIMD_DYNAMIC` is used for functions that are part of the public API, but are dispatched at runtime.
+// - `SIMSIMD_DYNAMIC` is used for functions that are part of the public API, but are dispatched at
+// runtime.
 //
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define SIMSIMD_DYNAMIC __declspec(dllexport)
@@ -173,8 +174,8 @@
 // On Arm machines you may want to check for other flags:
 //      gcc-12 -march=native -dM -E - < /dev/null | egrep "NEON|SVE|FP16|FMA" | sort
 #if !defined(SIMSIMD_TARGET_SKYLAKE) || (SIMSIMD_TARGET_SKYLAKE && !_SIMSIMD_TARGET_X86)
-#if defined(__AVX512F__) && defined(__AVX512CD__) && defined(__AVX512VL__) && defined(__AVX512DQ__) && \
-    defined(__AVX512BW__)
+#if defined(__AVX512F__) && defined(__AVX512CD__) && defined(__AVX512VL__) &&                      \
+    defined(__AVX512DQ__) && defined(__AVX512BW__)
 #define SIMSIMD_TARGET_SKYLAKE 1
 #else
 #undef SIMSIMD_TARGET_SKYLAKE
@@ -182,8 +183,8 @@
 #endif
 #endif // !defined(SIMSIMD_TARGET_SKYLAKE) || ...
 #if !defined(SIMSIMD_TARGET_ICE) || (SIMSIMD_TARGET_ICE && !_SIMSIMD_TARGET_X86)
-#if defined(__AVX512VNNI__) && defined(__AVX512IFMA__) && defined(__AVX512BITALG__) && defined(__AVX512VBMI2__) && \
-    defined(__AVX512VPOPCNTDQ__)
+#if defined(__AVX512VNNI__) && defined(__AVX512IFMA__) && defined(__AVX512BITALG__) &&             \
+    defined(__AVX512VBMI2__) && defined(__AVX512VPOPCNTDQ__)
 #define SIMSIMD_TARGET_ICE 1
 #else
 #undef SIMSIMD_TARGET_ICE
@@ -235,8 +236,8 @@
 #include <arm_sve.h>
 #endif
 
-#if SIMSIMD_TARGET_HASWELL || SIMSIMD_TARGET_SKYLAKE || SIMSIMD_TARGET_ICE || SIMSIMD_TARGET_GENOA || \
-    SIMSIMD_TARGET_SAPPHIRE || SIMSIMD_TARGET_TURIN
+#if SIMSIMD_TARGET_HASWELL || SIMSIMD_TARGET_SKYLAKE || SIMSIMD_TARGET_ICE ||                      \
+    SIMSIMD_TARGET_GENOA || SIMSIMD_TARGET_SAPPHIRE || SIMSIMD_TARGET_TURIN
 #include <immintrin.h>
 #endif
 
@@ -294,12 +295,12 @@ typedef simsimd_f64_t simsimd_distance_t;
  *  - Default: `unsigned short`.
  */
 #if !defined(SIMSIMD_NATIVE_F16) || SIMSIMD_NATIVE_F16
-#if (defined(__GNUC__) || defined(__clang__)) && (defined(__ARM_ARCH) || defined(__aarch64__)) && \
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__ARM_ARCH) || defined(__aarch64__)) &&  \
     (defined(__ARM_FP16_FORMAT_IEEE))
 #undef SIMSIMD_NATIVE_F16
 #define SIMSIMD_NATIVE_F16 1
 typedef __fp16 simsimd_f16_t;
-#elif ((defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
+#elif ((defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) &&  \
        (defined(__AVX512FP16__)))
 typedef _Float16 simsimd_f16_t;
 #undef SIMSIMD_NATIVE_F16
@@ -342,12 +343,12 @@ typedef unsigned short simsimd_f16_t;
  *  https://forums.developer.apple.com/forums/thread/726201
  *  https://www.phoronix.com/news/GCC-LLVM-bf16-BFloat16-Type
  */
-#if (defined(__GNUC__) || defined(__clang__)) && (defined(__ARM_ARCH) || defined(__aarch64__)) && \
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__ARM_ARCH) || defined(__aarch64__)) &&  \
     (defined(__ARM_BF16_FORMAT_ALTERNATIVE))
 #undef SIMSIMD_NATIVE_BF16
 #define SIMSIMD_NATIVE_BF16 1
 typedef __bf16 simsimd_bf16_t;
-#elif ((defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) && \
+#elif ((defined(__GNUC__) || defined(__clang__)) && (defined(__x86_64__) || defined(__i386__)) &&  \
        (defined(__AVX512BF16__)))
 typedef __bfloat16 simsimd_bf16_t;
 #undef SIMSIMD_NATIVE_BF16
@@ -436,19 +437,21 @@ SIMSIMD_STATIC_ASSERT(sizeof(simsimd_bf16_t) == 2, simsimd_bf16_t_must_be_2_byte
 #endif
 
 #if !defined(SIMSIMD_F32_TO_I8)
-#define SIMSIMD_F32_TO_I8(x, y) \
-    *(y) = (simsimd_i8_t)((x) > 127 ? 127 : ((x) < -128 ? -128 : (int)((x) + ((x) < 0 ? -0.5f : 0.5f))))
+#define SIMSIMD_F32_TO_I8(x, y)                                                                    \
+    *(y) = (simsimd_i8_t)((x) > 127 ? 127                                                          \
+                                    : ((x) < -128 ? -128 : (int)((x) + ((x) < 0 ? -0.5f : 0.5f))))
 #endif
 #if !defined(SIMSIMD_F32_TO_U8)
-#define SIMSIMD_F32_TO_U8(x, y) \
+#define SIMSIMD_F32_TO_U8(x, y)                                                                    \
     *(y) = (simsimd_u8_t)((x) > 255 ? 255 : ((x) < 0 ? 0 : (int)((x) + ((x) < 0 ? -0.5f : 0.5f))))
 #endif
 #if !defined(SIMSIMD_F64_TO_I8)
-#define SIMSIMD_F64_TO_I8(x, y) \
-    *(y) = (simsimd_i8_t)((x) > 127 ? 127 : ((x) < -128 ? -128 : (int)((x) + ((x) < 0 ? -0.5 : 0.5))))
+#define SIMSIMD_F64_TO_I8(x, y)                                                                    \
+    *(y) = (simsimd_i8_t)((x) > 127 ? 127                                                          \
+                                    : ((x) < -128 ? -128 : (int)((x) + ((x) < 0 ? -0.5 : 0.5))))
 #endif
 #if !defined(SIMSIMD_F64_TO_U8)
-#define SIMSIMD_F64_TO_U8(x, y) \
+#define SIMSIMD_F64_TO_U8(x, y)                                                                    \
     *(y) = (simsimd_u8_t)((x) > 255 ? 255 : ((x) < 0 ? 0 : (int)((x) + ((x) < 0 ? -0.5 : 0.5))))
 #endif
 
@@ -458,25 +461,29 @@ typedef union {
     float f;
 } simsimd_f32i32_t;
 
-/** @brief  Convenience type addressing the real and imaginary parts of a half-precision complex number. */
+/** @brief  Convenience type addressing the real and imaginary parts of a half-precision complex
+ * number. */
 typedef struct {
     simsimd_f16_t real;
     simsimd_f16_t imag;
 } simsimd_f16c_t;
 
-/** @brief  Convenience type addressing the real and imaginary parts of a half-precision brain-float complex number. */
+/** @brief  Convenience type addressing the real and imaginary parts of a half-precision brain-float
+ * complex number. */
 typedef struct {
     simsimd_bf16_t real;
     simsimd_bf16_t imag;
 } simsimd_bf16c_t;
 
-/** @brief  Convenience type addressing the real and imaginary parts of a single-precision complex number. */
+/** @brief  Convenience type addressing the real and imaginary parts of a single-precision complex
+ * number. */
 typedef struct {
     simsimd_f32_t real;
     simsimd_f32_t imag;
 } simsimd_f32c_t;
 
-/** @brief  Convenience type addressing the real and imaginary parts of a double-precision complex number. */
+/** @brief  Convenience type addressing the real and imaginary parts of a double-precision complex
+ * number. */
 typedef struct {
     simsimd_f64_t real;
     simsimd_f64_t imag;
@@ -486,11 +493,11 @@ typedef struct {
  *  @brief  Computes `1/sqrt(x)` using the trick from Quake 3,
  *          replacing the magic numbers with the ones suggested by Jan Kadlec.
  *
- *  Subsequent additions by hardware manufacturers have made this algorithm redundant for the most part.
- *  For example, on x86, Intel introduced the SSE instruction `rsqrtss` in 1999. In a 2009 benchmark on
- *  the Intel Core 2, this instruction took 0.85ns per float compared to 3.54ns for the fast inverse
- *  square root algorithm, and had less error. Carmack's Magic Number `rsqrt` had an average error
- *  of 0.0990%, while SSE `rsqrtss` had 0.0094%, a 10x improvement.
+ *  Subsequent additions by hardware manufacturers have made this algorithm redundant for the most
+ * part. For example, on x86, Intel introduced the SSE instruction `rsqrtss` in 1999. In a 2009
+ * benchmark on the Intel Core 2, this instruction took 0.85ns per float compared to 3.54ns for the
+ * fast inverse square root algorithm, and had less error. Carmack's Magic Number `rsqrt` had an
+ * average error of 0.0990%, while SSE `rsqrtss` had 0.0094%, a 10x improvement.
  *
  *  https://web.archive.org/web/20210208132927/http://assemblyrequired.crashworks.org/timing-square-root/
  *  https://stackoverflow.com/a/41460625/2766161
@@ -547,7 +554,8 @@ SIMSIMD_INTERNAL simsimd_f32_t simsimd_f16_to_f32(simsimd_f16_t const *x_ptr) {
     unsigned int v = (mantissa_conv.i) >> 23;
     simsimd_f32i32_t conv;
     conv.i = (x & 0x8000) << 16 | (exponent != 0) * ((exponent + 112) << 23 | mantissa) |
-             ((exponent == 0) & (mantissa != 0)) * ((v - 37) << 23 | ((mantissa << (150 - v)) & 0x007FE000));
+             ((exponent == 0) & (mantissa != 0)) *
+                 ((v - 37) << 23 | ((mantissa << (150 - v)) & 0x007FE000));
     return conv.f;
 }
 
@@ -566,7 +574,8 @@ SIMSIMD_INTERNAL void simsimd_f32_to_f16(simsimd_f32_t x, simsimd_f16_t *result_
     unsigned int b = conv.i + 0x00001000;
     unsigned int e = (b & 0x7F800000) >> 23;
     unsigned int m = b & 0x007FFFFF;
-    unsigned short result = ((b & 0x80000000) >> 16) | (e > 112) * ((((e - 112) << 10) & 0x7C00) | (m >> 13)) |
+    unsigned short result = ((b & 0x80000000) >> 16) |
+                            (e > 112) * ((((e - 112) << 10) & 0x7C00) | (m >> 13)) |
                             ((e < 113) & (e > 101)) * ((((0x007FF000 + m) >> (125 - e)) + 1) >> 1) |
                             ((e > 143) * 0x7FFF);
     *(unsigned short *)result_ptr = result;
@@ -602,12 +611,24 @@ SIMSIMD_INTERNAL void simsimd_f32_to_bf16(simsimd_f32_t x, simsimd_bf16_t *resul
     *(unsigned short *)result_ptr = (unsigned short)conv.i;
 }
 
-SIMSIMD_INTERNAL simsimd_u32_t simsimd_u32_rol(simsimd_u32_t x, int n) { return (x << n) | (x >> (32 - n)); }
-SIMSIMD_INTERNAL simsimd_u16_t simsimd_u16_rol(simsimd_u16_t x, int n) { return (x << n) | (x >> (16 - n)); }
-SIMSIMD_INTERNAL simsimd_u8_t simsimd_u8_rol(simsimd_u8_t x, int n) { return (x << n) | (x >> (8 - n)); }
-SIMSIMD_INTERNAL simsimd_u32_t simsimd_u32_ror(simsimd_u32_t x, int n) { return (x >> n) | (x << (32 - n)); }
-SIMSIMD_INTERNAL simsimd_u16_t simsimd_u16_ror(simsimd_u16_t x, int n) { return (x >> n) | (x << (16 - n)); }
-SIMSIMD_INTERNAL simsimd_u8_t simsimd_u8_ror(simsimd_u8_t x, int n) { return (x >> n) | (x << (8 - n)); }
+SIMSIMD_INTERNAL simsimd_u32_t simsimd_u32_rol(simsimd_u32_t x, int n) {
+    return (x << n) | (x >> (32 - n));
+}
+SIMSIMD_INTERNAL simsimd_u16_t simsimd_u16_rol(simsimd_u16_t x, int n) {
+    return (x << n) | (x >> (16 - n));
+}
+SIMSIMD_INTERNAL simsimd_u8_t simsimd_u8_rol(simsimd_u8_t x, int n) {
+    return (x << n) | (x >> (8 - n));
+}
+SIMSIMD_INTERNAL simsimd_u32_t simsimd_u32_ror(simsimd_u32_t x, int n) {
+    return (x >> n) | (x << (32 - n));
+}
+SIMSIMD_INTERNAL simsimd_u16_t simsimd_u16_ror(simsimd_u16_t x, int n) {
+    return (x >> n) | (x << (16 - n));
+}
+SIMSIMD_INTERNAL simsimd_u8_t simsimd_u8_ror(simsimd_u8_t x, int n) {
+    return (x >> n) | (x << (8 - n));
+}
 
 #ifdef __cplusplus
 } // extern "C"

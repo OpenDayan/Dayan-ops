@@ -1,20 +1,20 @@
 // silu_f32_test.cpp
-#include <cstddef>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <stdexcept>
-#include <iomanip>
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <NPURuntime.h>
 
 #include "common.hpp"
 
-
-void dumb_silu(void) {}
+void dumb_silu(void) {
+}
 
 // SiLU (Sigmoid Linear Unit) a.k.a. Swish function
 // SiLU(x) = x * sigmoid(x)
@@ -25,13 +25,10 @@ float silu(float x) {
 
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
-int host_silu_f32(
-    void *x, void *y, int b, int h, int n, int m)
-{
+int host_silu_f32(void *x, void *y, int b, int h, int n, int m) {
     printf("\nb:%d, h:%d, n:%d, m:%d\n", b, h, n, m);
     static struct NPUKernelDesc *silu_f32_desc = NULL;
-    if (silu_f32_desc == NULL)
-    {
+    if (silu_f32_desc == NULL) {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
         err = npu_runtime_init(&runtime);
@@ -73,8 +70,8 @@ int host_silu_f32(
 
     // Launch kernel
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, silu_f32_desc, &kernel_ret, 7,
-                             x_dev, y_dev, (uint64_t)b, (uint64_t)h, (uint64_t)n, (uint64_t)m);
+    npu_runtime_kernel_start(&runtime, silu_f32_desc, &kernel_ret, 7, x_dev, y_dev, (uint64_t)b,
+                             (uint64_t)h, (uint64_t)n, (uint64_t)m);
 
     // Copy result from device to host
     ret = npu_memcpy_from_dev(&runtime.dev_state, y, y_dev, b * h * n * m * sizeof(float)); // y
@@ -84,20 +81,18 @@ int host_silu_f32(
     return kernel_ret;
 }
 
-void kernel_silu(
-    std::vector<float>& a, std::vector<float>& res,
-    TensorParams& psrc0, TensorParams & pdst) {
+void kernel_silu(std::vector<float> &a, std::vector<float> &res, TensorParams &psrc0,
+                 TensorParams &pdst) {
     int b = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
     int m = psrc0.ne[0];
 
-    host_silu_f32(
-        a.data(), res.data(),
-        b, h, n, m);
+    host_silu_f32(a.data(), res.data(), b, h, n, m);
 }
 
-int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc0, TensorParams & pdst) {
+int test_silu(std::string src0_trace, std::string dst_trace, TensorParams &psrc0,
+              TensorParams &pdst) {
     try {
         // std::cout << "Opening file: " << src0_trace << "..." << std::endl;
         std::vector<float> data_a = readF32FromFile(src0_trace);
@@ -108,7 +103,8 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
         // std::cout << "Get " << data_ref.size() << " float data" << std::endl;
 
         if (data_a.size() != data_ref.size()) {
-            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace << std::endl;
+            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace
+                      << std::endl;
             return 1;
         }
 
@@ -141,10 +137,14 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
             if (std::abs(result_data[i] - data_ref[i]) > epsilon) {
                 std::cerr << std::fixed << std::setprecision(8);
                 std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                std::cerr << "  - input1[ ... ][" << i % pdst.ne[0] << "]:    " << data_a[i] << std::endl;
-                std::cerr << "  - result[ ... ][" << i % pdst.ne[0] << "]:    " << result_data[i] << std::endl;
-                std::cerr << "  - ref[" << i / pdst.ne[0] << "][" << i % pdst.ne[0] << "]:    " << data_ref[i] << std::endl;
-                std::cerr << "  - result - ref:        " << std::abs(result_data[i] - data_ref[i]) << std::endl;
+                std::cerr << "  - input1[ ... ][" << i % pdst.ne[0] << "]:    " << data_a[i]
+                          << std::endl;
+                std::cerr << "  - result[ ... ][" << i % pdst.ne[0] << "]:    " << result_data[i]
+                          << std::endl;
+                std::cerr << "  - ref[" << i / pdst.ne[0] << "][" << i % pdst.ne[0]
+                          << "]:    " << data_ref[i] << std::endl;
+                std::cerr << "  - result - ref:        " << std::abs(result_data[i] - data_ref[i])
+                          << std::endl;
                 all_match = false;
                 break;
             }
@@ -156,7 +156,7 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
         } else
             return 1;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
@@ -164,8 +164,8 @@ int test_silu(std::string src0_trace, std::string dst_trace, TensorParams & psrc
     return 0;
 }
 
-int main(int argc, char * argv[]) {
-    if(argc < 3) {
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
         std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
     }

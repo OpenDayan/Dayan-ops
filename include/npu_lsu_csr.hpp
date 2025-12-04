@@ -2,9 +2,9 @@
 
 enum LSU_TCSR {
     LSU_BLOCK = 0,
-    LSU_DIM0  = 1,
-    LSU_DIM1  = 2,
-    LSU_DIM2  = 3,
+    LSU_DIM0 = 1,
+    LSU_DIM1 = 2,
+    LSU_DIM2 = 3,
     LSU_INBLOCKSTRIDE = 4,
     LSU_INDIM0STRIDE = 5,
     LSU_INDIM1STRIDE = 6,
@@ -22,10 +22,10 @@ enum LSU_TCSR {
     LSU_CHECKSUM = 31
 };
 
-#define LSU_GROUPSZ  (32)
+#define LSU_GROUPSZ (32)
 
 // 便捷宏，配置 LSU 矩阵为指定尺寸，注意，minor 应该对齐到 64
-template<long GROUPBASE>
+template <long GROUPBASE>
 void set_lsu_matrix(long &cksum, long dim1, long dim0, long inStride, long outStride) {
     // A Configuration
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);

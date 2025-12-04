@@ -27,5 +27,5 @@ enum VEC_TCSR {
     VEC_CKSUM = 31
 };
 
-#define VEC_GROUPSZ  (32)
+#define VEC_GROUPSZ (32)
 #define VEC_GROUPSEL (288)

@@ -4,10 +4,10 @@
 #ifndef __ASSEMBLER__
 
 struct Trapframe {
-	/* Saved main processor registers. */
-	unsigned long regs[32];
+    /* Saved main processor registers. */
+    unsigned long regs[32];
 
-	/* Saved special registers. */
+    /* Saved special registers. */
     long mepc;
     long mcause;
     long mstatus;
@@ -16,16 +16,16 @@ struct Trapframe {
 #endif
 
 #define TF_REG0 0
-#define TF_REG1  ((TF_REG0 ) + 8)
-#define TF_REG2  ((TF_REG1 ) + 8)
-#define TF_REG3  ((TF_REG2 ) + 8)
-#define TF_REG4  ((TF_REG3 ) + 8)
-#define TF_REG5  ((TF_REG4 ) + 8)
-#define TF_REG6  ((TF_REG5 ) + 8)
-#define TF_REG7  ((TF_REG6 ) + 8)
-#define TF_REG8  ((TF_REG7 ) + 8)
-#define TF_REG9  ((TF_REG8 ) + 8)
-#define TF_REG10 ((TF_REG9 ) + 8)
+#define TF_REG1 ((TF_REG0) + 8)
+#define TF_REG2 ((TF_REG1) + 8)
+#define TF_REG3 ((TF_REG2) + 8)
+#define TF_REG4 ((TF_REG3) + 8)
+#define TF_REG5 ((TF_REG4) + 8)
+#define TF_REG6 ((TF_REG5) + 8)
+#define TF_REG7 ((TF_REG6) + 8)
+#define TF_REG8 ((TF_REG7) + 8)
+#define TF_REG9 ((TF_REG8) + 8)
+#define TF_REG10 ((TF_REG9) + 8)
 #define TF_REG11 ((TF_REG10) + 8)
 #define TF_REG12 ((TF_REG11) + 8)
 #define TF_REG13 ((TF_REG12) + 8)
@@ -48,9 +48,9 @@ struct Trapframe {
 #define TF_REG30 ((TF_REG29) + 8)
 #define TF_REG31 ((TF_REG30) + 8)
 
-#define TF_MEPC    ((TF_REG31  ) + 8)
-#define TF_MCAUSE  ((TF_MEPC   ) + 8)
-#define TF_MSTATUS ((TF_MCAUSE ) + 8)
-#define TF_SIZE    ((TF_MSTATUS) + 8)
+#define TF_MEPC ((TF_REG31) + 8)
+#define TF_MCAUSE ((TF_MEPC) + 8)
+#define TF_MSTATUS ((TF_MCAUSE) + 8)
+#define TF_SIZE ((TF_MSTATUS) + 8)
 
 #endif

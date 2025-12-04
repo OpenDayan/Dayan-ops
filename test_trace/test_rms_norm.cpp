@@ -1,19 +1,19 @@
-#include <cstddef>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <stdexcept>
-#include <iomanip>
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <NPURuntime.h>
 
 #include "common.hpp"
 
-void rms_norm(std::vector<float>& a, std::vector<float>& res,
-              TensorParams & psrc0, NormParams & pnorm) {
+void rms_norm(std::vector<float> &a, std::vector<float> &res, TensorParams &psrc0,
+              NormParams &pnorm) {
     int b = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
@@ -26,22 +26,18 @@ void rms_norm(std::vector<float>& a, std::vector<float>& res,
         float mean = (float)(sum / m);
         for (int j = 0; j < m; ++j) {
             res[i * m + j] = a[i * m + j];
-            res[i * m + j] *= 1.0f/std::sqrt(mean + (float)(pnorm.eps));
+            res[i * m + j] *= 1.0f / std::sqrt(mean + (float)(pnorm.eps));
         }
     }
 }
 
-
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
-int host_rms_norm_f32(
-    void *x, void *y, int b, int h, int n, int m, float epsilon)
-{
+int host_rms_norm_f32(void *x, void *y, int b, int h, int n, int m, float epsilon) {
     printf("\nb:%d, h:%d, n:%d, m:%d\n", b, h, n, m);
     printf("epsilon: %f\n", epsilon);
     static struct NPUKernelDesc *rms_norm_f32_desc = NULL;
-    if (rms_norm_f32_desc == NULL)
-    {
+    if (rms_norm_f32_desc == NULL) {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
         err = npu_runtime_init(&runtime);
@@ -82,8 +78,8 @@ int host_rms_norm_f32(
         printf("[ERROR] Failed to write y to device at 0x%lx: err=%ld\n", y_dev, ret);
     // Launch kernel
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, rms_norm_f32_desc, &kernel_ret, 7,
-                             x_dev, y_dev, (uint64_t)b, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)epsilon);
+    npu_runtime_kernel_start(&runtime, rms_norm_f32_desc, &kernel_ret, 7, x_dev, y_dev, (uint64_t)b,
+                             (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)epsilon);
 
     // Copy result from device to host
     ret = npu_memcpy_from_dev(&runtime.dev_state, y, y_dev, b * h * n * m * sizeof(float)); // y
@@ -93,31 +89,28 @@ int host_rms_norm_f32(
     return kernel_ret;
 }
 
-
-void kernel_rms_norm(
-    std::vector<float>& a, std::vector<float>& res,
-    TensorParams& psrc0, TensorParams & pdst, NormParams & pnorm) {
+void kernel_rms_norm(std::vector<float> &a, std::vector<float> &res, TensorParams &psrc0,
+                     TensorParams &pdst, NormParams &pnorm) {
     int b = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
     int m = psrc0.ne[0];
 
     float epsilon = (float)pnorm.eps;
-    
+
     // Call Kernel
-    host_rms_norm_f32(
-        a.data(), res.data(),
-        b, h, n, m, epsilon);
+    host_rms_norm_f32(a.data(), res.data(), b, h, n, m, epsilon);
 }
 
-int test_rms_norm(std::string src0_trace, std::string dst_trace,
-                  TensorParams & psrc0, TensorParams & pdst, NormParams & pnorm) {
+int test_rms_norm(std::string src0_trace, std::string dst_trace, TensorParams &psrc0,
+                  TensorParams &pdst, NormParams &pnorm) {
     try {
         std::vector<float> data_a = readF32FromFile(src0_trace);
         std::vector<float> data_ref = readF32FromFile(dst_trace);
 
         if (data_a.size() != data_ref.size()) {
-            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace << std::endl;
+            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace
+                      << std::endl;
             return 1;
         }
 
@@ -147,20 +140,24 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
             if (std::abs(result_data[i] - data_ref[i]) > epsilon) {
                 std::cerr << std::fixed << std::setprecision(8);
                 std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                
+
                 // Print first 9 mismatches
                 size_t mismatches_to_print = std::min((size_t)6, result_data.size());
                 std::cerr << "First " << mismatches_to_print << " mismatches:" << std::endl;
-                
+
                 for (size_t j = 0; j < mismatches_to_print; j++) {
                     std::cerr << "[" << j << "]:" << std::endl;
-                    std::cerr << "  - input1[" << j / psrc0.ne[0] << "][" << j % pdst.ne[0] << "]:    " << data_a[j] << std::endl;
-                    std::cerr << "  - result[" << j / pdst.ne[0] << "][" << j % pdst.ne[0] << "]:    " << result_data[j] << std::endl;
-                    std::cerr << "  - ref[" << j / pdst.ne[0] << "][" << j % pdst.ne[0] << "]:    " << data_ref[j] << std::endl;
-                    std::cerr << "  - result - ref:        " << std::abs(result_data[j] - data_ref[j]) << std::endl;
+                    std::cerr << "  - input1[" << j / psrc0.ne[0] << "][" << j % pdst.ne[0]
+                              << "]:    " << data_a[j] << std::endl;
+                    std::cerr << "  - result[" << j / pdst.ne[0] << "][" << j % pdst.ne[0]
+                              << "]:    " << result_data[j] << std::endl;
+                    std::cerr << "  - ref[" << j / pdst.ne[0] << "][" << j % pdst.ne[0]
+                              << "]:    " << data_ref[j] << std::endl;
+                    std::cerr << "  - result - ref:        "
+                              << std::abs(result_data[j] - data_ref[j]) << std::endl;
                     std::cerr << std::endl;
                 }
-                
+
                 all_match = false;
                 break;
             }
@@ -172,7 +169,7 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
         } else
             return 1;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
@@ -180,8 +177,8 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace,
     return 0;
 }
 
-int main(int argc, char * argv[]) {
-    if(argc < 3) {
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
         std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
     }

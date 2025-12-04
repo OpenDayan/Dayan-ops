@@ -10,21 +10,21 @@
 #endif
 
 __attribute__((always_inline)) static inline uint32_t float_as_u32(float i) {
-  union {
-    float f;
-    uint32_t i;
-  } t;
-  t.f = i;
-  return t.i;
+    union {
+        float f;
+        uint32_t i;
+    } t;
+    t.f = i;
+    return t.i;
 }
 
 __attribute__((always_inline)) static inline float u32_as_float(uint32_t i) {
-  union {
-    float f;
-    uint32_t i;
-  } t;
-  t.i = i;
-  return t.f;
+    union {
+        float f;
+        uint32_t i;
+    } t;
+    t.i = i;
+    return t.f;
 }
 
 #endif

@@ -1,22 +1,23 @@
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <stdexcept>
-#include <iomanip>
-#include <algorithm>
 #include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <NPURuntime.h>
 
 #include "common.hpp"
 
-void dumb_softmax(void) {}
+void dumb_softmax(void) {
+}
 
-void softmax(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res,
-             TensorParams& pa, TensorParams& pb, SoftmaxParams& psoft) {
+void softmax(std::vector<float> &a, std::vector<float> &b, std::vector<float> &res,
+             TensorParams &pa, TensorParams &pb, SoftmaxParams &psoft) {
     const int bs = pa.ne[3];
     const uint32_t h = pa.ne[2];
     const int n = pa.ne[1];
@@ -26,16 +27,18 @@ void softmax(std::vector<float>& a, std::vector<float>& b, std::vector<float>& r
     const float m0 = powf(2.0f, -(psoft.max_bias) / h_log2);
     const float m1 = powf(2.0f, -(psoft.max_bias / 2.0f) / h_log2);
 
-    for (int i = 0; i < bs; ++i) { // batch
+    for (int i = 0; i < bs; ++i) {          // batch
         for (int j = 0; j < (h * n); ++j) { // attn-heads * seq_len
-            const uint32_t hidx = (j / n); // current head idx
-            // const float slope = (max_bias > 0.0f) ? h < h_log2 ? powf(m0, h + 1) : powf(m1, 2*(h - h_log2) + 1) : 1.0f;
+            const uint32_t hidx = (j / n);  // current head idx
+            // const float slope = (max_bias > 0.0f) ? h < h_log2 ? powf(m0, h + 1) :
+            // powf(m1, 2*(h - h_log2) + 1) : 1.0f;
             const float slope = 1.0f; // only support max_bias == 0.0f in qwen2
 
             // scale
             // a[i][j][k][:] *= scale
             for (int p = 0; p < m; ++p) {
-                a[i * h * n * m + j * m + p] = double(a[i * h * n * m + j * m + p]) * double(psoft.scale);
+                a[i * h * n * m + j * m + p] =
+                    double(a[i * h * n * m + j * m + p]) * double(psoft.scale);
             }
 
             // mask
@@ -75,9 +78,9 @@ void softmax(std::vector<float>& a, std::vector<float>& b, std::vector<float>& r
 
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
-int host_softmax_f32_f32_f32(float* a, float* b, float* res, float scale,
-              int bs, int h, int n, int m) {
-    static struct NPUKernelDesc* softmax_f32_f32_f32 = NULL;
+int host_softmax_f32_f32_f32(float *a, float *b, float *res, float scale, int bs, int h, int n,
+                             int m) {
+    static struct NPUKernelDesc *softmax_f32_f32_f32 = NULL;
     if (softmax_f32_f32_f32 == NULL) {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
@@ -114,19 +117,21 @@ int host_softmax_f32_f32_f32(float* a, float* b, float* res, float scale,
     ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, bs * h * n * m * sizeof(float)); // b
     if (ret < 0)
         printf("[ERROR] Failed to write pos_sin to device at 0x%lx: err=%d\n", b_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, res_dev, res, bs * h * n * m * sizeof(float));   // res
+    ret = npu_memcpy_to_dev(&runtime.dev_state, res_dev, res,
+                            bs * h * n * m * sizeof(float)); // res
     if (ret < 0)
         printf("[ERROR] Failed to write res to device at 0x%lx: err=%d\n", res_dev, ret);
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, softmax_f32_f32_f32, &kernel_ret, 8,
-                             a_dev, b_dev, res_dev, float_as_u32(scale),
-                             (uint64_t)bs, (uint64_t)h, (uint64_t)n, (uint64_t)m);
-    npu_memcpy_from_dev(&runtime.dev_state, res, res_dev, bs * h * n * m * sizeof(float)); // res
+    npu_runtime_kernel_start(&runtime, softmax_f32_f32_f32, &kernel_ret, 8, a_dev, b_dev, res_dev,
+                             float_as_u32(scale), (uint64_t)bs, (uint64_t)h, (uint64_t)n,
+                             (uint64_t)m);
+    npu_memcpy_from_dev(&runtime.dev_state, res, res_dev,
+                        bs * h * n * m * sizeof(float)); // res
     return kernel_ret;
 }
 
-void kernel_softmax(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res,
-             TensorParams& pa, TensorParams& pb, SoftmaxParams& psoft) {
+void kernel_softmax(std::vector<float> &a, std::vector<float> &b, std::vector<float> &res,
+                    TensorParams &pa, TensorParams &pb, SoftmaxParams &psoft) {
     const int bs = pa.ne[3];
     const uint32_t h = pa.ne[2];
     const int n = pa.ne[1];
@@ -137,19 +142,21 @@ void kernel_softmax(std::vector<float>& a, std::vector<float>& b, std::vector<fl
     const float m1 = powf(2.0f, -(psoft.max_bias / 2.0f) / h_log2);
 
     const float scale = psoft.scale;
-    
+
     host_softmax_f32_f32_f32(a.data(), b.data(), res.data(), scale, bs, h, n, m);
 }
 
 int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst_trace,
-                 TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst, SoftmaxParams& psoft) {
+                 TensorParams &psrc0, TensorParams &psrc1, TensorParams &pdst,
+                 SoftmaxParams &psoft) {
     try {
         std::vector<float> data_a = readF32FromFile(src0_trace);
         std::vector<float> data_b = readF32FromFile(src1_trace);
         std::vector<float> data_ref = readF32FromFile(dst_trace);
 
         if (data_a.size() != data_ref.size()) {
-            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace << std::endl;
+            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace
+                      << std::endl;
             return 1;
         }
 
@@ -187,11 +194,12 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
                         if (std::abs(result - ref) > epsilon) {
                             std::cerr << std::fixed << std::setprecision(8);
                             std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                << result << std::endl;
-                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                << ref << std::endl;
-                            std::cerr << "  - result - ref:        " << std::abs(result - ref) << std::endl;
+                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << result << std::endl;
+                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << ref << std::endl;
+                            std::cerr << "  - result - ref:        " << std::abs(result - ref)
+                                      << std::endl;
                             all_match = false;
                             goto Done;
                         }
@@ -203,12 +211,10 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
             return 0;
-        }
-        else
+        } else
             return 1;
 
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
@@ -216,7 +222,7 @@ int test_softmax(std::string src0_trace, std::string src1_trace, std::string dst
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc < 3) {
         std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;

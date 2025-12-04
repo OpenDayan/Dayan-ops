@@ -1,12 +1,12 @@
-#include <cstddef>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <stdexcept>
-#include <iomanip>
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <NPURuntime.h>
 
@@ -15,8 +15,8 @@
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
 
-void mul(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res,
-         TensorParams& psrc0, TensorParams& psrc1) {
+void mul(std::vector<float> &a, std::vector<float> &b, std::vector<float> &res, TensorParams &psrc0,
+         TensorParams &psrc1) {
     int bs = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
@@ -31,45 +31,38 @@ void mul(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res,
                     int p1 = psrc1.ne[0] == 1 ? 0 : p;
                     res[i * h * n * m + j * n * m + k * m + p] =
                         a[i * h * n * m + j * n * m + k * m + p] *
-                        b[i1* h * n * m + j1 * n * m + k1 * m + p1];
+                        b[i1 * h * n * m + j1 * n * m + k1 * m + p1];
                 }
             }
         }
     }
 }
 
-int host_kernel_mul_fp32(
-    void *a, void *b, void *c,
-    int total_elements,
-    const TensorParams &psrc0, const TensorParams &psrc1)
-{
+int host_kernel_mul_fp32(void *a, void *b, void *c, int total_elements, const TensorParams &psrc0,
+                         const TensorParams &psrc1) {
     printf("\nTotal elements: %d\n", total_elements);
     printf("psrc0 shape: [%d, %d, %d, %d]\n", psrc0.ne[3], psrc0.ne[2], psrc0.ne[1], psrc0.ne[0]);
     printf("psrc1 shape: [%d, %d, %d, %d]\n", psrc1.ne[3], psrc1.ne[2], psrc1.ne[1], psrc1.ne[0]);
 
     static struct NPUKernelDesc *kernel_mul_fp32_desc = NULL;
-    if (kernel_mul_fp32_desc == NULL)
-    {
+    if (kernel_mul_fp32_desc == NULL) {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
         err = npu_runtime_init(&runtime);
-        if (err != NPU_SUCCESS)
-        {
+        if (err != NPU_SUCCESS) {
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
         err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
-        if (err != NPU_SUCCESS)
-        {
+        if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
             exit(-1);
         }
         printf("[INFO] Kernel set loaded successfully.\n");
         err = npu_runtime_get_kernel_desc(&runtime, "kernel_mul_fp32", &kernel_mul_fp32_desc);
-        if (err != NPU_SUCCESS)
-        {
+        if (err != NPU_SUCCESS) {
             printf("Failed to get kernel description: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
             exit(-1);
@@ -99,38 +92,34 @@ int host_kernel_mul_fp32(
 
     int kernel_ret;
 
-    npu_runtime_kernel_start(&runtime, kernel_mul_fp32_desc, &kernel_ret, 11,
-                             a_dev, b_dev, c_dev,
-                             psrc0.ne[0], psrc0.ne[1], psrc0.ne[2], psrc0.ne[3],
-                             psrc1.ne[0], psrc1.ne[1], psrc1.ne[2], psrc1.ne[3]);      
+    npu_runtime_kernel_start(&runtime, kernel_mul_fp32_desc, &kernel_ret, 11, a_dev, b_dev, c_dev,
+                             psrc0.ne[0], psrc0.ne[1], psrc0.ne[2], psrc0.ne[3], psrc1.ne[0],
+                             psrc1.ne[1], psrc1.ne[2], psrc1.ne[3]);
 
     npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, total_elements * sizeof(float)); // c
     return kernel_ret;
 }
 
 void kernel_mul(std::vector<float> &a, std::vector<float> &b, std::vector<float> &res,
-    TensorParams &psrc0, TensorParams &psrc1)
-{
+                TensorParams &psrc0, TensorParams &psrc1) {
     int total_elements = psrc0.ne[3] * psrc0.ne[2] * psrc0.ne[1] * psrc0.ne[0];
-    
-    int kernel_result = host_kernel_mul_fp32(
-            a.data(), b.data(), res.data(),
-            total_elements,
-            psrc0, psrc1);
+
+    int kernel_result =
+        host_kernel_mul_fp32(a.data(), b.data(), res.data(), total_elements, psrc0, psrc1);
 
     assert(kernel_result == 0);
-
 }
 
 int test_mul(std::string src0_trace, std::string src1_trace, std::string dst_trace,
-             TensorParams& psrc0, TensorParams& psrc1) {
+             TensorParams &psrc0, TensorParams &psrc1) {
     try {
         std::vector<float> data_a = readF32FromFile(src0_trace);
         std::vector<float> data_b = readF32FromFile(src1_trace);
         std::vector<float> data_ref = readF32FromFile(dst_trace);
 
         if (data_a.size() != data_ref.size()) {
-            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace << std::endl;
+            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace
+                      << std::endl;
             return 1;
         }
 
@@ -175,15 +164,20 @@ int test_mul(std::string src0_trace, std::string src1_trace, std::string dst_tra
                         if (std::abs(result - ref) > epsilon) {
                             std::cerr << std::fixed << std::setprecision(8);
                             std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                            std::cerr << "  - input0[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                    << data_a[i1* h * n * m + j1 * n * m + k1 * m + p1] << std::endl;
-                            std::cerr << "  - input1[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                    << data_b[i1* h * n * m + j1 * n * m + k1 * m + p1] << std::endl;
-                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                    << result << std::endl;
-                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                    << ref << std::endl;
-                            std::cerr << "  - result - ref:        " << std::abs(result - ref) << std::endl;
+                            std::cerr
+                                << "  - input0[" << i << "][" << j << "][" << k << "][" << p
+                                << "]:    " << data_a[i1 * h * n * m + j1 * n * m + k1 * m + p1]
+                                << std::endl;
+                            std::cerr
+                                << "  - input1[" << i << "][" << j << "][" << k << "][" << p
+                                << "]:    " << data_b[i1 * h * n * m + j1 * n * m + k1 * m + p1]
+                                << std::endl;
+                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << result << std::endl;
+                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << ref << std::endl;
+                            std::cerr << "  - result - ref:        " << std::abs(result - ref)
+                                      << std::endl;
                             all_match = false;
                             goto Done;
                         }
@@ -191,14 +185,14 @@ int test_mul(std::string src0_trace, std::string src1_trace, std::string dst_tra
                 }
             }
         }
-        Done:
+    Done:
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
             return 0;
         } else
             return 1;
 
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
@@ -206,8 +200,8 @@ int test_mul(std::string src0_trace, std::string src1_trace, std::string dst_tra
     return 0;
 }
 
-int main(int argc, char * argv[]) {
-    if(argc < 3) {
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
         std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
     }

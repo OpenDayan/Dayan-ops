@@ -1,27 +1,25 @@
-#include <cstddef>
-#include <cstdint>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <stdexcept>
-#include <iomanip>
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <NPURuntime.h>
 
 #include "common.hpp"
 
-void rope_cache_init(std::vector<float>& cache,
-                     float theta_base, float theta_scale,
-                     float freq_scale,
-                     int m,
-                     float* corr_dims = NULL, // useless in qwen2
-                     float* freq_factor = NULL, // freq_factor is always NULL in qwen2
-                     float ext_factor = 0.0f, // // ext_factor is always 0.0f in qwen2
-                     float mscale = 1.0f, // mscale == attn_factor is always 1.0f in qwen2
-                     float sin_sign = 1.0f // sin_sign is always 1.0f in forward computing
+void rope_cache_init(std::vector<float> &cache, float theta_base, float theta_scale,
+                     float freq_scale, int m,
+                     float *corr_dims = NULL,   // useless in qwen2
+                     float *freq_factor = NULL, // freq_factor is always NULL in qwen2
+                     float ext_factor = 0.0f,   // // ext_factor is always 0.0f in qwen2
+                     float mscale = 1.0f,       // mscale == attn_factor is always 1.0f in qwen2
+                     float sin_sign = 1.0f      // sin_sign is always 1.0f in forward computing
 ) {
     float theta = theta_base;
     for (size_t i = 0; i < m; i += 2) {
@@ -40,8 +38,8 @@ void rope_cache_init(std::vector<float>& cache,
     }
 }
 
-void rope_neox(std::vector<float>& a, std::vector<int>& b, std::vector<float>& res,
-               TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst, RopeParams& prope) {
+void rope_neox(std::vector<float> &a, std::vector<int> &b, std::vector<float> &res,
+               TensorParams &psrc0, TensorParams &psrc1, TensorParams &pdst, RopeParams &prope) {
     int bs = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
@@ -51,42 +49,45 @@ void rope_neox(std::vector<float>& a, std::vector<int>& b, std::vector<float>& r
     std::vector<float> cache;
     cache.resize(psrc0.ne[0]);
 
-    for (int i = 0; i < bs; ++i) { // batch
+    for (int i = 0; i < bs; ++i) {    // batch
         for (int j = 0; j < h; ++j) { // seq-len
             int64_t p = b[j];
-            rope_cache_init(cache, p, theta_scale,
-                            static_cast<float>(prope.freq_scale), pdst.ne[0]);
+            rope_cache_init(cache, p, theta_scale, static_cast<float>(prope.freq_scale),
+                            pdst.ne[0]);
             for (int k = 0; k < n; ++k) { // attn-heads
                 // fill res[i][j][k][:prope.n_dims]
                 for (int p = 0; p < prope.n_dims; p += 2) {
                     const int64_t ic = p / 2;
                     const float cos_theta = cache[p];
                     const float sin_theta = cache[p + 1];
-                    const float x0 = a[i * h * n * m + j * n * m + k * m + ic];                    // x0 = a[i][j][k][p]
-                    const float x1 = a[i * h * n * m + j * n * m + k * m + ic + prope.n_dims / 2]; // x1 = a[i][j][k][p + dim/2]
+                    const float x0 =
+                        a[i * h * n * m + j * n * m + k * m + ic]; // x0 = a[i][j][k][p]
+                    const float x1 = a[i * h * n * m + j * n * m + k * m + ic +
+                                       prope.n_dims / 2]; // x1 = a[i][j][k][p + dim/2]
 
-                    res[i * h * n * m + j * n * m + k * m + ic] = (x0 * cos_theta) - (x1 * sin_theta);                    // dst[i][j][k][p] = ...
-                    res[i * h * n * m + j * n * m + k * m + ic + prope.n_dims / 2] = (x0 * sin_theta) + (x1 * cos_theta); // dst[i][j][k][p + dim/2] = ...
+                    res[i * h * n * m + j * n * m + k * m + ic] =
+                        (x0 * cos_theta) - (x1 * sin_theta); // dst[i][j][k][p] = ...
+                    res[i * h * n * m + j * n * m + k * m + ic + prope.n_dims / 2] =
+                        (x0 * sin_theta) + (x1 * cos_theta); // dst[i][j][k][p + dim/2] = ...
                 }
 
                 // fill remain res[i][j][k][prope.n_dims:]
                 for (size_t p = prope.n_dims; p < m; p += 2) {
-                    res[i * h * n * m + j * n * m + k * m + p] = a[i * h * n * m + j * n * m + k * m + p];
-                    res[i * h * n * m + j * n * m + k * m + p + 1] = a[i * h * n * m + j * n * m + k * m + p + 1];
+                    res[i * h * n * m + j * n * m + k * m + p] =
+                        a[i * h * n * m + j * n * m + k * m + p];
+                    res[i * h * n * m + j * n * m + k * m + p + 1] =
+                        a[i * h * n * m + j * n * m + k * m + p + 1];
                 }
             }
         }
     }
 }
 
-
 static struct NPURuntimeState runtime;
 extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
-int host_rope_f32_i32_f32(
-    void* a, void* b, void* res,
-    int bs, int h, int n, int m, int n_dims,
-    float theta_scale, float freq_scale, int mdst) {
-    static struct NPUKernelDesc* rope_f32_i32_f32 = NULL;
+int host_rope_f32_i32_f32(void *a, void *b, void *res, int bs, int h, int n, int m, int n_dims,
+                          float theta_scale, float freq_scale, int mdst) {
+    static struct NPUKernelDesc *rope_f32_i32_f32 = NULL;
     if (rope_f32_i32_f32 == NULL) {
         ssize_t err = 0;
         printf("[INFO] Initializing Runtime..\n");
@@ -123,44 +124,42 @@ int host_rope_f32_i32_f32(
     ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, h * sizeof(int)); // b
     if (ret < 0)
         printf("[ERROR] Failed to write b to device at 0x%lx: err=%d\n", b_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, res_dev, res, bs * h * n * m * sizeof(float));   // res
+    ret = npu_memcpy_to_dev(&runtime.dev_state, res_dev, res,
+                            bs * h * n * m * sizeof(float)); // res
     if (ret < 0)
         printf("[ERROR] Failed to write res to device at 0x%lx: err=%d\n", res_dev, ret);
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, rope_f32_i32_f32, &kernel_ret, 11,
-                             a_dev, b_dev, res_dev,
+    npu_runtime_kernel_start(&runtime, rope_f32_i32_f32, &kernel_ret, 11, a_dev, b_dev, res_dev,
                              (uint64_t)bs, (uint64_t)h, (uint64_t)n, (uint64_t)m, (uint64_t)n_dims,
                              float_as_u32(theta_scale), float_as_u32(freq_scale), (int)mdst);
-    npu_memcpy_from_dev(&runtime.dev_state, res, res_dev, bs * h * n * m * sizeof(float)); // res
+    npu_memcpy_from_dev(&runtime.dev_state, res, res_dev,
+                        bs * h * n * m * sizeof(float)); // res
     return kernel_ret;
 }
 
-void kernel_rope_f32(std::vector<float>& a, std::vector<int>& b, std::vector<float>& res,
-                     TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst, RopeParams& prope) {
+void kernel_rope_f32(std::vector<float> &a, std::vector<int> &b, std::vector<float> &res,
+                     TensorParams &psrc0, TensorParams &psrc1, TensorParams &pdst,
+                     RopeParams &prope) {
     int bs = psrc0.ne[3];
     int h = psrc0.ne[2];
     int n = psrc0.ne[1];
     int m = psrc0.ne[0];
     float theta_scale = std::pow(prope.freq_base, -2.0f / prope.n_dims);
 
-    host_rope_f32_i32_f32(
-        a.data(),
-        b.data(),
-        res.data(),
-        bs, h, n, m, prope.n_dims,
-        theta_scale, prope.freq_scale, pdst.ne[0]
-    );
+    host_rope_f32_i32_f32(a.data(), b.data(), res.data(), bs, h, n, m, prope.n_dims, theta_scale,
+                          prope.freq_scale, pdst.ne[0]);
 }
 
 int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_trace,
-              TensorParams& psrc0, TensorParams& psrc1, TensorParams& pdst, RopeParams& prope) {
+              TensorParams &psrc0, TensorParams &psrc1, TensorParams &pdst, RopeParams &prope) {
     try {
         std::vector<float> data_a = readF32FromFile(src0_trace);
         std::vector<int> data_b = readInt32FromFile(src1_trace);
         std::vector<float> data_ref = readF32FromFile(dst_trace);
 
         if (data_a.size() != data_ref.size()) {
-            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace << std::endl;
+            std::cerr << "Error: Input " << src0_trace << " has different size with " << dst_trace
+                      << std::endl;
             return 1;
         }
 
@@ -200,11 +199,12 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
                         if (std::abs(result - ref) > epsilon) {
                             std::cerr << std::fixed << std::setprecision(8);
                             std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                << result << std::endl;
-                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p << "]:    "
-                                << ref << std::endl;
-                            std::cerr << "  - result - ref:        " << std::abs(result - ref) << std::endl;
+                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << result << std::endl;
+                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                                      << "]:    " << ref << std::endl;
+                            std::cerr << "  - result - ref:        " << std::abs(result - ref)
+                                      << std::endl;
                             all_match = false;
                             goto Done;
                         }
@@ -216,11 +216,9 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
         if (all_match) {
             std::cout << " *** Compare PASS ***" << std::endl;
             return 0;
-        }
-        else
+        } else
             return 1;
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
@@ -228,7 +226,7 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc < 3) {
         std::cout << "Usage: ./test <TRACE DIR> <TRACE ID>" << std::endl;
         return 0;
