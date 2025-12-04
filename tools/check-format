@@ -54,14 +54,21 @@ function fatal() {
 function check-cl() {
 	green '[ clang-format ] begin'
 	# Use '-follow' in case 'quizs' is symlinked.
-	c_files=$(find -- * -regextype sed -regex '.*\.[ch]' -a -not -name '*.b.c' -print -follow)
+	c_files=$(find . -regextype posix-extended -regex '.*\.(c|cpp|h|hpp)')
 
 	if [ "$fix" = "yes" ]; then
+		# shellcheck disable=2086
+		if ! $CLANG_FORMAT -i $c_files ; then
+			warning '[ clang-format ] maybe version too low?'
+		fi
 		green '[ clang-format ] fix end'
 		return 0
 	else
 		# shellcheck disable=2086
 		cnt=$($CLANG_FORMAT $c_files --output-replacements-xml | grep -c "<replacement "; exit "${PIPESTATUS[0]}")
+		if [ "${PIPESTATUS[0]}" -ne 0 ] && [ "$cnt" -eq 0 ]; then
+			warning '[ clang-format ] maybe version too low?'
+		fi
 		if [ "$cnt" -eq 0 ]; then
 			green '[ clang-format ] check passed'
 			return 0

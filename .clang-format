@@ -6,7 +6,6 @@ UseTab: Always
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: None
 IndentCaseLabels: false
-InsertBraces: true
 ForEachMacros:
   - 'LIST_FOREACH'
   - 'TAILQ_FOREACH'
