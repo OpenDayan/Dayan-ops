@@ -75,7 +75,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                 a_buf_id = cur_id;
                                 b_buf_id = n & 0x1;
                                 c_buf_id = cid;
-                                cid ^= 0x1;
+                                cid = (cid + 0x1) % 3;
                                 advance_state = &&ZTNextLoop;
                                 return false;
                             ZTNextLoop:;
@@ -100,7 +100,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                 b_buf_id = cur_id;
                                 c_buf_id = cid;
                                 cur_id ^= 0x1;
-                                cid ^= 0x1;
+                                cid = (cid + 0x1) % 3;
                                 advance_state = &&ZNextLoop;
                                 return false;
                             ZNextLoop:;
@@ -119,7 +119,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
 };
 
 // Producer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle>
 class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
@@ -133,10 +133,9 @@ class MatmulProducerTask : public NPUTask {
         set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
         // C Configuration
         set_lsu_matrix<GROUPBASE + LSU_CLD>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
-        // 配置 Swizzle 为 M5 B3 S5
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         return;
     }
     // 局部变量
@@ -245,7 +244,7 @@ class MatmulProducerTask : public NPUTask {
 };
 
 // Consumer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle>
 class MatmulConsumerTask : public NPUTask {
   private:
     long cCkSum;
@@ -253,8 +252,7 @@ class MatmulConsumerTask : public NPUTask {
     inline void config_tcsr() {
         // C Configuration
         set_lsu_matrix<GROUPBASE + LSU_CST>(cCkSum, tileM, tileN * 4, tileN * 4, s->cStride);
-        // 配置 Swizzle 为 M5 B3 S5
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_CST) * LSU_GROUPSZ + LSU_URAMREADSWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_CST) * LSU_GROUPSZ + LSU_URAMREADSWIZZLEMBS>(swizzle);
         // Matmul Configuration
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(tileM - 1);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(tileN - 1);
@@ -267,10 +265,9 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_DATATYPE>(0);
-        // 配置 Swizzle 为 M5 B3 S5
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(mat_batch_swizzle(5, 3, 5));
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(swizzle);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(swizzle);
     }
     // 局部变量
     NPUURAM *a, *b, *c;
@@ -306,8 +303,10 @@ class MatmulConsumerTask : public NPUTask {
             // 写回 C
             tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride,
                                           c->uram);
-            NPUDMABar(0);
+            // Optimize: Early deallocate of C Buffer, since dma instruction is execute inorder.
             c->consume(sched);
+            NPUDMABar(0);
+            // c->consume(sched);
             NPUYield(0);
         }
         NPUFinish(-1);
@@ -323,25 +322,31 @@ template<long tileM, long tileN, long tileK, bool ZT>
 static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
                                    uint64_t bBase, uint64_t cBase, uint64_t aStride,
                                    uint64_t bStride, uint64_t cStride) {
-    NPUURAM buf[6] = {
-        NPUURAM(0x0ul),                                         // 0    - 128K
-        NPUURAM(tileM * tileK * 2),                             // 128K - 256K
-        NPUURAM(tileM * tileK * 2 * 2),                         // 256K - 384K
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2),     // 384K - 512K
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2), // 512K - 576K
+    NPUURAM buf[7] = {
+        NPUURAM(0x0ul),
+        NPUURAM(tileM * tileK * 2),
+        NPUURAM(tileM * tileK * 2 * 2),
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2),
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),
         NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 +
-                tileM * tileN * 4) // 576K - 640K
+                tileM * tileN * 4 * 1),
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 +
+                tileM * tileN * 4 * 2)
     };
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, aBase, bBase, cBase, aStride, bStride, cStride, &buf[0], &buf[2], &buf[4]);
     auto pub_consumer = MatmulPubState<tileM, tileN, tileK, ZT>(pub_producer);
 
+    // 配置 Swizzle 为 M5 B3 S5
+    const long swizzle_pack = MAT_BATCH_SWIZZLE(5, 3, 5);
+    // const long swizzle_pack = 0;
+
     // 创建四个 Task
-    auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, ZT>(&pub_producer);
-    auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, ZT>(&pub_producer);
-    auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, ZT>(&pub_consumer);
-    auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, ZT>(&pub_consumer);
+    auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+    auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+    auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
+    auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
     NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
                          (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
     // 创建一个调度器
