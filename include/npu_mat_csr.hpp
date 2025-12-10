@@ -16,3 +16,6 @@ enum MAT_TCSR {
 };
 
 #define MAT_GROUPSZ (32)
+static inline long mat_batch_swizzle(uint8_t M, uint8_t B, uint8_t S) {
+    return ((uint64_t)M << 16) | ((uint64_t)B << 8) | ((uint64_t)S);
+}
