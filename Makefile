@@ -50,7 +50,7 @@ $(SUB_DIRS): $(BUILD_DIR)
 	@echo "Building $@..."
 	$(MAKE) -C $@ BUILD_DIR=../$(BUILD_DIR)
 
-$(ELF_FILE): $(SUB_DIRS)
+$(ELF_FILE): $(SUB_DIRS) $(OUTPUT_DIR)
 	@echo "Linking $@..."
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
 		$(BUILD_DIR)/*.o \
