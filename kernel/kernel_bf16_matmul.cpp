@@ -1,3 +1,5 @@
+// BF16 矩阵乘法算子核
+
 #include "npu_instruction.hpp"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"

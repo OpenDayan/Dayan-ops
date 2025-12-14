@@ -1,4 +1,5 @@
 #include "npu_instruction.hpp"
+#include "npu_instruction_old.h"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_vec_csr.hpp"
@@ -11,6 +12,8 @@
 
 // Note1：避免过度抽象封装，将重复的/结构性的代码段或者语句组织抽象为函数
 // 如若仅出现一次的代码段或者语句，没有必要单独抽象为一个函数
+
+// Note2: 在 QEMU 中，用户可以通过直接访问 _uram 数组来读取/写入 URAM ，以方便快速调试
 
 extern int _uram[256 * 1024];
 
@@ -431,5 +434,10 @@ __device__ long test_mat_tcsr_write_read(void) {
     ret = 0xffffffff;
     ret &= test_one_mat_tcsr_reg<31>();
     printf("31: %x\n", ret);
+    return 0;
+}
+
+__device__ long test_legacy_vec_inst(void) {
+    __tx_fp_add_fp32<0, 1, 2, 0b1111>((void *)0, (void *)0x1000, (void *)0x2000);
     return 0;
 }
