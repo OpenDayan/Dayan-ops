@@ -318,21 +318,18 @@ class MatmulConsumerTask : public NPUTask {
 };
 } // namespace
 
-template<long tileM, long tileN, long tileK, bool ZT>
+template <long tileM, long tileN, long tileK, bool ZT>
 static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
-                                   uint64_t bBase, uint64_t cBase, uint64_t aStride,
-                                   uint64_t bStride, uint64_t cStride) {
+                                        uint64_t bBase, uint64_t cBase, uint64_t aStride,
+                                        uint64_t bStride, uint64_t cStride) {
     NPUURAM buf[7] = {
         NPUURAM(0x0ul),
         NPUURAM(tileM * tileK * 2),
         NPUURAM(tileM * tileK * 2 * 2),
         NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2),
         NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 +
-                tileM * tileN * 4 * 1),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 +
-                tileM * tileN * 4 * 2)
-    };
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
+        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, aBase, bBase, cBase, aStride, bStride, cStride, &buf[0], &buf[2], &buf[4]);
@@ -343,10 +340,14 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
     // const long swizzle_pack = 0;
 
     // 创建四个 Task
-    auto task_producer0 = MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
-    auto task_producer1 = MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
-    auto task_consumer0 = MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
-    auto task_consumer1 = MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
+    auto task_producer0 =
+        MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+    auto task_producer1 =
+        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+    auto task_consumer0 =
+        MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
+    auto task_consumer1 =
+        MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
     NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
                          (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
     // 创建一个调度器
@@ -370,7 +371,7 @@ __device__ long matmul_bf16_a_bt_c(uint64_t M, uint64_t N, uint64_t K, uint64_t 
     } else { // M >= N
         const uint64_t tileM = 128, tileN = 128, tileK = 512;
         matmul_bf16_template<tileM, tileN, tileK, true>(M, N, K, aBase, bBase, cBase, aStride,
-                                                         bStride, cStride);
+                                                        bStride, cStride);
     }
 
     return 0;

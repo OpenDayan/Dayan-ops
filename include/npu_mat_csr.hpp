@@ -17,7 +17,5 @@ enum MAT_TCSR {
 
 #define MAT_GROUPSZ (32)
 
-#define MAT_BATCH_SWIZZLE(M, B, S) \
-    ((uint64_t)((uint8_t)(M)) << 16 | \
-     (uint64_t)((uint8_t)(B)) << 8 | \
-     (uint64_t)((uint8_t)(S)))
+#define MAT_BATCH_SWIZZLE(M, B, S)                                                                 \
+    ((uint64_t)((uint8_t)(M)) << 16 | (uint64_t)((uint8_t)(B)) << 8 | (uint64_t)((uint8_t)(S)))
