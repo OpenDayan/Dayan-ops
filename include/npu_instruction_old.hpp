@@ -1,6 +1,10 @@
 #ifndef _NPU_INSTRUCTION_OLD_HPP_
 #define _NPU_INSTRUCTION_OLD_HPP_
 
+#include <stdint.h>
+
+typedef unsigned long ulong;
+
 const long TCSR_DIM0 = 0;
 const long TCSR_STRIDE0 = 1;
 const long TCSR_DIM1 = 2;
@@ -12,24 +16,14 @@ const long TCSR_STRIDE3 = 7;
 
 class TCFG {
   public:
-    long dim0;
-    long stride0;
-    long dim1;
-    long stride1;
-    long dim2;
-    long stride2;
-    long dim3;
-    long stride3;
-    long get_offset(long column /* DIM0 */, long row /* DIM1 */) {
-        return (column * stride0 + row * stride1);
-    }
-    long get_offset(long dim0 /* DIM0 */, long dim1 /* DIM1 */, long dim2 /* DIM2 */) {
-        return (dim0 * stride0 + dim1 * stride1 + dim2 * stride2);
-    }
-    long get_offset(long dim0 /* DIM0 */, long dim1 /* DIM1 */, long dim2 /* DIM2 */,
-                    long dim3 /* DIM3 */) {
-        return (dim0 * stride0 + dim1 * stride1 + dim2 * stride2 + dim3 * stride3);
-    }
+  ulong dim0;
+  ulong stride0;
+  ulong dim1;
+  ulong stride1;
+  ulong dim2;
+  ulong stride2;
+  ulong dim3;
+  ulong stride3;
 };
 
 namespace NPUInstBuilder {
@@ -267,6 +261,11 @@ __attribute__((always_inline)) static inline void __custom_64b_instruction1r(lon
         : "r"(rs3), "i"(encoding));
 }
 template <long encoding>
+__attribute__((always_inline)) static inline void __custom_64b_instruction_bar() {
+    asm volatile(".insn 8, %0 | 0x3F | (5 << 7) | (5 << 27)\n"
+                 "andi t0,t0,0\n" ::"i"(encoding));
+}
+template <long encoding>
 __attribute__((always_inline)) static inline void __custom_64b_instruction1r(long rs3) {
     asm volatile(
         "\n"
@@ -286,7 +285,7 @@ __attribute__((always_inline)) static inline void __custom_64b_instruction1r(lon
         ".align 3\n"
         ".insn 8, %1 | 0x3F | (_R0 << 27)\n"
         ".set _R0,z\n"
-        : "r"(rs3), "i"(encoding));
+        :: "r"(rs3), "i"(encoding));
 }
 
 template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2,
@@ -723,5 +722,15 @@ GENERATE_TX_SFU_OP_TYPE(cos, TX_SFU_COS, fp32, TX_FP32)
 GENERATE_TX_SFU_OP_TYPE(exp, TX_SFU_EXP, fp32, TX_FP32)
 GENERATE_TX_SFU_OP_TYPE(relu, TX_SFU_RELU, fp32, TX_FP32)
 #undef GENERATE_TX_SFU_OP_TYPE
+
+// New Barrier and Produce / Consume Instructions
+__attribute__((always_inline)) static inline void __tx_sb_produce(long rd) {
+    NPUInstBuilder::__custom_64b_instruction1r<((long)0b11111111 << 56ul) | ((long)0b0000 << 52ul)>(
+        rd);
+}
+__attribute__((always_inline)) static inline void __tx_sb_bar() {
+    NPUInstBuilder::__custom_64b_instruction_bar<((long)0b11111111 << 56ul) |
+                                                 ((long)0b0001 << 52ul)>();
+}
 
 #endif

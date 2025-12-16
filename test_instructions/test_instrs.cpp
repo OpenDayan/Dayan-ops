@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     // run_instr_test(&runtime, "test_mat_tcsr_write_read");
     // run_instr_test(&runtime, "test_calculated_goto");
     // run_instr_test(&runtime, "test_npu_task_basic_dma");
-    run_instr_test(&runtime, "test_legacy_vec_inst");
+    run_instr_test(&runtime, "test_legacy_add_int32_inst");
 
     std::cout << "All Instr Test Finished." << std::endl;
 
