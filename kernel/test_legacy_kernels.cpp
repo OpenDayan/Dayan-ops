@@ -3,6 +3,7 @@
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_vec_csr.hpp"
+#include <cmath>
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
@@ -21,9 +22,9 @@ template <ulong TCFG_ID> static inline void config_tcsr(TCFG *tcsr) {
 }
 
 template <typename T, ulong TCFG_A, ulong TCFG_B, ulong TCFG_C, ulong broadcast, typename INST_F,
-          typename DATAGENA_F, typename DATAGENB_F, typename REF_F>
+          typename DATAGENA_F, typename DATAGENB_F, typename REF_F, typename CHK_F>
 static int test_binary_inst(INST_F INST, DATAGENA_F DATAGENA, DATAGENB_F DATAGENB, REF_F REF,
-                            ulong dim0, ulong dim1 = 1, ulong dim2 = 1, ulong dim3 = 1) {
+                            CHK_F CHK, ulong dim0, ulong dim1 = 1, ulong dim2 = 1, ulong dim3 = 1) {
     TCFG cfg = {.dim0 = dim0,
                 .stride0 = 1,
                 .dim1 = dim1,
@@ -97,7 +98,7 @@ static int test_binary_inst(INST_F INST, DATAGENA_F DATAGENA, DATAGENB_F DATAGEN
                     ulong b_idx = get_b_idx(d0, d1, d2, d3);
                     T expected = REF(dev_a[i], dev_b[b_idx]); // 计算参考值
                     T actual = dev_c[i];
-                    if (expected != actual) {
+                    if (!CHK(expected, actual)) {
                         printf("Error at %lu, %lu, %lu, %lu\n", d0, d1, d2, d3);
                         printf("a = %lu, b = %lu, c = %lu\n", dev_a[i], dev_b[b_idx], dev_c[i]);
                         printf("expected = %lu, actual = %lu\n", expected, actual);
@@ -116,5 +117,14 @@ __device__ long test_legacy_add_int32_inst(void) {
         [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },
         [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },
         [](auto a, auto b) { return a + b; },
-        16);
+        [](auto expected, auto actual) { return expected == actual; }, 16);
+}
+
+__device__ long test_legacy_add_fp32_inst(void) {
+    return test_binary_inst<float, 0, 0, 0, 0>(
+        __tx_fp_add_fp32<0, 0, 0, 0>,
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
+        [](auto a, auto b) { return a + b; },
+        [](auto expected, auto actual) { return fabs(expected - actual) < 1e-3f; }, 16);
 }

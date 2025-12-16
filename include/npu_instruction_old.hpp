@@ -16,14 +16,14 @@ const long TCSR_STRIDE3 = 7;
 
 class TCFG {
   public:
-  ulong dim0;
-  ulong stride0;
-  ulong dim1;
-  ulong stride1;
-  ulong dim2;
-  ulong stride2;
-  ulong dim3;
-  ulong stride3;
+    ulong dim0;
+    ulong stride0;
+    ulong dim1;
+    ulong stride1;
+    ulong dim2;
+    ulong stride2;
+    ulong dim3;
+    ulong stride3;
 };
 
 namespace NPUInstBuilder {
@@ -284,8 +284,8 @@ __attribute__((always_inline)) static inline void __custom_64b_instruction1r(lon
         "%0,t5\n.set _R0,30\n.endif\n.ifc %0,t6\n.set _R0,31\n.endif\n"
         ".align 3\n"
         ".insn 8, %1 | 0x3F | (_R0 << 27)\n"
-        ".set _R0,z\n"
-        :: "r"(rs3), "i"(encoding));
+        ".set _R0,z\n" ::"r"(rs3),
+        "i"(encoding));
 }
 
 template <long basetype, long rs1type, long rs2type, long rs3type, long tcfgrs1, long tcfgrs2,
