@@ -113,11 +113,12 @@ static int test_binary_inst(INST_F INST, DATAGENA_F DATAGENA, DATAGENB_F DATAGEN
 
 __device__ long test_legacy_add_int32_inst(void) {
     return test_binary_inst<int, 0, 0, 0, 0>(
-        __tx_int_add_s32<0, 0, 0, 0>,
-        [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },
-        [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },
-        [](auto a, auto b) { return a + b; },
-        [](auto expected, auto actual) { return expected == actual; }, 16);
+        __tx_int_add_s32<0, 0, 0, 0>,                                       // 待测张量指令
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },     // 待测数据 A 生成函数，d0/1/2/3 分别表示待生成元素的 dim0/1/2/3 坐标
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return d0 + d1; },     // 待测数据 B 生成函数，d0/1/2/3 分别表示待生成元素的 dim0/1/2/3 坐标
+        [](auto a, auto b) { return a + b; },                               // Reference 函数，测试金标
+        [](auto expected, auto actual) { return expected == actual; },      // Check 函数，检验标准
+        16);                                                                // 待测尺寸 dim0, dim1=1, dim2=1, dim3=1
 }
 
 __device__ long test_legacy_add_fp32_inst(void) {
