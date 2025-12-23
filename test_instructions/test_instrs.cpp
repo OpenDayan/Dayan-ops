@@ -66,6 +66,14 @@ int main(int argc, char **argv) {
     // run_instr_test(&runtime, "test_mat_tcsr_write_read");
     // run_instr_test(&runtime, "test_calculated_goto");
     // run_instr_test(&runtime, "test_npu_task_basic_dma");
+    run_instr_test(&runtime, "test_legacy_add_int32_inst");
+    run_instr_test(&runtime, "test_legacy_add_fp32_inst");
+    run_instr_test(&runtime, "test_legacy_mul_fp32_inst");
+    run_instr_test(&runtime, "test_legacy_lutop_and_int32_inst");
+    run_instr_test(&runtime, "test_legacy_lutop_or_int32_inst");
+    run_instr_test(&runtime, "test_legacy_lutop_xor_int32_inst");
+    run_instr_test(&runtime, "test_legacy_reduce_min_fp32_inst");
+    run_instr_test(&runtime, "test_legacy_reduce_add_fp32_inst");
     run_instr_test(&runtime, "test_legacy_cos_fp32_inst");
 
     std::cout << "All Instr Test Finished." << std::endl;

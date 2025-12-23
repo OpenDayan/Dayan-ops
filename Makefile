@@ -73,6 +73,7 @@ clean:
 		echo "Cleaning $$dir..."; \
 		$(MAKE) -C $$dir clean; \
 	done
+	@$(MAKE) -C test_instructions clean
 	@rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
 	@find . -name '*.objdump' -exec rm -f {} +
 	@echo "Clean completed"
