@@ -3,7 +3,7 @@
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_vec_csr.hpp"
-#include <cmath>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
@@ -77,8 +77,8 @@ static int test_unary_inst(INST_F INST, DATAGENA_F DATAGENA, REF_F REF,
                     T actual = dev_c[i];
                     if (!CHK(expected, actual)) {
                         printf("Error at %lu, %lu, %lu, %lu\n", d0, d1, d2, d3);
-                        printf("a = %lu, c = %lu\n", dev_a[i], dev_c[i]);
-                        printf("expected = 0x%lx, actual = 0x%lx\n", expected, actual);
+                        printf("a = %x, c = %x\n", *(uint32_t*)&dev_a[i], *(uint32_t*)&dev_c[i]);
+                        printf("expected = 0x%x, actual = 0x%x\n", *(uint32_t*)&expected, *(uint32_t*)&actual);
                         return -1;
                     }
                 }
@@ -110,14 +110,24 @@ __device__ long test_legacy_relu_fp32_inst(void) {
     return -1;
 }
 
+extern "C" float rsqrtf(float x);
+
 __device__ long test_legacy_rsqrt_fp32_inst(void) {
-    printf("[ERROR] test_legacy_rsqrt_fp32_inst not implemented"); // TODO
-    return -1;
+    return test_unary_inst<float, 0, 0>(
+        __tx_sfu_rsqrt_fp32<0, 0>,
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
+        [](auto a) -> float { return (float)rsqrtf((float)a); },
+        [](auto expected, auto actual) { return fabs(expected - actual) < 1e-5f; },
+        16);
 }
 
 __device__ long test_legacy_sin_fp32_inst(void) {
-    printf("[ERROR] test_legacy_sin_fp32_inst not implemented"); // TODO
-    return -1;
+    return test_unary_inst<float, 0, 0>(
+        __tx_sfu_sin_fp32<0, 0>,
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
+        [](auto a) -> float { return (float)sinf((float)a); },
+        [](auto expected, auto actual) { return fabs(expected - actual) < 1e-5f; },
+        16);
 }
 
 __device__ long test_legacy_cos_fp32_inst(void) {
@@ -130,6 +140,10 @@ __device__ long test_legacy_cos_fp32_inst(void) {
 }
 
 __device__ long test_legacy_exp_fp32_inst(void) {
-    printf("[ERROR] test_legacy_exp_fp32_inst not implemented"); // TODO
-    return -1;
+    return test_unary_inst<float, 0, 0>(
+        __tx_sfu_exp_fp32<0, 0>,
+        [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
+        [](auto a) -> float { return (float)expf((float)a); },
+        [](auto expected, auto actual) { return fabs(expected - actual) < 1e-5f; },
+        16);
 }
