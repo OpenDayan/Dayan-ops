@@ -129,3 +129,13 @@ __device__ long test_legacy_add_fp32_inst(void) {
         [](auto a, auto b) { return a + b; },
         [](auto expected, auto actual) { return fabs(expected - actual) < 1e-3f; }, 16);
 }
+
+__device__ long test_legacy_sub_fp32_inst(void) {
+    printf("[ERROR] test_legacy_sub_fp32_inst not implemented"); // TODO
+    return -1;
+}
+
+__device__ long test_legacy_mul_fp32_inst(void) {
+    printf("[ERROR] test_legacy_mul_fp32_inst not implemented"); // TODO
+    return -1;
+}
