@@ -122,7 +122,7 @@ __device__ long test_legacy_sin_fp32_inst(void) {
 
 __device__ long test_legacy_cos_fp32_inst(void) {
     return test_unary_inst<float, 0, 0>(
-        __tx_sfu_sin_fp32<0, 0>,
+        __tx_sfu_cos_fp32<0, 0>,
         [](ulong d0, ulong d1, ulong d2, ulong d3) { return (float)(d0 + d1); },
         [](auto a) -> float { return (float)cosf((float)a); },
         [](auto expected, auto actual) { return fabs(expected - actual) < 1e-5f; },
