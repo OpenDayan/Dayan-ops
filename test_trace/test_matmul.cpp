@@ -379,7 +379,7 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t> &a, std::vector<float> &b, std::v
 }
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k, int lda, int ldb,
                                   int ldc) {
     printf("\nm:%d, n:%d, k:%d\n", m, n, k);
@@ -394,7 +394,7 @@ int host_gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);
             npu_runtime_deinit(&runtime);
@@ -506,7 +506,7 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);
             npu_runtime_deinit(&runtime);

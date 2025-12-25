@@ -77,7 +77,7 @@ void softmax(std::vector<float> &a, std::vector<float> &b, std::vector<float> &r
 }
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_softmax_f32_f32_f32(float *a, float *b, float *res, float scale, int bs, int h, int n,
                              int m) {
     static struct NPUKernelDesc *softmax_f32_f32_f32 = NULL;
@@ -90,7 +90,7 @@ int host_softmax_f32_f32_f32(float *a, float *b, float *res, float scale, int bs
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);
             npu_runtime_deinit(&runtime);

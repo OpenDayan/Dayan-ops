@@ -3,7 +3,7 @@ CC  := gcc
 
 BUILD_DIR := build
 RUNTIME_DIR := ../../npu-runtime
-KERNEL_PACK := ../general_entry_fpga.packed.c
+KERNEL_PACK := ../bin/kernels_pack.packed.c
 
 COMMON_SOURCES := common.cpp
 TEST_SOURCES := $(wildcard test_*.cpp)

@@ -24,7 +24,7 @@ float silu(float x) {
 }
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_silu_f32(void *x, void *y, int b, int h, int n, int m) {
     printf("\nb:%d, h:%d, n:%d, m:%d\n", b, h, n, m);
     static struct NPUKernelDesc *silu_f32_desc = NULL;
@@ -38,7 +38,7 @@ int host_silu_f32(void *x, void *y, int b, int h, int n, int m) {
         }
         printf("[INFO] Runtime initialized successfully.\n");
 
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("[ERROR] Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);

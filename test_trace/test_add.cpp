@@ -13,7 +13,7 @@
 #include "common.hpp"
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 
 void add(std::vector<float> &a, std::vector<float> &b, std::vector<float> &res, TensorParams &psrc0,
          TensorParams &psrc1) {
@@ -54,7 +54,7 @@ int host_kernel_add_fp32(void *a, void *b, void *c, int total_elements, const Te
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);

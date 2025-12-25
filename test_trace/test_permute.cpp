@@ -28,7 +28,7 @@ void permute_f32_2_1(std::vector<float> &a, std::vector<float> &res, TensorParam
 }
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_permute_f32_2_1(float *a, float *res, int bs, int h, int n, int m) {
     static struct NPUKernelDesc *permute_f32_2_1 = NULL;
     if (permute_f32_2_1 == NULL) {
@@ -40,7 +40,7 @@ int host_permute_f32_2_1(float *a, float *res, int bs, int h, int n, int m) {
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);

@@ -32,7 +32,7 @@ void rms_norm(std::vector<float> &a, std::vector<float> &res, TensorParams &psrc
 }
 
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_rms_norm_f32(void *x, void *y, int b, int h, int n, int m, float epsilon) {
     printf("\nb:%d, h:%d, n:%d, m:%d\n", b, h, n, m);
     printf("epsilon: %f\n", epsilon);
@@ -47,7 +47,7 @@ int host_rms_norm_f32(void *x, void *y, int b, int h, int n, int m, float epsilo
         }
         printf("[INFO] Runtime initialized successfully.\n");
 
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("[ERROR] Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);

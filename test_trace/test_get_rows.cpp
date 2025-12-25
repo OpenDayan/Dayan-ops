@@ -96,7 +96,7 @@ void get_rows_f32(std::vector<float> &a, std::vector<int> &b, std::vector<float>
 
 #include <NPURuntime.h>
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 long host_get_rows_f32(void *a, void *b, void *c, int h1, int n1, int m1, int m0, int n0) {
     // printf("\nh1:%d, n1:%d, m1:%d, m0:%d, n0:%d\n", h1, n1, m1, m0, n0);
     static struct NPUKernelDesc *get_rows_f32_desc = NULL;
@@ -109,7 +109,7 @@ long host_get_rows_f32(void *a, void *b, void *c, int h1, int n1, int m1, int m0
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
@@ -158,7 +158,7 @@ long host_get_rows_bf16(void *a, void *b, void *c, int h1, int n1, int m1, int m
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);

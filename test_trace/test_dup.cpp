@@ -167,7 +167,7 @@ void dup_cont_f32_cont_f32(std::vector<float> &a, std::vector<float> &res, Tenso
     }
 }
 static struct NPURuntimeState runtime;
-extern struct NPUDeviceKernelSetDesc __general_entry_fpga;
+extern struct NPUDeviceKernelSetDesc __bin_kernels_pack;
 int host_dup_cont_f32_cont_f32(float *a, float *res, int a_bs, int a_h, int a_n, int a_m,
                                int res_bs, int res_h, int res_n, int res_m) {
     static struct NPUKernelDesc *dup_cont_f32_cont_f32 = NULL;
@@ -180,7 +180,7 @@ int host_dup_cont_f32_cont_f32(float *a, float *res, int a_bs, int a_h, int a_n,
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
@@ -230,7 +230,7 @@ int host_dup_cont_f32_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h, int 
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
@@ -331,7 +331,7 @@ int host_dup_cont_f32_no_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h, i
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
@@ -387,7 +387,7 @@ int host_dup_no_cont_f32_no_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h
             exit(-1);
         }
         printf("[INFO] Runtime initialized successfully.\n");
-        err = npu_runtime_load_kernelset(&runtime, &__general_entry_fpga);
+        err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
             npu_runtime_deinit(&runtime);
