@@ -8,6 +8,9 @@ make clean
 cd test_instructions
 make -j
 cd -
+cd test_trace
+make -j
+cd -
 echo "BUILD COMPLETE"
 
 $1 | tee .rpt

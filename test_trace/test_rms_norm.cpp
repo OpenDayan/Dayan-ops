@@ -45,7 +45,7 @@ int host_rms_norm_f32(void *x, void *y, int b, int h, int n, int m, float epsilo
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
 
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {

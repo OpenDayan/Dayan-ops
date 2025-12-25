@@ -39,6 +39,7 @@
       "options": [
         "test_instructions/build/test_instrs",
         "test_instructions/build/test_bf16_matmul",
+        "test_trace/build/test_silu test_trace/example_trace/prefill0-5/silu/ 0",
       ],
       "type": "pickString"
     }

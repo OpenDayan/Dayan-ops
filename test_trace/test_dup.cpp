@@ -179,7 +179,7 @@ int host_dup_cont_f32_cont_f32(float *a, float *res, int a_bs, int a_h, int a_n,
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
@@ -229,7 +229,7 @@ int host_dup_cont_f32_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h, int 
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
@@ -330,7 +330,7 @@ int host_dup_cont_f32_no_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h, i
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
@@ -386,7 +386,7 @@ int host_dup_no_cont_f32_no_cont_bf16(float *a, uint16_t *res, int a_bs, int a_h
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);

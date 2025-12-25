@@ -44,6 +44,18 @@ static inline void configTCSRs(int m, int n) {
     __tx_tcsr_write<cTCSR * 8 + TCSR_STRIDE3>(m * n);
 }
 
+static inline void configoneTCSR(void) {
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM0>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM1>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE1>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE2>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_DIM3>(1);
+    __tx_tcsr_write<oneTCFG * 8 + TCSR_STRIDE3>(1);
+}
+
+
 // NOTE: 新版硬件 LSU 传输的最低粒度为一个BLOCK(大小固定为64B)，可以理解为把 Tensor 按照 BLOCK 切分进行传输
 // NOTE: 对于新版硬件的配置寄存器，一组 TCSR (32个) 作为一个 GROUP，一个 GROUP 的寄存器用于描述一个 Load/Store
 //       运算的输入输出形状，模板参数 GROUPBASE 代表 LSU TCSR 标号，elemty 表示原Tensor元素数据类型
@@ -54,12 +66,16 @@ static inline void configLSUTCSR(int m, int n) {
     long m_bytes = m * sizeof(elemty);
     // NOTE: 最小传输粒度是 64B，所以 m_bytes 必须 >= 64，否则 LSU_DIM0 值会溢出
     m_bytes = m_bytes < 64 ? 64 : m_bytes;
+    if(n && ((m_bytes % 64) != 0)) {
+        // TODO: 不支持非对齐传输
+        printf("LSU transfer size must be aligned to 64B, but got m_bytes=%ld\n", m_bytes);
+    }
 
     // 输入/输出 维度，LSU 的输入和输出维度一定是相同的
     // LSU的第0维：LSU_BLOCK 寄存器值表示这一维 BLOCK 的数量，这里设置成0，相当于 原Tensor第0维 合并到 LSU的第1维
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
     // LSU的第1维：相当于 原Tensor第0维(m) 合并到了这一维，这里这里维度大小应该除以块大小，注意 dim大小=寄存器值+1
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((m_bytes / 64) - 1);
+    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>(((m_bytes + 63) / 64) - 1);
     // LSU的第2维：相当于 原Tensor第1维(n)
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM1>(n - 1);
     // LSU的第3维：相当于 原Tensor第2维(n)
@@ -116,6 +132,7 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
     // * (float *)(_uram + (((size_t)minusone-(size_t)_uram) / sizeof(float))) = -1.0f;
     *minusone = -1.0f;
 
+    configoneTCSR();
 
     if (op_count == 1) { // 数据足以单次处理
         configTCSRs(num, 1);
@@ -123,26 +140,35 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
         configLSUTCSR<lsuTCSR, float>(num, 1); // 设置 LSU 专用配置寄存器，tensor形状为 1 x num
 
         // NOTE: 不再使用 tx_async_uram_load 指令，改用新版异步拷贝指令 tx_lsu_dma_d2u
-        tx_lsu_dma_d2u<lsuTCSR>((long)x, (long)(XTile[0])); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        // 注意： DMA 指令的第一个参数为 rd，指定目标地址，第二个参数为 rs1，指定源地址
+        tx_lsu_dma_d2u<lsuTCSR>((long)(XTile[0]), (long)x);
+        __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
+
 
         // NOTE: Vec 类指令依然使用老版本指令
+        // 注意：老版本指令的目标地址依然为最后一个参数
         __tx_fp_mul_fp32<aTCSR, oneTCFG, cTCSR, 0b0001>(XTile[0], minusone, mid1);
         __tx_sfu_exp_fp32<aTCSR, aTCSR>(mid1, mid2);
         __tx_fp_sub_fp32<aTCSR, oneTCFG, aTCSR, 0b0001>(mid2, minusone, mid1);
         __tx_sfu_recip_fp32<aTCSR, aTCSR>(mid1, mid2);
         __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(XTile[0], mid2, YTile[0]);
+        __tx_sb_bar(); // 新版同步指令
 
         // NOTE: 不再使用 tx_async_uram_store 指令，改用新版异步拷贝指令 tx_lsu_dma_u2d
-        tx_lsu_dma_u2d<lsuTCSR>((long)(YTile[0]), (long)y); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
+        // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
+        // 注意： DMA 指令的第一个参数为 rd，指定目标地址，第二个参数为 rs1，指定源地址
+        tx_lsu_dma_u2d<lsuTCSR>((long)y, (long)(YTile[0]));
 
         // NOTE: 新版硬件不再使用 tx_fence 指令进行同步;
-        __tx_sb_bar(); // 新版同步指令
+        __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
 
     } else {
         // load_0
         configTCSRs(aTile, 1);
         configLSUTCSR<lsuTCSR, float>(aTile, 1); // 设置 LSU 专用配置寄存器，tensor形状为 1 x aTile
-        tx_lsu_dma_d2u<lsuTCSR>((long)x, (long)(XTile[0])); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        tx_lsu_dma_d2u<lsuTCSR>((long)(XTile[0]), (long)x); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
         __tx_sb_bar(); // 新版同步指令
 
         // compute_0
@@ -156,7 +182,8 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
         int size = ((num - aTile) > aTile) ? aTile : (num - aTile);
         configTCSRs(size, 1);
         configLSUTCSR<lsuTCSR, float>(size, 1); // 设置 LSU 专用配置寄存器，tensor形状为 1 x size
-        tx_lsu_dma_d2u<lsuTCSR>((long)(&x[aTile]), (long)(XTile[1])); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        tx_lsu_dma_d2u<lsuTCSR>((long)(XTile[1]), (long)(&x[aTile])); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+        __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
         __tx_sb_bar(); // 新版同步指令
 
         for (int i = 2; i < op_count; i++) {
@@ -173,8 +200,8 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
 
              // store_i-2
             float *y_store = y + store_num * aTile;
-            __tx_async_uram_store<cTCSR, cTCSR, 2>(YTile[store_buffer_num], y_store);
-            tx_lsu_dma_u2d<lsuTCSR>((long)(YTile[store_buffer_num]), (long)y_store); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
+            // __tx_async_uram_store<cTCSR, cTCSR, 2>(YTile[store_buffer_num], y_store);
+            tx_lsu_dma_u2d<lsuTCSR>((long)y_store, (long)(YTile[store_buffer_num])); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
 
             // compute_i-1
             __tx_fp_mul_fp32<aTCSR, oneTCFG, cTCSR, 0b0001>(XTile[compute_buffer_num], minusone, mid1);
@@ -186,13 +213,14 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
 
             // load_i
             float *x_load = x + load_num * aTile;
-            tx_lsu_dma_d2u<lsuTCSR>((long)x_load, (long)(XTile[load_buffer_num])); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+            tx_lsu_dma_d2u<lsuTCSR>((long)(XTile[load_buffer_num]), (long)x_load); // 调用新版异步拷贝指令把数据从DRAM搬运到URAM
+            __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
             __tx_sb_bar(); // 新版同步指令
         }
 
         // store_n-1
         float *y_store_0 = y + (op_count - 2) * aTile;
-        tx_lsu_dma_u2d<lsuTCSR>((long)(YTile[op_count % 2]), (long)y_store_0); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
+        tx_lsu_dma_u2d<lsuTCSR>((long)y_store_0, (long)(YTile[op_count % 2])); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
 
         // compute_n
         size = num - ((op_count - 1) * aTile);
@@ -205,11 +233,11 @@ __device__ long silu_f32(float *x, float *y, int b, int h, int n, int m) {
         __tx_sfu_recip_fp32<aTCSR, aTCSR>(mid1, mid2);
         __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(XTile[compute_buffer_num], mid2,
                                                       YTile[compute_buffer_num]);
-
+        __tx_sb_bar(); // 新版同步指令
         // store_n
         float *y_store_1 = y + (op_count - 1) * aTile;
-        tx_lsu_dma_u2d<lsuTCSR>((long)(YTile[(op_count - 1) % 2]), (long)y_store_1); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
-        __tx_sb_bar(); // 新版同步指令
+        tx_lsu_dma_u2d<lsuTCSR>((long)y_store_1, (long)(YTile[(op_count - 1) % 2])); // 调用新版异步拷贝指令把数据从URAM搬运到DRAM
+        __tx_lsu_sb_bar(); // 新版异步拷贝同步指令
     }
 
     return 0;

@@ -96,7 +96,7 @@ int host_rope_f32_i32_f32(void *a, void *b, void *res, int bs, int h, int n, int
             printf("[ERROR] Failed to initialize Runtime: err=%d\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);

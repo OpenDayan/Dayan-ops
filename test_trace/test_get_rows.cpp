@@ -108,7 +108,7 @@ long host_get_rows_f32(void *a, void *b, void *c, int h1, int n1, int m1, int m0
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);
@@ -157,7 +157,7 @@ long host_get_rows_bf16(void *a, void *b, void *c, int h1, int n1, int m1, int m
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);

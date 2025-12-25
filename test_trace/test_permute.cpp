@@ -39,7 +39,7 @@ int host_permute_f32_2_1(float *a, float *res, int bs, int h, int n, int m) {
             printf("[ERROR] Failed to initialize Runtime: err=%ld\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%ld\n", err);

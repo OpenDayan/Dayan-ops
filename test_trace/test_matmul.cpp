@@ -393,7 +393,7 @@ int host_gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k
             printf("[ERROR] Failed to initialize Runtime: err=%d\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);
@@ -505,7 +505,7 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
             printf("[ERROR] Failed to initialize Runtime: err=%d\n", err);
             exit(-1);
         }
-        printf("[INFO] Runtime initialized successfully.\n");
+        std::cout << "Runtime initialized successfully." << std::endl;
         err = npu_runtime_load_kernelset(&runtime, &__bin_kernels_pack);
         if (err != NPU_SUCCESS) {
             printf("Failed to load kernel set: err=%d\n", err);
