@@ -80,9 +80,9 @@ int main(int argc, char **argv) {
         for (int n = 0; n < N; n++) {
             for (int k = 0; k < K; k++) {
                 B[n][k] = (n * K + k) & 0x7dff;
-                if (B[n][k] < 0x0080) {
-                    B[n][k] = 0x0080;
-                }
+                // if (B[n][k] < 0x0080) {
+                //     B[n][k] = 0x0080;
+                // }
             }
         }
 
