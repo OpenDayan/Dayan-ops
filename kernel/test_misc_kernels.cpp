@@ -435,3 +435,16 @@ __device__ long test_mat_tcsr_write_read(void) {
     printf("31: %x\n", ret);
     return 0;
 }
+
+__device__ long test_uram_direct_access(void) {
+    // 直接访问 URAM 进行读写
+    for (int i = 0; i < 8; i++) {
+        _uram[i] = i * 2;
+    }
+    for (int i = 0; i < 8; i++) {
+        if (_uram[i] != i * 2) {
+            printf("Error at _uram[%d]: expected %d, got %d\n", i, i * 2, _uram[i]);
+        }
+    }
+    return 0;
+}

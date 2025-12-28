@@ -16,11 +16,11 @@ OBJDUMP := $(CROSS_COMPILE)objdump
 PYTHON := python3
 
 # 编译选项
-CFLAGS := -g -mcmodel=medany -std=gnu99 -O0 -ffast-math \
+CFLAGS := -g -mcmodel=medany -std=gnu99 -O3 -ffast-math \
           -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
           -fno-pic -march=rv64g -Wa,-march=rv64g
 
-CXXFLAGS := -g -mcmodel=medany -std=c++17 -O0 -ffast-math \
+CXXFLAGS := -g -mcmodel=medany -std=c++17 -O3 -ffast-math \
             -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
             -fno-pic -march=rv64g -Wa,-march=rv64g
 

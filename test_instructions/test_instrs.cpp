@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
     run_instr_test(&runtime, "test_legacy_reduce_min_fp32_inst");
     run_instr_test(&runtime, "test_legacy_reduce_add_fp32_inst");
     run_instr_test(&runtime, "test_legacy_cos_fp32_inst");
+    run_instr_test(&runtime, "test_uram_direct_access");
 
     std::cout << "All Instr Test Finished." << std::endl;
 
