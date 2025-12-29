@@ -232,24 +232,16 @@ static inline long dup_f32_bf16_rows(void *a, void *res, int a_bs, int a_h, int 
     configLSUTCSRd2u<lsuTCSR0, float>(a_m, a_n, a_nb1);
     configLSUTCSRu2d<lsuTCSR1, uint16_t>(res_m, res_n, res_nb1);
 
-    printf("a[0]=%x\n", *(int *)a);
-
     for (int bs = 0; bs < a_bs; ++bs) {
         for (int i = 0; i < a_h; ++i) {
             tx_lsu_dma_d2u<lsuTCSR0>((long)uram0, (long)(a + i * a_nb2 + bs * a_nb3));
             __tx_lsu_sb_bar();
 
-            printf("uram0[0]=%x\n", *(int *)uram0);
-
             __tx_convert_fp32_bf16_round<aUramTCSR, cUramTCSR>((void *)uram0, (void *)uram1);
             __tx_sb_bar();
 
-            printf("uram1[0]=%x\n", *(uint16_t *)uram1);
-
             tx_lsu_dma_u2d<lsuTCSR1>((long)(res + i * res_nb2 + bs * res_nb3), (long)uram1);
             __tx_lsu_sb_bar();
-
-            printf("res[0]=%x\n", *(uint16_t *)res);
         }
     }
 
