@@ -57,11 +57,9 @@ static inline void configLSUTCSR(int m, int n) {
 }
 
 #define MAX_VEC_LEN 0x1000
-static float pos_cos[0x1000];
-static float pos_sin[0x1000];
-static float theta_interp_cache[0x1000];
+static float theta_interp_cache[0x1000] __attribute__((aligned(64)));;
 
-static inline void rope_yarn(float *cos_cache, float *sin_cache, float theta_base,
+static inline void rope_yarn(uint64_t cos_cache_uram, uint64_t sin_cache_uram, float theta_base,
                              float theta_scale, float freq_scale, int m,
                              float *corr_dims = NULL,   // useless in qwen2
                              float *freq_factor = NULL, // freq_factor is always NULL in qwen2
@@ -86,20 +84,16 @@ static inline void rope_yarn(float *cos_cache, float *sin_cache, float theta_bas
         theta_interp_cache[i] = freq_scale * theta_extrap;
         theta *= theta_scale;
     }
-
+    printf("theta_interp_cache = %p\n", theta_interp_cache);
     tx_lsu_dma_d2u<lsuTCSR>((long)rama, (long)theta_interp_cache);
     __tx_lsu_sb_bar();
 
     __tx_sfu_cos_fp32<aTCSR, aTCSR>(rama, ramb);
     __tx_sfu_sin_fp32<aTCSR, aTCSR>(rama, ramc);
-    __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void *)ramb, (void *)ram_mscale, (void *)ramb); // cos * mscale
+    __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void *)ramb, (void *)ram_mscale, (void *)cos_cache_uram); // cos * mscale
     __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void *)ramc, (void *)ram_mscale, (void *)ramc); // sin * mscale
-    __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void *)ramc, (void *)ram_mscale, (void *)ramc); // sin * mscale * sin_sign
+    __tx_fp_mul_fp32<aTCSR, oneTCSR, aTCSR, 0b0001>((void *)ramc, (void *)ram_mscale, (void *)sin_cache_uram); // sin * mscale * sin_sign
     __tx_sb_bar();
-
-    tx_lsu_dma_u2d<lsuTCSR>((long)cos_cache, (long)ramb);
-    tx_lsu_dma_u2d<lsuTCSR>((long)sin_cache, (long)ramc);
-    __tx_lsu_sb_bar();
 }
 
 __device__ long rope_f32_i32_f32(float *a, int *b, float *res, int bs, int h, int n, int m,
@@ -133,7 +127,7 @@ __device__ long rope_f32_i32_f32(float *a, int *b, float *res, int bs, int h, in
     for (int i = 0; i < bs; ++i) {    // batch
         for (int j = 0; j < h; ++j) { // seq-len
             int64_t p = b[j];
-            rope_yarn(pos_cos, pos_sin, p, theta_scale, freq_scale, mdst);
+            rope_yarn(uram2, uram3, p, theta_scale, freq_scale, mdst);
 
             for (int k = 0; k < n; ++k) { // attn-heads
                 const int64_t head_offset = (i * h * n + j * n + k) * m;
@@ -145,8 +139,6 @@ __device__ long rope_f32_i32_f32(float *a, int *b, float *res, int bs, int h, in
                 // load stage
                 tx_lsu_dma_d2u<lsuTCSR>((long)uram0, (long)x0_ptr);
                 tx_lsu_dma_d2u<lsuTCSR>((long)uram1, (long)x1_ptr);
-                tx_lsu_dma_d2u<lsuTCSR>((long)uram2, (long)pos_cos);
-                tx_lsu_dma_d2u<lsuTCSR>((long)uram3, (long)pos_sin);
                 __tx_lsu_sb_bar();
 
                 // compute stage
