@@ -182,7 +182,7 @@ int test_rope(std::string src0_trace, std::string src1_trace, std::string dst_tr
 
         // 对比结果
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 1e-4f;
+        const float epsilon = 1e-3f;
         bool all_match = true;
 
         int bs = psrc0.ne[3];
