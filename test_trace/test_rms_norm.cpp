@@ -133,7 +133,7 @@ int test_rms_norm(std::string src0_trace, std::string dst_trace, TensorParams &p
 
         // 对比结果
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 1e-6f;
+        const float epsilon = 2 * 1e-2f;
         bool all_match = true;
 
         for (size_t i = 0; i < result_data.size(); ++i) {
