@@ -3,10 +3,14 @@
   .section ".text.trap"
   .globl _trap_handler
 _trap_handler:
+  csrw mscratch, sp
+  la sp, trap_stack + (512 * 8) # Set sp to top of trap stack
   # Alloc trapframe == sp - TF_SIZE
   # Save Basic Information of sp, t0-t2
-  sd sp, TF_REG2 - TF_SIZE(sp)
   sd t0, TF_REG5 - TF_SIZE(sp)
+  csrr t0, mscratch
+  sd t0, TF_REG2 - TF_SIZE(sp)
+  // sd sp, TF_REG2 - TF_SIZE(sp)
   sd t1, TF_REG6 - TF_SIZE(sp)
   sd t2, TF_REG7 - TF_SIZE(sp)
 

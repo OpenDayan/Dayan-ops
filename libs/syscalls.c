@@ -13,6 +13,7 @@
 
 #undef strcmp
 
+uint64_t trap_stack[512];
 extern volatile uint64_t tohost;
 extern volatile uint64_t fromhost;
 

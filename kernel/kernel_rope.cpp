@@ -84,6 +84,7 @@ static inline void rope_yarn(uint64_t cos_cache_uram, uint64_t sin_cache_uram, f
         theta_interp_cache[i] = freq_scale * theta_extrap;
         theta *= theta_scale;
     }
+    __asm__ __volatile__(".insn 0xfc000073" ::: "memory"); // CFLUSH.D.L1
     tx_lsu_dma_d2u<lsuTCSR>((long)rama, (long)theta_interp_cache);
     __tx_lsu_sb_bar();
 

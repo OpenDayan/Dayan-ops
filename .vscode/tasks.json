@@ -40,6 +40,7 @@
         "test_instructions/build/test_instrs",
         "test_instructions/build/test_bf16_matmul",
         "test_trace/build/test_silu test_trace/example_trace/prefill0-5/silu/ 0",
+        "test_trace/build/test_rms_norm test_trace/example_trace/prefill0-5/rms_norm/ 0"
       ],
       "type": "pickString"
     }
