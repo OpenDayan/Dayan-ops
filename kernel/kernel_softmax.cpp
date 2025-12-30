@@ -58,10 +58,10 @@ __device__ long softmax_f32_f32_f32(float *a, float *b, float *res, uint32_t sca
                                     int n, int m) {
     float scale = u32_as_float(scale_);
     float *sp = (float *)_uram;
-    float *scale_ram = sp + 1;
-    float *slope_ram = sp + 2;
-    float *max_ram = sp + 3;
-    float *sum_ram = sp + 4;
+    float *scale_ram = sp + 0x100;
+    float *slope_ram = sp + 0x200;
+    float *max_ram = sp + 0x300;
+    float *sum_ram = sp + 0x400;
 
     void * uram0 = (void *)((char *)_uram + 0x10000);
     void * uram1 = (void *)((char *)_uram + 0x20000);
@@ -83,8 +83,6 @@ __device__ long softmax_f32_f32_f32(float *a, float *b, float *res, uint32_t sca
             float *b_ptr = &b[i * h * n * m + (j % n) * m];
             float *res_ptr = &res[i * h * n * m + j * m];
 
-            float sum = 0.0f;
-
             // load stage
             tx_lsu_dma_d2u<lsuTCSR>((long)uram0, (long)a_ptr);
             tx_lsu_dma_d2u<lsuTCSR>((long)uram1, (long)b_ptr);
@@ -104,16 +102,10 @@ __device__ long softmax_f32_f32_f32(float *a, float *b, float *res, uint32_t sca
                 (void *)uram0); // a[i][j][k][:] = a[i][j][k][:] - max
             __tx_sfu_exp_fp32<aTCSR, bTCSR>((void *)uram0,
                                             (void *)uram1); // exp_temp = exp(a[i][j][k][:])
-
             __tx_fp_reduce_add_fp32<aTCSR, oneTCSR, 0>((void *)uram1,
                                                        (void *)sum_ram); // sum = sum of exp_temp
-            __tx_sb_bar();
+            __tx_sfu_recip_fp32<oneTCSR, oneTCSR>((void *)sum_ram, (void *)sum_ram); // sum_ram = 1/sum
 
-            sum = *(float *)sum_ram;
-            sum = 1.0f / sum;
-            *(float *)sum_ram = sum;
-
-            __tx_sb_bar();
             __tx_fp_mul_fp32<bTCSR, oneTCSR, cTCSR, 0b0001>((void *)uram1, sum_ram,
                                                             (void *)uram1); // exp_temp *= 1/sum
             __tx_sb_bar();
