@@ -85,7 +85,6 @@ __device__ long kernel_add_fp32_without_broadcast(void* a_ptr,
                 const long base_offset =
                     (long)i * stride_dim3 + (long)j * stride_dim2 + (long)k * stride_dim1;
 
-                // 预加载 chunk0
                 int chunk0 = (ne0 > MTile) ? MTile : ne0;
                 config_tcsr_vector<aTCSR>(chunk0);
                 config_tcsr_vector<bTCSR>(chunk0);
@@ -100,13 +99,25 @@ __device__ long kernel_add_fp32_without_broadcast(void* a_ptr,
                 __tx_lsu_sb_bar();
                 __tx_sb_bar();
 
-                // 主循环
                 for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
                     const int cur_buf = chunk_idx % 2;
                     const int next_buf = (chunk_idx + 1) % 2;
                     const int prev_buf = (chunk_idx - 1 + 2) % 2;
 
-                    // 预取 next
+                    const int cur_size =
+                        (ne0 - chunk_idx * MTile > MTile)
+                            ? MTile
+                            : (ne0 - chunk_idx * MTile);
+
+                    config_tcsr_vector<aTCSR>(cur_size);
+                    config_tcsr_vector<bTCSR>(cur_size);
+                    config_tcsr_vector<cTCSR>(cur_size);
+
+                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
+                        uram_ptr(A_base + cur_buf * MTile),
+                        uram_ptr(B_base + cur_buf * MTile),
+                        uram_ptr(C_base + cur_buf * MTile));
+
                     if (chunk_idx < total_chunks - 1) {
                         const int next_size =
                             (ne0 - (chunk_idx + 1) * MTile > MTile)
@@ -123,7 +134,6 @@ __device__ long kernel_add_fp32_without_broadcast(void* a_ptr,
                         tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)b_next);
                     }
 
-                    // 回写 prev
                     if (chunk_idx > 0) {
                         const int prev_size =
                             (ne0 - (chunk_idx - 1) * MTile > MTile)
@@ -138,26 +148,10 @@ __device__ long kernel_add_fp32_without_broadcast(void* a_ptr,
                         tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
                     }
 
-                    // 计算 cur
-                    const int cur_size =
-                        (ne0 - chunk_idx * MTile > MTile)
-                            ? MTile
-                            : (ne0 - chunk_idx * MTile);
-
-                    config_tcsr_vector<aTCSR>(cur_size);
-                    config_tcsr_vector<bTCSR>(cur_size);
-                    config_tcsr_vector<cTCSR>(cur_size);
-
-                    __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
-                        uram_ptr(A_base + cur_buf * MTile),
-                        uram_ptr(B_base + cur_buf * MTile),
-                        uram_ptr(C_base + cur_buf * MTile));
-
                     __tx_sb_bar();
                     __tx_lsu_sb_bar();
                 }
 
-                // 回写最后一个 chunk
                 const int last_idx = total_chunks - 1;
                 const int last_buf = last_idx % 2;
                 const int last_size =
@@ -216,6 +210,21 @@ __device__ long kernel_mul_fp32_without_broadcast(void* a_ptr,
                     const int next_buf = (chunk_idx + 1) % 2;
                     const int prev_buf = (chunk_idx - 1 + 2) % 2;
 
+                    const int cur_size =
+                        (ne0 - chunk_idx * MTile > MTile)
+                            ? MTile
+                            : (ne0 - chunk_idx * MTile);
+
+                    config_tcsr_vector<aTCSR>(cur_size);
+                    config_tcsr_vector<bTCSR>(cur_size);
+                    config_tcsr_vector<cTCSR>(cur_size);
+
+                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
+                        uram_ptr(A_base + cur_buf * MTile),
+                        uram_ptr(B_base + cur_buf * MTile),
+                        uram_ptr(C_base + cur_buf * MTile));
+
+                    // 2. 发射预取 (Prefetch Next)
                     if (chunk_idx < total_chunks - 1) {
                         const int next_size =
                             (ne0 - (chunk_idx + 1) * MTile > MTile)
@@ -246,20 +255,6 @@ __device__ long kernel_mul_fp32_without_broadcast(void* a_ptr,
                         tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
                     }
 
-                    const int cur_size =
-                        (ne0 - chunk_idx * MTile > MTile)
-                            ? MTile
-                            : (ne0 - chunk_idx * MTile);
-
-                    config_tcsr_vector<aTCSR>(cur_size);
-                    config_tcsr_vector<bTCSR>(cur_size);
-                    config_tcsr_vector<cTCSR>(cur_size);
-
-                    __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(
-                        uram_ptr(A_base + cur_buf * MTile),
-                        uram_ptr(B_base + cur_buf * MTile),
-                        uram_ptr(C_base + cur_buf * MTile));
-
                     __tx_sb_bar();
                     __tx_lsu_sb_bar();
                 }
@@ -287,52 +282,6 @@ static inline bool needs_broadcast(int a0, int a1, int a2, int a3,
     return (a0 != b0 || a1 != b1 || a2 != b2 || a3 != b3);
 }
 
-#define DISPATCH_VEC_ADD_FP32(mask, a_u, b_u, c_u)                     \
-    do {                                                               \
-        switch (mask) {                                                \
-        case 0b0000: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0000>(a_u,b_u,c_u); break; \
-        case 0b0001: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0001>(a_u,b_u,c_u); break; \
-        case 0b0010: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0010>(a_u,b_u,c_u); break; \
-        case 0b0011: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0011>(a_u,b_u,c_u); break; \
-        case 0b0100: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0100>(a_u,b_u,c_u); break; \
-        case 0b0101: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0101>(a_u,b_u,c_u); break; \
-        case 0b0110: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0110>(a_u,b_u,c_u); break; \
-        case 0b0111: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0111>(a_u,b_u,c_u); break; \
-        case 0b1000: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1000>(a_u,b_u,c_u); break; \
-        case 0b1001: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1001>(a_u,b_u,c_u); break; \
-        case 0b1010: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1010>(a_u,b_u,c_u); break; \
-        case 0b1011: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1011>(a_u,b_u,c_u); break; \
-        case 0b1100: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1100>(a_u,b_u,c_u); break; \
-        case 0b1101: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1101>(a_u,b_u,c_u); break; \
-        case 0b1110: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1110>(a_u,b_u,c_u); break; \
-        case 0b1111: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b1111>(a_u,b_u,c_u); break; \
-        default: __tx_fp_add_fp32<aTCSR,bTCSR,cTCSR,0b0000>(a_u,b_u,c_u); break;     \
-        }                                                              \
-    } while (0)
-
-#define DISPATCH_VEC_MUL_FP32(mask, a_u, b_u, c_u)                     \
-    do {                                                               \
-        switch (mask) {                                                \
-        case 0b0000: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0000>(a_u,b_u,c_u); break; \
-        case 0b0001: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0001>(a_u,b_u,c_u); break; \
-        case 0b0010: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0010>(a_u,b_u,c_u); break; \
-        case 0b0011: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0011>(a_u,b_u,c_u); break; \
-        case 0b0100: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0100>(a_u,b_u,c_u); break; \
-        case 0b0101: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0101>(a_u,b_u,c_u); break; \
-        case 0b0110: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0110>(a_u,b_u,c_u); break; \
-        case 0b0111: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0111>(a_u,b_u,c_u); break; \
-        case 0b1000: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1000>(a_u,b_u,c_u); break; \
-        case 0b1001: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1001>(a_u,b_u,c_u); break; \
-        case 0b1010: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1010>(a_u,b_u,c_u); break; \
-        case 0b1011: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1011>(a_u,b_u,c_u); break; \
-        case 0b1100: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1100>(a_u,b_u,c_u); break; \
-        case 0b1101: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1101>(a_u,b_u,c_u); break; \
-        case 0b1110: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1110>(a_u,b_u,c_u); break; \
-        case 0b1111: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b1111>(a_u,b_u,c_u); break; \
-        default: __tx_fp_mul_fp32<aTCSR,bTCSR,cTCSR,0b0000>(a_u,b_u,c_u); break;     \
-        }                                                              \
-    } while (0)
-
 static inline uint8_t get_broadcast(int a_dim0, int a_dim1, int a_dim2, int a_dim3, int b_dim0,
                                     int b_dim1, int b_dim2, int b_dim3) {
     uint8_t broadcast = 0;
@@ -356,207 +305,126 @@ static inline uint8_t get_broadcast(int a_dim0, int a_dim1, int a_dim2, int a_di
     return broadcast;
 }
     
+
 __device__ long kernel_add_fp32_with_broadcast(void* a_ptr, void* b_ptr, void* c_ptr,
-                                                 int a0,int a1,int a2,int a3,
-                                                 int b0,int b1,int b2,int b3) {
-    const uint8_t broadcast_base = get_broadcast(a0,a1,a2,a3, b0,b1,b2,b3);
+                                               int psrc0_ne0, int psrc0_ne1, int psrc0_ne2, int psrc0_ne3,
+                                               int psrc1_ne0, int psrc1_ne1, int psrc1_ne2, int psrc1_ne3) {
+    
+    // 1. 计算维度步长
+    const int a_stride_dim1 = psrc0_ne0;
+    const int a_stride_dim2 = psrc0_ne0 * psrc0_ne1;
+    const int a_stride_dim3 = psrc0_ne0 * psrc0_ne1 * psrc0_ne2;
 
-    const int a_s1 = a0;
-    const int a_s2 = a0 * a1;
-    const int a_s3 = a0 * a1 * a2;
+    const int b_stride_dim1 = psrc1_ne0;
+    const int b_stride_dim2 = psrc1_ne0 * psrc1_ne1;
+    const int b_stride_dim3 = psrc1_ne0 * psrc1_ne1 * psrc1_ne2;
 
-    const int b_s1 = b0;
-    const int b_s2 = b0 * b1;
-    const int b_s3 = b0 * b1 * b2;
-
+    // URAM 布局常量
     constexpr size_t A_base = 0;
     constexpr size_t B_base = A_base + 2 * MTile;
     constexpr size_t C_base = B_base + 2 * MTile;
-    constexpr size_t B_scalar_base = C_base + 2 * MTile;
-    (void)B_scalar_base;
 
-    for (int i = 0; i < a3; ++i) {
-        const int i1 = (b3 == 1) ? 0 : i;
-        for (int j = 0; j < a2; ++j) {
-            const int j1 = (b2 == 1) ? 0 : j;
-            for (int k = 0; k < a1; ++k) {
-                const int k1 = (b1 == 1) ? 0 : k;
+    for (int i = 0; i < psrc0_ne3; ++i) {
+        int i1 = (psrc1_ne3 == 1) ? 0 : i;
 
-                const int total_chunks = (a0 + MTile - 1) / MTile;
+        for (int j = 0; j < psrc0_ne2; ++j) {
+            int j1 = (psrc1_ne2 == 1) ? 0 : j;
+
+            for (int k = 0; k < psrc0_ne1; ++k) {
+                int k1 = (psrc1_ne1 == 1) ? 0 : k;
+
+                const int total_chunks = (psrc0_ne0 + MTile - 1) / MTile;
                 if (total_chunks <= 0) continue;
 
-                const long a_base = (long)i * a_s3 + (long)j * a_s2 + (long)k * a_s1;
-                const long c_base = a_base;
+                const long a_base_offset = (long)i * a_stride_dim3 + (long)j * a_stride_dim2 + (long)k * a_stride_dim1;
+                // B 的偏移计算已经包含了 Dim1/2/3 的广播逻辑 
+                const long b_base_offset = (long)i1 * b_stride_dim3 + (long)j1 * b_stride_dim2 + (long)k1 * b_stride_dim1;
+                const long c_base_offset = a_base_offset;
 
-                const long b_base =
-                    (long)i1 * b_s3 + (long)j1 * b_s2 + (long)k1 * b_s1;
+                // 外层维度的广播由软件循环处理，指令只关心 Dim0
+                uint8_t instruction_mask = (psrc1_ne0 == 1) ? 0b0001 : 0b0000;
 
-                if (b0 == 1) {
-                    configLSUTCSR_1d<lsuTCSR, float>(1);
-                    float* b_scalar_ptr = (float*)b_ptr + b_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_scalar_base), (long)b_scalar_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
+                // 预加载阶段
+                int chunk0_size = (psrc0_ne0 > MTile) ? MTile : psrc0_ne0;
+                
+                configLSUTCSR_1d<lsuTCSR, float>(chunk0_size);
+                tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)((float*)a_ptr + a_base_offset));
 
-                    const uint8_t mask = (uint8_t)(broadcast_base | 0b0001);
+                // B 的加载
+                int b_chunk0_size = (psrc1_ne0 == 1) ? 1 : chunk0_size;
+                configLSUTCSR_1d<lsuTCSR, float>(b_chunk0_size);
+                tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + 0 * MTile), (long)((float*)b_ptr + b_base_offset));
 
-                    const int chunk0 = (a0 > MTile) ? MTile : a0;
-                    config_tcsr_vector<aTCSR>(chunk0);
-                    config_tcsr_vector<bTCSR>(1);
-                    config_tcsr_vector<cTCSR>(chunk0);
-                    configLSUTCSR_1d<lsuTCSR, float>(chunk0);
+                config_tcsr_vector<aTCSR>(chunk0_size);
+                config_tcsr_vector<bTCSR>((psrc1_ne0 == 1) ? 1 : chunk0_size);
+                config_tcsr_vector<cTCSR>(chunk0_size);
 
-                    float* a0_ptr = (float*)a_ptr + a_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)a0_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
+                __tx_lsu_sb_bar();
+                __tx_sb_bar();
 
-                    for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
-                        const int cur_buf = chunk_idx % 2;
-                        const int next_buf = (chunk_idx + 1) % 2;
-                        const int prev_buf = (chunk_idx - 1 + 2) % 2;
 
-                        // 预取 next A
-                        if (chunk_idx < total_chunks - 1) {
-                            const int next_size =
-                                (a0 - (chunk_idx + 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx + 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(next_size);
+                for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
+                    const int cur_buf = chunk_idx % 2;
+                    const int next_buf = (chunk_idx + 1) % 2;
+                    const int prev_buf = (chunk_idx - 1 + 2) % 2;
 
-                            long next_off = a_base + (long)(chunk_idx + 1) * MTile;
-                            float* a_next = (float*)a_ptr + next_off;
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)a_next);
+                    // 预取
+                    if (chunk_idx < total_chunks - 1) {
+                        int next_chunk_size = (psrc0_ne0 - (chunk_idx + 1) * MTile > MTile) ? MTile : (psrc0_ne0 - (chunk_idx + 1) * MTile);
+                        
+                        configLSUTCSR_1d<lsuTCSR, float>(next_chunk_size);
+                        long a_next_off = a_base_offset + (long)(chunk_idx + 1) * MTile;
+                        tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)((float*)a_ptr + a_next_off));
+
+                        if (psrc1_ne0 == 1) {
+                            configLSUTCSR_1d<lsuTCSR, float>(1);
+                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)((float*)b_ptr + b_base_offset));
+                        } else {
+                            configLSUTCSR_1d<lsuTCSR, float>(next_chunk_size);
+                            long b_next_off = b_base_offset + (long)(chunk_idx + 1) * MTile;
+                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)((float*)b_ptr + b_next_off));
                         }
-
-                        // 回写 prev C
-                        if (chunk_idx > 0) {
-                            const int prev_size =
-                                (a0 - (chunk_idx - 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx - 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(prev_size);
-
-                            long prev_off = c_base + (long)(chunk_idx - 1) * MTile;
-                            float* c_prev = (float*)c_ptr + prev_off;
-                            tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
-                        }
-
-                        // 计算 cur
-                        const int cur_size =
-                            (a0 - chunk_idx * MTile > MTile)
-                                ? MTile
-                                : (a0 - chunk_idx * MTile);
-
-                        config_tcsr_vector<aTCSR>(cur_size);
-                        config_tcsr_vector<bTCSR>(1);
-                        config_tcsr_vector<cTCSR>(cur_size);
-
-                        DISPATCH_VEC_ADD_FP32(mask,
-                            uram_ptr(A_base + cur_buf * MTile),
-                            uram_ptr(B_scalar_base),
-                            uram_ptr(C_base + cur_buf * MTile));
-
-                        __tx_sb_bar();
-                        __tx_lsu_sb_bar();
                     }
 
-                    // 回写最后一个
-                    const int last_idx = total_chunks - 1;
-                    const int last_buf = last_idx % 2;
-                    const int last_size =
-                        (a0 - last_idx * MTile > MTile) ? MTile : (a0 - last_idx * MTile);
-
-                    configLSUTCSR_1d<lsuTCSR, float>(last_size);
-
-                    long last_off = c_base + (long)last_idx * MTile;
-                    float* c_last = (float*)c_ptr + last_off;
-                    tx_lsu_dma_u2d<lsuTCSR>((long)c_last, (long)uram_ptr(C_base + last_buf * MTile));
-                    __tx_lsu_sb_bar();
-
-                    continue;
-                }
-
-                {
-                    const uint8_t mask = broadcast_base;
-
-                    // 预取 chunk0 的 A/B
-                    const int chunk0 = (a0 > MTile) ? MTile : a0;
-                    config_tcsr_vector<aTCSR>(chunk0);
-                    config_tcsr_vector<bTCSR>(chunk0);
-                    config_tcsr_vector<cTCSR>(chunk0);
-                    configLSUTCSR_1d<lsuTCSR, float>(chunk0);
-
-                    float* a0_ptr = (float*)a_ptr + a_base;
-                    float* b0_ptr = (float*)b_ptr + b_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)a0_ptr);
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + 0 * MTile), (long)b0_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
-
-                    for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
-                        const int cur_buf = chunk_idx % 2;
-                        const int next_buf = (chunk_idx + 1) % 2;
-                        const int prev_buf = (chunk_idx - 1 + 2) % 2;
-
-                        if (chunk_idx < total_chunks - 1) {
-                            const int next_size =
-                                (a0 - (chunk_idx + 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx + 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(next_size);
-
-                            long next_a_off = a_base + (long)(chunk_idx + 1) * MTile;
-                            long next_b_off = b_base + (long)(chunk_idx + 1) * MTile;
-                            float* a_next = (float*)a_ptr + next_a_off;
-                            float* b_next = (float*)b_ptr + next_b_off;
-
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)a_next);
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)b_next);
-                        }
-
-                        if (chunk_idx > 0) {
-                            const int prev_size =
-                                (a0 - (chunk_idx - 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx - 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(prev_size);
-
-                            long prev_c_off = c_base + (long)(chunk_idx - 1) * MTile;
-                            float* c_prev = (float*)c_ptr + prev_c_off;
-                            tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
-                        }
-
-                        const int cur_size =
-                            (a0 - chunk_idx * MTile > MTile)
-                                ? MTile
-                                : (a0 - chunk_idx * MTile);
-
-                        config_tcsr_vector<aTCSR>(cur_size);
-                        config_tcsr_vector<bTCSR>(cur_size);
-                        config_tcsr_vector<cTCSR>(cur_size);
-
-                        DISPATCH_VEC_ADD_FP32(mask,
-                            uram_ptr(A_base + cur_buf * MTile),
-                            uram_ptr(B_base + cur_buf * MTile),
-                            uram_ptr(C_base + cur_buf * MTile));
-
-                        __tx_sb_bar();
-                        __tx_lsu_sb_bar();
+                    // 回写
+                    if (chunk_idx > 0) {
+                        int prev_chunk_size = (psrc0_ne0 - (chunk_idx - 1) * MTile > MTile) ? MTile : (psrc0_ne0 - (chunk_idx - 1) * MTile);
+                        configLSUTCSR_1d<lsuTCSR, float>(prev_chunk_size);
+                        
+                        long c_prev_off = c_base_offset + (long)(chunk_idx - 1) * MTile;
+                        tx_lsu_dma_u2d<lsuTCSR>((long)((float*)c_ptr + c_prev_off), (long)uram_ptr(C_base + prev_buf * MTile));
                     }
 
-                    const int last_idx = total_chunks - 1;
-                    const int last_buf = last_idx % 2;
-                    const int last_size =
-                        (a0 - last_idx * MTile > MTile) ? MTile : (a0 - last_idx * MTile);
+                    // 计算 Cur
+                    int cur_size = (psrc0_ne0 - chunk_idx * MTile > MTile) ? MTile : (psrc0_ne0 - chunk_idx * MTile);
+                    
+                    config_tcsr_vector<aTCSR>(cur_size);
+                    config_tcsr_vector<bTCSR>((psrc1_ne0 == 1) ? 1 : cur_size);
+                    config_tcsr_vector<cTCSR>(cur_size);
 
-                    configLSUTCSR_1d<lsuTCSR, float>(last_size);
+                    void* a_uram = uram_ptr(A_base + cur_buf * MTile);
+                    void* b_uram = uram_ptr(B_base + cur_buf * MTile);
+                    void* c_uram = uram_ptr(C_base + cur_buf * MTile);
 
-                    long last_off = c_base + (long)last_idx * MTile;
-                    float* c_last = (float*)c_ptr + last_off;
-                    tx_lsu_dma_u2d<lsuTCSR>((long)c_last, (long)uram_ptr(C_base + last_buf * MTile));
+                    if (instruction_mask == 0b0001) {
+                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0001>(a_uram, b_uram, c_uram);
+                    } else {
+                        __tx_fp_add_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(a_uram, b_uram, c_uram);
+                    }
+
+                    __tx_sb_bar();
                     __tx_lsu_sb_bar();
                 }
+
+                // 回写
+                int last_idx = total_chunks - 1;
+                int last_buf = last_idx % 2;
+                int last_size = (psrc0_ne0 - last_idx * MTile > MTile) ? MTile : (psrc0_ne0 - last_idx * MTile);
+
+                configLSUTCSR_1d<lsuTCSR, float>(last_size);
+                long c_last_off = c_base_offset + (long)last_idx * MTile;
+                tx_lsu_dma_u2d<lsuTCSR>((long)((float*)c_ptr + c_last_off), (long)uram_ptr(C_base + last_buf * MTile));
+                __tx_lsu_sb_bar();
             }
         }
     }
@@ -564,198 +432,108 @@ __device__ long kernel_add_fp32_with_broadcast(void* a_ptr, void* b_ptr, void* c
 }
 
 __device__ long kernel_mul_fp32_with_broadcast(void* a_ptr, void* b_ptr, void* c_ptr,
-                                                 int a0,int a1,int a2,int a3,
-                                                 int b0,int b1,int b2,int b3) {
-    const uint8_t broadcast_base = get_broadcast(a0,a1,a2,a3, b0,b1,b2,b3);
+                                               int psrc0_ne0, int psrc0_ne1, int psrc0_ne2, int psrc0_ne3,
+                                               int psrc1_ne0, int psrc1_ne1, int psrc1_ne2, int psrc1_ne3) {
+    
+    const int a_stride_dim1 = psrc0_ne0;
+    const int a_stride_dim2 = psrc0_ne0 * psrc0_ne1;
+    const int a_stride_dim3 = psrc0_ne0 * psrc0_ne1 * psrc0_ne2;
 
-    const int a_s1 = a0;
-    const int a_s2 = a0 * a1;
-    const int a_s3 = a0 * a1 * a2;
-
-    const int b_s1 = b0;
-    const int b_s2 = b0 * b1;
-    const int b_s3 = b0 * b1 * b2;
+    const int b_stride_dim1 = psrc1_ne0;
+    const int b_stride_dim2 = psrc1_ne0 * psrc1_ne1;
+    const int b_stride_dim3 = psrc1_ne0 * psrc1_ne1 * psrc1_ne2;
 
     constexpr size_t A_base = 0;
     constexpr size_t B_base = A_base + 2 * MTile;
     constexpr size_t C_base = B_base + 2 * MTile;
-    constexpr size_t B_scalar_base = C_base + 2 * MTile;
 
-    for (int i = 0; i < a3; ++i) {
-        const int i1 = (b3 == 1) ? 0 : i;
-        for (int j = 0; j < a2; ++j) {
-            const int j1 = (b2 == 1) ? 0 : j;
-            for (int k = 0; k < a1; ++k) {
-                const int k1 = (b1 == 1) ? 0 : k;
+    for (int i = 0; i < psrc0_ne3; ++i) {
+        int i1 = (psrc1_ne3 == 1) ? 0 : i;
+        for (int j = 0; j < psrc0_ne2; ++j) {
+            int j1 = (psrc1_ne2 == 1) ? 0 : j;
+            for (int k = 0; k < psrc0_ne1; ++k) {
+                int k1 = (psrc1_ne1 == 1) ? 0 : k;
 
-                const int total_chunks = (a0 + MTile - 1) / MTile;
+                const int total_chunks = (psrc0_ne0 + MTile - 1) / MTile;
                 if (total_chunks <= 0) continue;
 
-                const long a_base = (long)i * a_s3 + (long)j * a_s2 + (long)k * a_s1;
-                const long c_base = a_base;
-                const long b_base = (long)i1 * b_s3 + (long)j1 * b_s2 + (long)k1 * b_s1;
+                const long a_base_offset = (long)i * a_stride_dim3 + (long)j * a_stride_dim2 + (long)k * a_stride_dim1;
+                const long b_base_offset = (long)i1 * b_stride_dim3 + (long)j1 * b_stride_dim2 + (long)k1 * b_stride_dim1;
+                const long c_base_offset = a_base_offset; 
 
-                if (b0 == 1) {
-                    configLSUTCSR_1d<lsuTCSR, float>(1);
-                    float* b_scalar_ptr = (float*)b_ptr + b_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_scalar_base), (long)b_scalar_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
+                uint8_t instruction_mask = (psrc1_ne0 == 1) ? 0b0001 : 0b0000;
 
-                    const uint8_t mask = (uint8_t)(broadcast_base | 0b0001);
+                int chunk0_size = (psrc0_ne0 > MTile) ? MTile : psrc0_ne0;
+                configLSUTCSR_1d<lsuTCSR, float>(chunk0_size);
+                tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)((float*)a_ptr + a_base_offset));
 
-                    const int chunk0 = (a0 > MTile) ? MTile : a0;
-                    config_tcsr_vector<aTCSR>(chunk0);
-                    config_tcsr_vector<bTCSR>(1);
-                    config_tcsr_vector<cTCSR>(chunk0);
-                    configLSUTCSR_1d<lsuTCSR, float>(chunk0);
+                int b_chunk0_size = (psrc1_ne0 == 1) ? 1 : chunk0_size;
+                configLSUTCSR_1d<lsuTCSR, float>(b_chunk0_size);
+                tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + 0 * MTile), (long)((float*)b_ptr + b_base_offset));
 
-                    float* a0_ptr = (float*)a_ptr + a_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)a0_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
+                config_tcsr_vector<aTCSR>(chunk0_size);
+                config_tcsr_vector<bTCSR>((psrc1_ne0 == 1) ? 1 : chunk0_size);
+                config_tcsr_vector<cTCSR>(chunk0_size);
 
-                    for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
-                        const int cur_buf = chunk_idx % 2;
-                        const int next_buf = (chunk_idx + 1) % 2;
-                        const int prev_buf = (chunk_idx - 1 + 2) % 2;
+                __tx_lsu_sb_bar();
+                __tx_sb_bar();
 
-                        if (chunk_idx < total_chunks - 1) {
-                            const int next_size =
-                                (a0 - (chunk_idx + 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx + 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(next_size);
+                for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
+                    const int cur_buf = chunk_idx % 2;
+                    const int next_buf = (chunk_idx + 1) % 2;
+                    const int prev_buf = (chunk_idx - 1 + 2) % 2;
 
-                            long next_off = a_base + (long)(chunk_idx + 1) * MTile;
-                            float* a_next = (float*)a_ptr + next_off;
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)a_next);
+                    if (chunk_idx < total_chunks - 1) {
+                        int next_chunk_size = (psrc0_ne0 - (chunk_idx + 1) * MTile > MTile) ? MTile : (psrc0_ne0 - (chunk_idx + 1) * MTile);
+                        
+                        configLSUTCSR_1d<lsuTCSR, float>(next_chunk_size);
+                        long a_next_off = a_base_offset + (long)(chunk_idx + 1) * MTile;
+                        tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)((float*)a_ptr + a_next_off));
+
+                        if (psrc1_ne0 == 1) {
+                            configLSUTCSR_1d<lsuTCSR, float>(1);
+                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)((float*)b_ptr + b_base_offset));
+                        } else {
+                            configLSUTCSR_1d<lsuTCSR, float>(next_chunk_size);
+                            long b_next_off = b_base_offset + (long)(chunk_idx + 1) * MTile;
+                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)((float*)b_ptr + b_next_off));
                         }
-
-                        if (chunk_idx > 0) {
-                            const int prev_size =
-                                (a0 - (chunk_idx - 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx - 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(prev_size);
-
-                            long prev_off = c_base + (long)(chunk_idx - 1) * MTile;
-                            float* c_prev = (float*)c_ptr + prev_off;
-                            tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
-                        }
-
-                        const int cur_size =
-                            (a0 - chunk_idx * MTile > MTile)
-                                ? MTile
-                                : (a0 - chunk_idx * MTile);
-
-                        config_tcsr_vector<aTCSR>(cur_size);
-                        config_tcsr_vector<bTCSR>(1);
-                        config_tcsr_vector<cTCSR>(cur_size);
-
-                        DISPATCH_VEC_MUL_FP32(mask,
-                            uram_ptr(A_base + cur_buf * MTile),
-                            uram_ptr(B_scalar_base),
-                            uram_ptr(C_base + cur_buf * MTile));
-
-                        __tx_sb_bar();
-                        __tx_lsu_sb_bar();
                     }
 
-                    const int last_idx = total_chunks - 1;
-                    const int last_buf = last_idx % 2;
-                    const int last_size =
-                        (a0 - last_idx * MTile > MTile) ? MTile : (a0 - last_idx * MTile);
-
-                    configLSUTCSR_1d<lsuTCSR, float>(last_size);
-
-                    long last_off = c_base + (long)last_idx * MTile;
-                    float* c_last = (float*)c_ptr + last_off;
-                    tx_lsu_dma_u2d<lsuTCSR>((long)c_last, (long)uram_ptr(C_base + last_buf * MTile));
-                    __tx_lsu_sb_bar();
-
-                    continue;
-                }
-
-                {
-                    const uint8_t mask = broadcast_base;
-
-                    const int chunk0 = (a0 > MTile) ? MTile : a0;
-                    config_tcsr_vector<aTCSR>(chunk0);
-                    config_tcsr_vector<bTCSR>(chunk0);
-                    config_tcsr_vector<cTCSR>(chunk0);
-                    configLSUTCSR_1d<lsuTCSR, float>(chunk0);
-
-                    float* a0_ptr = (float*)a_ptr + a_base;
-                    float* b0_ptr = (float*)b_ptr + b_base;
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + 0 * MTile), (long)a0_ptr);
-                    tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + 0 * MTile), (long)b0_ptr);
-                    __tx_lsu_sb_bar();
-                    __tx_sb_bar();
-
-                    for (int chunk_idx = 0; chunk_idx < total_chunks; ++chunk_idx) {
-                        const int cur_buf = chunk_idx % 2;
-                        const int next_buf = (chunk_idx + 1) % 2;
-                        const int prev_buf = (chunk_idx - 1 + 2) % 2;
-
-                        if (chunk_idx < total_chunks - 1) {
-                            const int next_size =
-                                (a0 - (chunk_idx + 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx + 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(next_size);
-
-                            long next_a_off = a_base + (long)(chunk_idx + 1) * MTile;
-                            long next_b_off = b_base + (long)(chunk_idx + 1) * MTile;
-                            float* a_next = (float*)a_ptr + next_a_off;
-                            float* b_next = (float*)b_ptr + next_b_off;
-
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(A_base + next_buf * MTile), (long)a_next);
-                            tx_lsu_dma_d2u<lsuTCSR>((long)uram_ptr(B_base + next_buf * MTile), (long)b_next);
-                        }
-
-                        if (chunk_idx > 0) {
-                            const int prev_size =
-                                (a0 - (chunk_idx - 1) * MTile > MTile)
-                                    ? MTile
-                                    : (a0 - (chunk_idx - 1) * MTile);
-                            configLSUTCSR_1d<lsuTCSR, float>(prev_size);
-
-                            long prev_c_off = c_base + (long)(chunk_idx - 1) * MTile;
-                            float* c_prev = (float*)c_ptr + prev_c_off;
-                            tx_lsu_dma_u2d<lsuTCSR>((long)c_prev, (long)uram_ptr(C_base + prev_buf * MTile));
-                        }
-
-                        const int cur_size =
-                            (a0 - chunk_idx * MTile > MTile)
-                                ? MTile
-                                : (a0 - chunk_idx * MTile);
-
-                        config_tcsr_vector<aTCSR>(cur_size);
-                        config_tcsr_vector<bTCSR>(cur_size);
-                        config_tcsr_vector<cTCSR>(cur_size);
-
-                        DISPATCH_VEC_MUL_FP32(mask,
-                            uram_ptr(A_base + cur_buf * MTile),
-                            uram_ptr(B_base + cur_buf * MTile),
-                            uram_ptr(C_base + cur_buf * MTile));
-
-                        __tx_sb_bar();
-                        __tx_lsu_sb_bar();
+                    if (chunk_idx > 0) {
+                        int prev_chunk_size = (psrc0_ne0 - (chunk_idx - 1) * MTile > MTile) ? MTile : (psrc0_ne0 - (chunk_idx - 1) * MTile);
+                        configLSUTCSR_1d<lsuTCSR, float>(prev_chunk_size);
+                        long c_prev_off = c_base_offset + (long)(chunk_idx - 1) * MTile;
+                        tx_lsu_dma_u2d<lsuTCSR>((long)((float*)c_ptr + c_prev_off), (long)uram_ptr(C_base + prev_buf * MTile));
                     }
 
-                    const int last_idx = total_chunks - 1;
-                    const int last_buf = last_idx % 2;
-                    const int last_size =
-                        (a0 - last_idx * MTile > MTile) ? MTile : (a0 - last_idx * MTile);
+                    int cur_size = (psrc0_ne0 - chunk_idx * MTile > MTile) ? MTile : (psrc0_ne0 - chunk_idx * MTile);
+                    config_tcsr_vector<aTCSR>(cur_size);
+                    config_tcsr_vector<bTCSR>((psrc1_ne0 == 1) ? 1 : cur_size);
+                    config_tcsr_vector<cTCSR>(cur_size);
 
-                    configLSUTCSR_1d<lsuTCSR, float>(last_size);
+                    void* a_uram = uram_ptr(A_base + cur_buf * MTile);
+                    void* b_uram = uram_ptr(B_base + cur_buf * MTile);
+                    void* c_uram = uram_ptr(C_base + cur_buf * MTile);
 
-                    long last_off = c_base + (long)last_idx * MTile;
-                    float* c_last = (float*)c_ptr + last_off;
-                    tx_lsu_dma_u2d<lsuTCSR>((long)c_last, (long)uram_ptr(C_base + last_buf * MTile));
+                    if (instruction_mask == 0b0001) {
+                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0001>(a_uram, b_uram, c_uram);
+                    } else {
+                        __tx_fp_mul_fp32<aTCSR, bTCSR, cTCSR, 0b0000>(a_uram, b_uram, c_uram);
+                    }
+
+                    __tx_sb_bar();
                     __tx_lsu_sb_bar();
                 }
+
+                int last_idx = total_chunks - 1;
+                int last_buf = last_idx % 2;
+                int last_size = (psrc0_ne0 - last_idx * MTile > MTile) ? MTile : (psrc0_ne0 - last_idx * MTile);
+
+                configLSUTCSR_1d<lsuTCSR, float>(last_size);
+                long c_last_off = c_base_offset + (long)last_idx * MTile;
+                tx_lsu_dma_u2d<lsuTCSR>((long)((float*)c_ptr + c_last_off), (long)uram_ptr(C_base + last_buf * MTile));
+                __tx_lsu_sb_bar();
             }
         }
     }
@@ -765,20 +543,19 @@ __device__ long kernel_mul_fp32_with_broadcast(void* a_ptr, void* b_ptr, void* c
 __device__ long kernel_add_fp32(void* a_ptr, void* b_ptr, void* c_ptr,
                                   int a0,int a1,int a2,int a3,
                                   int b0,int b1,int b2,int b3) {
-    if (!needs_broadcast(a0,a1,a2,a3, b0,b1,b2,b3)) {
-        return kernel_add_fp32_without_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3);
-    }
+    // if (!needs_broadcast(a0,a1,a2,a3, b0,b1,b2,b3)) {
+    //     return kernel_add_fp32_with_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3, b0,b1,b2,b3);
+    // }
     return kernel_add_fp32_with_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3, b0,b1,b2,b3);
 }
 
 __device__ long kernel_mul_fp32(void* a_ptr, void* b_ptr, void* c_ptr,
                                   int a0,int a1,int a2,int a3,
                                   int b0,int b1,int b2,int b3) {
-    if (!needs_broadcast(a0,a1,a2,a3, b0,b1,b2,b3)) {
-        return kernel_mul_fp32_without_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3);
-    }
+    // if (!needs_broadcast(a0,a1,a2,a3, b0,b1,b2,b3)) {
+    //     return kernel_mul_fp32_with_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3, b0,b1,b2,b3);
+    // }
     return kernel_mul_fp32_with_broadcast(a_ptr,b_ptr,c_ptr, a0,a1,a2,a3, b0,b1,b2,b3);
 }
 
-#undef DISPATCH_VEC_ADD_FP32
-#undef DISPATCH_VEC_MUL_FP32
+
