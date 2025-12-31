@@ -122,6 +122,68 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
     }
 };
 
+// 公共基本方法
+template <ulong TCSR_ID>
+static inline void load_matrix(
+    // Major: 主序维 (K)
+    // Minor: 非主序维 (M / N)
+    ulong major_left, ulong minor_left, ulong major_tile, ulong minor_tile, ulong uram_base,
+    ulong dram_base) {
+    if (major_left >= major_tile) {
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(major_tile / 64 - 1);
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
+            (minor_left < minor_tile ? minor_left : minor_tile) - 1);
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
+        tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
+    } else {
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
+            (minor_left < minor_tile ? minor_left : minor_tile) - 1);
+        while (major_left) {
+            ulong handle_bytes = major_left >= 64 ? 64 : major_left;
+            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(
+                ((major_left + 63) / 64) - 1);
+            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(
+                handle_bytes - 1);
+            tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
+            uram_base += handle_bytes;
+            dram_base += handle_bytes;
+            major_left = major_left - handle_bytes;
+        }
+    }
+}
+
+template <ulong TCSR_ID>
+static inline void store_matrix(
+    // Major: 主序维 (K)
+    // Minor: 非主序维 (M / N)
+    ulong major_left, ulong minor_left, ulong major_tile, ulong minor_tile, ulong uram_base,
+    ulong dram_base) {
+    if(major_left % 64 != 0) {
+        printf("Warning: store_matrix major_left not aligned to 64 Bytes: %lu\n", major_left);
+    }
+    if (major_left >= major_tile) {
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(major_tile / 64 - 1);
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
+            (minor_left < minor_tile ? minor_left : minor_tile) - 1);
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
+        tx_lsu_dma_u2d<TCSR_ID>(dram_base, uram_base);
+    } else {
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
+            (minor_left < minor_tile ? minor_left : minor_tile) - 1);
+        while (major_left) {
+            ulong handle_bytes = major_left >= 64 ? 64 : major_left;
+            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(
+                ((major_left + 63) / 64) - 1);
+            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(
+                handle_bytes - 1);
+            tx_lsu_dma_u2d<TCSR_ID>(dram_base, uram_base);
+            uram_base += handle_bytes;
+            dram_base += handle_bytes;
+            major_left = major_left - handle_bytes;
+        }
+    }
+}
+
 // Producer Task 类
 template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle>
 class MatmulProducerTask : public NPUTask {
@@ -161,39 +223,6 @@ class MatmulProducerTask : public NPUTask {
     int m, n, k; // 当前处理中的 m n k
     NPUURAM *a, *b, *c;
     int a_buf_id, b_buf_id, c_buf_id;
-
-    template<ulong TCSR_ID>
-    static inline void load_matrix(
-        // Major: 主序维 (K)
-        // Minor: 非主序维 (M / N)
-        ulong major_left, ulong minor_left,
-        ulong major_tile, ulong minor_tile,
-        ulong uram_base, ulong dram_base
-    ) {
-        if(major_left >= major_tile) {
-            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM0>(
-                major_tile / 64 - 1);
-            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM1>(
-                (minor_left < minor_tile ? minor_tile : minor_left) - 1);
-            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
-            tx_lsu_dma_d2u<GROUPBASE + TCSR_ID>(
-                uram_base, dram_base);
-        } else {
-            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM1>(
-                (minor_left < minor_tile ? minor_tile : minor_left) - 1);
-            while(major_left) {
-                ulong handle_bytes = major_left >= 64 ? 64 : major_left;
-                tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM0>(
-                    ((major_left + 63) / 64) - 1);
-                tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_REQUESTPADDING>(
-                    handle_bytes - 1);
-                tx_lsu_dma_d2u<GROUPBASE + TCSR_ID>(uram_base, dram_base);
-                uram_base += handle_bytes;
-                dram_base += handle_bytes;
-                major_left = major_left - handle_bytes;
-            }
-        }
-    }
 
   public:
     MatmulProducerTask(MatmulPubState<tileM, tileN, tileK, ZT> *s) : s(s), NPUTask(wrapper){};
@@ -246,9 +275,10 @@ class MatmulProducerTask : public NPUTask {
                     //                                            n * tileN * s->bStride);
                     long kLeft = s->K - tileK * k;
                     long nLeft = s->N - tileN * n;
-                    load_matrix<LSU_B>(kLeft * 2, nLeft,
-                        tileK * 2, tileN,
-                        b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
+                    load_matrix<GROUPBASE + LSU_B>(
+                        kLeft * sizeof(uint16_t), nLeft,
+                        tileK * sizeof(uint16_t), tileN,
+                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride);
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
@@ -256,9 +286,10 @@ class MatmulProducerTask : public NPUTask {
                     //                                            m * tileM * s->aStride);
                     long kLeft = s->K - tileK * k;
                     long mLeft = s->M - tileM * m;
-                    load_matrix<LSU_A>(kLeft * 4, mLeft,
-                        tileK * 4, tileM,
-                        a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
+                    load_matrix<GROUPBASE + LSU_A>(
+                        kLeft * sizeof(float), mLeft,
+                        tileK * sizeof(float), tileM,
+                        a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                     NPULEGACYBar(0);
@@ -270,9 +301,10 @@ class MatmulProducerTask : public NPUTask {
                     //                                            m * tileM * s->aStride);
                     long kLeft = s->K - tileK * k;
                     long mLeft = s->M - tileM * m;
-                    load_matrix<LSU_A>(kLeft * 4, mLeft,
-                        tileK * 4, tileM,
-                        a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
+                    load_matrix<GROUPBASE + LSU_A>(
+                        kLeft * sizeof(float), mLeft,
+                        tileK * sizeof(float), tileM,
+                        a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                     NPULEGACYBar(0);
@@ -283,14 +315,20 @@ class MatmulProducerTask : public NPUTask {
                     //                                            n * tileN * s->bStride);
                     long kLeft = s->K - tileK * k;
                     long nLeft = s->N - tileN * n;
-                    load_matrix<LSU_B>(kLeft * 2, nLeft,
-                        tileK * 2, tileN,
-                        b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
+                    load_matrix<GROUPBASE + LSU_B>(
+                        kLeft * sizeof(uint16_t), nLeft,
+                        tileK * sizeof(uint16_t), tileN,
+                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride);
                 }
             }
-            // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
-            tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
-                                          s->cBase + n * tileN * 4 + m * tileM * s->cStride);
+            // tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
+            //                               s->cBase + n * tileN * 4 + m * tileM * s->cStride);
+            long nLeft = s->N - tileN * n;
+            long mLeft = s->M - tileM * m;
+            load_matrix<GROUPBASE + LSU_CLD>(
+                nLeft * sizeof(float), mLeft,
+                tileN * sizeof(float), tileM,
+                c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride);
 
             // __tx_lsu_sb_bar();
             // __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
@@ -372,17 +410,17 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
-
-            long mLeft = s->M - tileM * m;
-            long nLeft = s->N - tileN * n;
-            long kLeft = s->K - tileK * k;
-            ulong real_m = mLeft > tileM ? tileM : mLeft;
-            ulong real_n = nLeft > tileN ? tileN : nLeft;
-            ulong real_k = kLeft > tileK ? tileK : kLeft;
-            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(real_m - 1);
-            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(real_n - 1);
-            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
-
+            if(1) {
+                long mLeft = s->M - tileM * m;
+                long nLeft = s->N - tileN * n;
+                long kLeft = s->K - tileK * k;
+                ulong real_m = mLeft > tileM ? tileM : mLeft;
+                ulong real_n = nLeft > tileN ? tileN : nLeft;
+                ulong real_k = kLeft > tileK ? tileK : kLeft;
+                tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(real_m - 1);
+                tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(real_n - 1);
+                tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
+            }
             printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
                    m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
@@ -393,8 +431,16 @@ class MatmulConsumerTask : public NPUTask {
             a->consume(sched);
             b->consume(sched);
             // 写回 C
-            tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride,
-                                          c->uram);
+            // tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride,
+            //                               c->uram);
+            if(1) {
+                long mLeft = s->M - tileM * m;
+                long nLeft = s->N - tileN * n;
+                store_matrix<GROUPBASE + LSU_CST>(
+                    nLeft * sizeof(float), mLeft,
+                    tileN * sizeof(float), tileM,
+                    c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride);
+            }
             // Optimize: Early deallocate of C Buffer, since dma instruction is execute inorder.
             c->consume(sched);
             NPUDMABar(0);
