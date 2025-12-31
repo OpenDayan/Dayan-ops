@@ -185,7 +185,7 @@ static inline void store_matrix(
 }
 
 // Producer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32>
 class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
@@ -286,13 +286,20 @@ class MatmulProducerTask : public NPUTask {
                     //                                            m * tileM * s->aStride);
                     long kLeft = s->K - tileK * k;
                     long mLeft = s->M - tileM * m;
-                    load_matrix<GROUPBASE + LSU_A>(
-                        kLeft * sizeof(float), mLeft,
-                        tileK * sizeof(float), tileM,
-                        a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
-                    NPUDMABar(0);
-                    __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                    NPULEGACYBar(0);
+                    if(A_IS_FP32) {
+                        load_matrix<GROUPBASE + LSU_A>(
+                            kLeft * sizeof(float), mLeft,
+                            tileK * sizeof(float), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
+                        NPUDMABar(0);
+                        __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                        NPULEGACYBar(0);
+                    } else {
+                        load_matrix<GROUPBASE + LSU_A>(
+                            kLeft * sizeof(uint16_t), mLeft,
+                            tileK * sizeof(uint16_t), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride);
+                    }
                 }
             } else {
                 if (n == 0) {
@@ -301,13 +308,20 @@ class MatmulProducerTask : public NPUTask {
                     //                                            m * tileM * s->aStride);
                     long kLeft = s->K - tileK * k;
                     long mLeft = s->M - tileM * m;
-                    load_matrix<GROUPBASE + LSU_A>(
-                        kLeft * sizeof(float), mLeft,
-                        tileK * sizeof(float), tileM,
-                        a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
-                    NPUDMABar(0);
-                    __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                    NPULEGACYBar(0);
+                    if(A_IS_FP32) {
+                        load_matrix<GROUPBASE + LSU_A>(
+                            kLeft * sizeof(float), mLeft,
+                            tileK * sizeof(float), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
+                        NPUDMABar(0);
+                        __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                        NPULEGACYBar(0);
+                    } else {
+                        load_matrix<GROUPBASE + LSU_A>(
+                            kLeft * sizeof(uint16_t), mLeft,
+                            tileK * sizeof(uint16_t), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride);
+                    }
                 }
                 if ((m % 2) == 0) {
                     // 多次遍历，因此每次 n 为第一列或者最后一列时检查
@@ -456,19 +470,19 @@ class MatmulConsumerTask : public NPUTask {
 };
 } // namespace
 
-template <long tileM, long tileN, long tileK, bool ZT>
+template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32>
 static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
                                         uint64_t bBase, uint64_t cBase, uint64_t aStride,
                                         uint64_t bStride, uint64_t cStride) {
-    // TODO: Rearrage Buffer here.
+    const ulong a_elem_size = A_IS_FP32 ? sizeof(float) : sizeof(uint16_t);
     NPUURAM buf[7] = {
         NPUURAM(0x0ul),
-        NPUURAM(tileM * tileK * 4),
-        NPUURAM(tileM * tileK * 4 * 2),
-        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2),
-        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2),
-        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
-        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
+        NPUURAM(tileM * tileK * a_elem_size),
+        NPUURAM(tileM * tileK * a_elem_size * 2),
+        NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2),
+        NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2),
+        NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
+        NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, aBase, bBase, cBase, aStride, bStride, cStride, &buf[0], &buf[2], &buf[4]);
@@ -480,9 +494,9 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
 
     // 创建四个 Task
     auto task_producer0 =
-        MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+        MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_producer);
     auto task_producer1 =
-        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_producer);
+        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_producer);
     auto task_consumer0 =
         MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
     auto task_consumer1 =
@@ -505,11 +519,11 @@ static inline long matmul_fp32_bf16_fp32_a_bt_c(uint64_t M, uint64_t N, uint64_t
                                    uint64_t bStride, uint64_t cStride) {
     if (M <= N) {
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, false>(M, N, K, aBase, bBase, cBase, aStride,
+        matmul_bf16_template<tileM, tileN, tileK, false, true>(M, N, K, aBase, bBase, cBase, aStride,
                                                          bStride, cStride);
     } else { // M >= N
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, true>(M, N, K, aBase, bBase, cBase, aStride,
+        matmul_bf16_template<tileM, tileN, tileK, true, true>(M, N, K, aBase, bBase, cBase, aStride,
                                                         bStride, cStride);
     }
 
