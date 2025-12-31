@@ -184,24 +184,24 @@ static inline void store_matrix(
     }
 }
 
+template<long TCSR_ID>
+static inline void set_legacy_matrix(int M, int K) {
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM0>(K);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE0>(1);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM1>(M);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE1>(K);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM2>(1);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE2>(1);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_DIM3>(1);
+    __tx_tcsr_write<TCSR_ID * 8 + TCSR_STRIDE3>(1);
+}
+
 // Producer Task 类
 template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32>
 class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
     MatmulPubState<tileM, tileN, tileK, ZT> *s;
-
-    template<long TCSRID>
-    inline void config_legacy_tcsr(int M, int K) {
-        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM0>(K);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE0>(1);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM1>(M);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE1>(K);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM2>(1);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE2>(1);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM3>(1);
-        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE3>(1);
-    }
 
     inline void config_tcsr() {
         // Note: k and tileK should be aligned to 64-Bytes
@@ -216,7 +216,7 @@ class MatmulProducerTask : public NPUTask {
         tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(0);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
-        config_legacy_tcsr<LEGACY_A>(tileM, tileK);
+        // set_legacy_matrix<LEGACY_A>(tileM, tileK);
         return;
     }
     // 局部变量
@@ -285,23 +285,12 @@ class MatmulProducerTask : public NPUTask {
                     // tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
                     //                                            m * tileM * s->aStride);
                     if(A_IS_FP32) {
-                        {
-                            long leftK = s->K - tileK * k;
-                            long leftM = s->M - tileM * m;
-                            load_matrix<GROUPBASE + LSU_A>(
-                                leftK * sizeof(float), leftM,
-                                tileK * sizeof(float), tileM,
-                                a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
-                            NPUDMABar(0);
-                        }
-                        {
-                            long leftK = s->K - tileK * k;
-                            long leftM = s->M - tileM * m;
-                            __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
-                            __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
-                            __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                            NPULEGACYBar(0);
-                        }
+                        long leftK = s->K - tileK * k;
+                        long leftM = s->M - tileM * m;
+                        load_matrix<GROUPBASE + LSU_A>(
+                            leftK * sizeof(float), leftM,
+                            tileK * sizeof(float), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
                     } else {
                         long leftK = s->K - tileK * k;
                         long leftM = s->M - tileM * m;
@@ -317,23 +306,12 @@ class MatmulProducerTask : public NPUTask {
                     // tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
                     //                                            m * tileM * s->aStride);
                     if(A_IS_FP32) {
-                        {
-                            long leftK = s->K - tileK * k;
-                            long leftM = s->M - tileM * m;
-                            load_matrix<GROUPBASE + LSU_A>(
-                                leftK * sizeof(float), leftM,
-                                tileK * sizeof(float), tileM,
-                                a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
-                            NPUDMABar(0);
-                        }
-                        {
-                            long leftK = s->K - tileK * k;
-                            long leftM = s->M - tileM * m;
-                            __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
-                            __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
-                            __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                            NPULEGACYBar(0);
-                        }
+                        long leftK = s->K - tileK * k;
+                        long leftM = s->M - tileM * m;
+                        load_matrix<GROUPBASE + LSU_A>(
+                            leftK * sizeof(float), leftM,
+                            tileK * sizeof(float), tileM,
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
                     } else {
                         long leftK = s->K - tileK * k;
                         long leftM = s->M - tileM * m;
@@ -396,7 +374,7 @@ class MatmulProducerTask : public NPUTask {
 };
 
 // Consumer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32>
 class MatmulConsumerTask : public NPUTask {
   private:
     long cCkSum;
@@ -422,6 +400,7 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(swizzle);
+        set_legacy_matrix<LEGACY_A>(tileM, tileK);
     }
     // 局部变量
     NPUURAM *a, *b, *c;
@@ -444,6 +423,17 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
+
+            if(A_IS_FP32) {
+                // 可选的转数部分
+                long leftK = s->K - tileK * k;
+                long leftM = s->M - tileM * m;
+                __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
+                __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
+                __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                NPULEGACYBar(0);
+            }
+
             if(1) {
                 long leftM = s->M - tileM * m;
                 long leftN = s->N - tileN * n;
@@ -518,9 +508,9 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
     auto task_producer1 =
         MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_producer);
     auto task_consumer0 =
-        MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
+        MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
     auto task_consumer1 =
-        MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack>(&pub_consumer);
+        MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
     NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
                          (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
     // 创建一个调度器
