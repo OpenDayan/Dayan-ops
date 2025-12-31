@@ -417,12 +417,12 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
     // TODO: Rearrage Buffer here.
     NPUURAM buf[7] = {
         NPUURAM(0x0ul),
-        NPUURAM(tileM * tileK * 2),
-        NPUURAM(tileM * tileK * 2 * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
-        NPUURAM(tileM * tileK * 2 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
+        NPUURAM(tileM * tileK * 4),
+        NPUURAM(tileM * tileK * 4 * 2),
+        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2),
+        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2),
+        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
+        NPUURAM(tileM * tileK * 4 * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, aBase, bBase, cBase, aStride, bStride, cStride, &buf[0], &buf[2], &buf[4]);
@@ -458,11 +458,11 @@ static inline long matmul_fp32_bf16_fp32_a_bt_c(uint64_t M, uint64_t N, uint64_t
                                    uint64_t bBase, uint64_t cBase, uint64_t aStride,
                                    uint64_t bStride, uint64_t cStride) {
     if (M <= N) {
-        const uint64_t tileM = 128, tileN = 128, tileK = 512;
+        const uint64_t tileM = 64, tileN = 128, tileK = 512;
         matmul_bf16_template<tileM, tileN, tileK, false>(M, N, K, aBase, bBase, cBase, aStride,
                                                          bStride, cStride);
     } else { // M >= N
-        const uint64_t tileM = 128, tileN = 128, tileK = 512;
+        const uint64_t tileM = 64, tileN = 128, tileK = 512;
         matmul_bf16_template<tileM, tileN, tileK, true>(M, N, K, aBase, bBase, cBase, aStride,
                                                         bStride, cStride);
     }
@@ -471,10 +471,28 @@ static inline long matmul_fp32_bf16_fp32_a_bt_c(uint64_t M, uint64_t N, uint64_t
 }
 
 // 名称后缀 QK256 是为了兼容之前的算子名称。如要修改算子名称需要同时修改 llama.cpp 和 test_trace/test_matmul.cpp
-__device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k, int lda,
-                                         int ldb, int ldc) {
+__device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, uint64_t n, uint64_t k, uint64_t lda,
+                                         uint64_t ldb, uint64_t ldc, uint64_t g, uint64_t h, uint64_t stride_g, uint64_t stride_h) {
     // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
-    return matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n, (uint64_t)m, (uint64_t)k,
-                                        (uint64_t)b, (uint64_t)a, (uint64_t)c,
-                                        ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float));
+    // 如果 ratio * ldb == stride_h，说明 B 布局为 [Head][N][K] ，且紧密排布，可视为 [Ratio*N][K] 直接参与矩阵乘。
+    ulong ratio = h / g;
+    int ret;
+    for(int cur_g = 0; cur_g < g; cur_g++) 
+    {
+        if(ratio * ldb == stride_h) {
+            // 可直接内联 h 和 n
+            printf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
+            ret = matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n * ratio, (uint64_t)m, (uint64_t)k,
+                                                (uint64_t)b + cur_g * ratio * stride_h * sizeof(float),
+                                                (uint64_t)a + cur_g * stride_g * sizeof(uint16_t),
+                                                (uint64_t)c + cur_g * ratio * n * ldc * sizeof(float),
+                                                ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float));
+            if(ret) return ret;
+        } else {
+            // 暂时不支持离散的情况，这种模式下严重欠优化。
+            printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d)\n", h, ldb, stride_h);
+            return -1;
+        }
+    }
+    return 0;
 }
