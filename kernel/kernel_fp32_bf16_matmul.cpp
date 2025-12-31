@@ -162,6 +162,39 @@ class MatmulProducerTask : public NPUTask {
     NPUURAM *a, *b, *c;
     int a_buf_id, b_buf_id, c_buf_id;
 
+    template<ulong TCSR_ID>
+    static inline void load_matrix(
+        // Major: 主序维 (K)
+        // Minor: 非主序维 (M / N)
+        ulong major_left, ulong minor_left,
+        ulong major_tile, ulong minor_tile,
+        ulong uram_base, ulong dram_base
+    ) {
+        if(major_left >= major_tile) {
+            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM0>(
+                major_tile / 64 - 1);
+            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM1>(
+                (minor_left < minor_tile ? minor_tile : minor_left) - 1);
+            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
+            tx_lsu_dma_d2u<GROUPBASE + TCSR_ID>(
+                uram_base, dram_base);
+        } else {
+            tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM1>(
+                (minor_left < minor_tile ? minor_tile : minor_left) - 1);
+            while(major_left) {
+                ulong handle_bytes = major_left >= 64 ? 64 : major_left;
+                tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_DIM0>(
+                    ((major_left + 63) / 64) - 1);
+                tx_lsu_tcsr_write<(GROUPBASE + TCSR_ID) * LSU_GROUPSZ + LSU_REQUESTPADDING>(
+                    handle_bytes - 1);
+                tx_lsu_dma_d2u<GROUPBASE + TCSR_ID>(uram_base, dram_base);
+                uram_base += handle_bytes;
+                dram_base += handle_bytes;
+                major_left = major_left - handle_bytes;
+            }
+        }
+    }
+
   public:
     MatmulProducerTask(MatmulPubState<tileM, tileN, tileK, ZT> *s) : s(s), NPUTask(wrapper){};
     int32_t execute(int *err) {
@@ -206,34 +239,51 @@ class MatmulProducerTask : public NPUTask {
                 }
             }
             // 注意，局部变量在下一个 bar 到来时就失效
-            long kLeft = s->K - tileK * k;
-            long mLeft = s->M - tileM * m;
-            long nLeft = s->N - tileN * n;
             if (ZT) {
                 if (m == 0) {
                     // 更新 n 和 k
-                    tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
-                                                               n * tileN * s->bStride);
+                    // tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
+                    //                                            n * tileN * s->bStride);
+                    long kLeft = s->K - tileK * k;
+                    long nLeft = s->N - tileN * n;
+                    load_matrix<LSU_B>(kLeft * 2, nLeft,
+                        tileK * 2, tileN,
+                        b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
-                    tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
-                                                               m * tileM * s->aStride);
+                    // tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
+                    //                                            m * tileM * s->aStride);
+                    long kLeft = s->K - tileK * k;
+                    long mLeft = s->M - tileM * m;
+                    load_matrix<LSU_A>(kLeft * 4, mLeft,
+                        tileK * 4, tileM,
+                        a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                 }
             } else {
                 if (n == 0) {
                     // 仅遍历一次，因此仅 m 为当前最后一行时检查
-                    tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
-                                                               m * tileM * s->aStride);
+                    // tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
+                    //                                            m * tileM * s->aStride);
+                    long kLeft = s->K - tileK * k;
+                    long mLeft = s->M - tileM * m;
+                    load_matrix<LSU_A>(kLeft * 4, mLeft,
+                        tileK * 4, tileM,
+                        a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                 }
                 if ((m % 2) == 0) {
                     // 多次遍历，因此每次 n 为第一列或者最后一列时检查
-                    tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
-                                                               n * tileN * s->bStride);
+                    // tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
+                    //                                            n * tileN * s->bStride);
+                    long kLeft = s->K - tileK * k;
+                    long nLeft = s->N - tileN * n;
+                    load_matrix<LSU_B>(kLeft * 2, nLeft,
+                        tileK * 2, tileN,
+                        b->uram, s->bBase + k * tileK * 2 + n * tileN * s->bStride);
                 }
             }
             // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
@@ -321,6 +371,15 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(b);
             NPUWaitReady(a);
 
+            long kLeft = s->K - tileK * k;
+            long mLeft = s->M - tileM * m;
+            long nLeft = s->N - tileN * n;
+            ulong real_k = kLeft > tileK ? tileK : kLeft;
+            ulong real_m = mLeft > tileM ? tileM : mLeft;
+            ulong real_n = nLeft > tileN ? tileN : nLeft;
+            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
+            // TODO: change MAT_M MAT_N
+
             printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
                    m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
@@ -352,6 +411,7 @@ template <long tileM, long tileN, long tileK, bool ZT>
 static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
                                         uint64_t bBase, uint64_t cBase, uint64_t aStride,
                                         uint64_t bStride, uint64_t cStride) {
+    // TODO: Rearrage Buffer here.
     NPUURAM buf[7] = {
         NPUURAM(0x0ul),
         NPUURAM(tileM * tileK * 2),
