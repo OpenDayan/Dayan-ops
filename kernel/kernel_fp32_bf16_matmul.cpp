@@ -20,7 +20,7 @@
 // Producer-Consumer 编程模型
 
 namespace {
-const int aTCSR_legacy = 0;
+const int LEGACY_A = 0;
 const int LSU_A = 0;
 const int LSU_B = 1;
 const int LSU_CLD = 2;
@@ -150,10 +150,11 @@ class MatmulProducerTask : public NPUTask {
         set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
         // C Configuration
         set_lsu_matrix<GROUPBASE + LSU_CLD>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
+        // 设置 A 的加载 Swizzle 为 0，以配合后续转数操作
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(0);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
-        config_legacy_tcsr<aTCSR_legacy>(tileM, tileK);
+        config_legacy_tcsr<LEGACY_A>(tileM, tileK);
         return;
     }
     // 局部变量
@@ -211,23 +212,27 @@ class MatmulProducerTask : public NPUTask {
             if (ZT) {
                 if (m == 0) {
                     // 更新 n 和 k
-                    tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 +
+                    tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
                                                                n * tileN * s->bStride);
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
-                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 4 +
+                    tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
                                                                m * tileM * s->aStride);
+                    NPUDMABar(0);
+                    __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                 }
             } else {
                 if (n == 0) {
                     // 仅遍历一次，因此仅 m 为当前最后一行时检查
-                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 4 +
+                    tx_lsu_dma_d2u<GROUPBASE + LSU_A>(a->uram, s->aBase + k * tileK * 4 +
                                                                m * tileM * s->aStride);
+                    NPUDMABar(0);
+                    __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                 }
                 if ((m % 2) == 0) {
                     // 多次遍历，因此每次 n 为第一列或者最后一列时检查
-                    tx_lsu_dma_d2u<GROUPBASE + 1>(b->uram, s->bBase + k * tileK * 2 +
+                    tx_lsu_dma_d2u<GROUPBASE + LSU_B>(b->uram, s->bBase + k * tileK * 2 +
                                                                n * tileN * s->bStride);
                 }
             }
@@ -235,8 +240,8 @@ class MatmulProducerTask : public NPUTask {
             tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
                                           s->cBase + n * tileN * 4 + m * tileM * s->cStride);
 
-            __tx_lsu_sb_bar();
-            __tx_convert_fp32_bf16_round<aTCSR_legacy, aTCSR_legacy>((void *)a->uram, (void *)a->uram);
+            // __tx_lsu_sb_bar();
+            // __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
 
             NPUDMABar(0);
 
@@ -288,7 +293,9 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_DATATYPE>(0);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(swizzle);
+        // 暂时关闭 A 上的 Swizzle，以适配向量的转数格式
+        // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(swizzle);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(swizzle);
     }

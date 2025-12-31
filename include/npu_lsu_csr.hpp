@@ -29,7 +29,7 @@ template <long GROUPBASE>
 void set_lsu_matrix(long &cksum, long dim1, long dim0, long inStride, long outStride) {
     // A Configuration
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((dim0 / 64) - 1);
+    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((dim0 / 64) - 1); // 边界条件下，调整 DIM0 DIM1 及 RequestPadding。
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM1>(dim1 - 1);
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM2>(0);
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM0STRIDE>(64);

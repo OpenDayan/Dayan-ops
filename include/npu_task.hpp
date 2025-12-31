@@ -2,6 +2,7 @@
 #define _NPU_TASK_HPP_
 
 #include "npu_instruction.hpp"
+#include "npu_instruction_old.hpp"
 #include "npu_list.hpp"
 #include <cstdint>
 #include <cstdio>
@@ -43,6 +44,14 @@
 #define NPUVecBar(z)                                                                               \
     do {                                                                                           \
         tx_vec_sb_produce((long)this);                                                             \
+        _state = &&CONCAT_LINE(_lb_);                                                              \
+        return z;                                                                                  \
+        CONCAT_LINE(_lb_) :;                                                                       \
+    } while (0)
+
+#define NPULEGACYBar(z)                                                                               \
+    do {                                                                                           \
+        __tx_sb_produce((long)this);                                                             \
         _state = &&CONCAT_LINE(_lb_);                                                              \
         return z;                                                                                  \
         CONCAT_LINE(_lb_) :;                                                                       \
