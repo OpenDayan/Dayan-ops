@@ -1,6 +1,7 @@
 // BF16 矩阵乘法算子核
 
 #include "npu_instruction.hpp"
+#include "npu_instruction_old.hpp"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_mat_csr.hpp"
@@ -19,6 +20,7 @@
 // Producer-Consumer 编程模型
 
 namespace {
+const int aTCSR_legacy = 0;
 const int LSU_A = 0;
 const int LSU_B = 1;
 const int LSU_CLD = 2;
@@ -126,11 +128,24 @@ class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
     MatmulPubState<tileM, tileN, tileK, ZT> *s;
+
+    template<long TCSRID>
+    inline void config_legacy_tcsr(int M, int K) {
+        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM0>(K);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE0>(1);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM1>(M);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE1>(K);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM2>(1);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE2>(1);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_DIM3>(1);
+        __tx_tcsr_write<TCSRID * 8 + TCSR_STRIDE3>(1);
+    }
+
     inline void config_tcsr() {
         // Note: k and tileK should be aligned to 64-Bytes
         // 暂不考虑 K pad 问题。
         // A Configuration
-        set_lsu_matrix<GROUPBASE + LSU_A>(aCkSum, tileM, tileK * 2, s->aStride, tileK * 2);
+        set_lsu_matrix<GROUPBASE + LSU_A>(aCkSum, tileM, tileK * 4, s->aStride, tileK * 4);
         // B Configuration
         set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
         // C Configuration
@@ -138,6 +153,7 @@ class MatmulProducerTask : public NPUTask {
         tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
+        config_legacy_tcsr<aTCSR_legacy>(tileM, tileK);
         return;
     }
     // 局部变量
@@ -200,13 +216,13 @@ class MatmulProducerTask : public NPUTask {
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
-                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 +
+                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 4 +
                                                                m * tileM * s->aStride);
                 }
             } else {
                 if (n == 0) {
                     // 仅遍历一次，因此仅 m 为当前最后一行时检查
-                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 2 +
+                    tx_lsu_dma_d2u<GROUPBASE + 0>(a->uram, s->aBase + k * tileK * 4 +
                                                                m * tileM * s->aStride);
                 }
                 if ((m % 2) == 0) {
@@ -218,7 +234,12 @@ class MatmulProducerTask : public NPUTask {
             // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
             tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
                                           s->cBase + n * tileN * 4 + m * tileM * s->cStride);
+
+            __tx_lsu_sb_bar();
+            __tx_convert_fp32_bf16_round<aTCSR_legacy, aTCSR_legacy>((void *)a->uram, (void *)a->uram);
+
             NPUDMABar(0);
+
             if (ZT) {
                 if (m == 0) {
                     b->produce(sched);
@@ -363,8 +384,7 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
     sched.scheduler();
 }
 
-// 名称后缀 QK256 是为了兼容之前的算子名称。如要修改算子名称需要同时修改 llama.cpp 和 test_trace/test_matmul.cpp
-__device__ long gmma_bf16_fp32_AT_QK256(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
+static inline long matmul_fp32_bf16_fp32_a_bt_c(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
                                    uint64_t bBase, uint64_t cBase, uint64_t aStride,
                                    uint64_t bStride, uint64_t cStride) {
     if (M <= N) {
@@ -378,4 +398,13 @@ __device__ long gmma_bf16_fp32_AT_QK256(uint64_t M, uint64_t N, uint64_t K, uint
     }
 
     return 0;
+}
+
+// 名称后缀 QK256 是为了兼容之前的算子名称。如要修改算子名称需要同时修改 llama.cpp 和 test_trace/test_matmul.cpp
+__device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k, int lda,
+                                         int ldb, int ldc) {
+    // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
+    return matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n, (uint64_t)m, (uint64_t)k,
+                                        (uint64_t)b, (uint64_t)a, (uint64_t)c,
+                                        ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float));
 }
