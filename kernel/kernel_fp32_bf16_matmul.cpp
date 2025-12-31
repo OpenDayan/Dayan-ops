@@ -261,6 +261,7 @@ class MatmulProducerTask : public NPUTask {
                         a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                    NPULEGACYBar(0);
                 }
             } else {
                 if (n == 0) {
@@ -274,6 +275,7 @@ class MatmulProducerTask : public NPUTask {
                         a->uram, s->aBase + k * tileK * 4 + m * tileM * s->aStride);
                     NPUDMABar(0);
                     __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                    NPULEGACYBar(0);
                 }
                 if ((m % 2) == 0) {
                     // 多次遍历，因此每次 n 为第一列或者最后一列时检查
@@ -371,14 +373,15 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(b);
             NPUWaitReady(a);
 
-            long kLeft = s->K - tileK * k;
             long mLeft = s->M - tileM * m;
             long nLeft = s->N - tileN * n;
-            ulong real_k = kLeft > tileK ? tileK : kLeft;
+            long kLeft = s->K - tileK * k;
             ulong real_m = mLeft > tileM ? tileM : mLeft;
             ulong real_n = nLeft > tileN ? tileN : nLeft;
+            ulong real_k = kLeft > tileK ? tileK : kLeft;
+            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_M>(real_m - 1);
+            tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(real_n - 1);
             tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
-            // TODO: change MAT_M MAT_N
 
             printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
                    m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
