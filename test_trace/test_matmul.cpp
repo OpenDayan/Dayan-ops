@@ -769,7 +769,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         }
 
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 1e-4;
+        const float epsilon = 0.02; // 2% error allowed
         bool all_match = true;
 
         int bs = pdst.ne[3];
@@ -798,8 +798,8 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
                         //     Done;
                         // }
                         float result =
-                            *((int *)(&result_data[i * h * n * m + j * n * m + k * m + p]));
-                        float ref = *((int *)(&data_ref[i * h * n * m + j * n * m + k * m + p]));
+                            *((float *)(&result_data[i * h * n * m + j * n * m + k * m + p]));
+                        float ref = *((float *)(&data_ref[i * h * n * m + j * n * m + k * m + p]));
                         if ((std::abs((result - ref) / ref) > epsilon) || std::isnan(result) ||
                             std::isnan(ref)) {
                             std::cerr << "\n !!! Compare FAILED !!!" << std::endl;

@@ -155,3 +155,9 @@ __attribute__((always_inline)) static inline void tx_mat_mma(long rd, long rs1, 
     constexpr long encoding = (0b00010000000000000000000000001011) | ((group & 7) << 25);
     BaseNPUInstBuilder::__custom_32b_instruction_mat<encoding>(rd, rs1, rs2);
 }
+
+template <long group>
+__attribute__((always_inline)) static inline void tx_mat_mm(long rd, long rs1, long rs2) {
+    constexpr long encoding = (0b00010000000000000001000000001011) | ((group & 7) << 25);
+    BaseNPUInstBuilder::__custom_32b_instruction_mat<encoding>(rd, rs1, rs2);
+}

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 enum LSU_TCSR {
     LSU_BLOCK = 0,
     LSU_DIM0 = 1,
@@ -25,19 +27,45 @@ enum LSU_TCSR {
 #define LSU_GROUPSZ (32)
 
 // 便捷宏，配置 LSU 矩阵为指定尺寸，注意，minor 应该对齐到 64
-template <long GROUPBASE>
+template <long GROUPBASE, bool TRANSPOSE = false, long TRANSPOSE_LOG2ELEMSIZE = 1>
 void set_lsu_matrix(long &cksum, long dim1, long dim0, long inStride, long outStride) {
-    // A Configuration
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((dim0 / 64) - 1); // 边界条件下，调整 DIM0 DIM1 及 RequestPadding。
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM1>(dim1 - 1);
+    if(TRANSPOSE) {
+        // Check matrix size for transpose
+        // matrix sub-block should be square
+        // input major dim should be multiple of 64 bytes
+        if(dim0 % 64 != 0) {
+            printf("Warning: set_lsu_matrix transpose dim0(%lu) not aligned to 64 Bytes.\n", dim0);
+        }
+        const long sub_block_size = 64 / (1 << TRANSPOSE_LOG2ELEMSIZE);
+        // input minor dim should be multiple of 64 / elemsize
+        if(dim1 % sub_block_size != 0) {
+            printf("Warning: set_lsu_matrix transpose dim1(%lu) not aligned to %lu elements.\n",
+                   dim1, sub_block_size);
+        }
+        // Set transpose parameters
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(sub_block_size - 1);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((dim0 / 64) - 1);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM1>((dim1 / sub_block_size) - 1);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INBLOCKSTRIDE>(inStride);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM0STRIDE>(64);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM1STRIDE>(inStride * sub_block_size);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTBLOCKSTRIDE>(outStride);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM0STRIDE>(outStride * sub_block_size);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM1STRIDE>(64);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKTRANSPOSE>(TRANSPOSE_LOG2ELEMSIZE);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKPADDING>(sub_block_size - 1);
+    } else {
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM0>((dim0 / 64) - 1); // 边界条件下，调整 DIM0 DIM1 及 RequestPadding。
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM1>(dim1 - 1);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM0STRIDE>(64);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM1STRIDE>(inStride);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM0STRIDE>(64);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM1STRIDE>(outStride);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKTRANSPOSE>(6);
+        tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKPADDING>(0);
+    }
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_DIM2>(0);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM0STRIDE>(64);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_INDIM1STRIDE>(inStride);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM0STRIDE>(64);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_OUTDIM1STRIDE>(outStride);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKTRANSPOSE>(6);
-    tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCKPADDING>(0);
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_PADDINGVALUE>(0);
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(0);
