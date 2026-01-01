@@ -152,11 +152,16 @@ static inline void load_matrix(
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
             (minor_left < minor_tile ? minor_left : minor_tile) - 1);
         while (major_left) {
-            ulong handle_bytes = major_left >= 64 ? 64 : major_left;
-            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(
-                ((major_left + 63) / 64) - 1);
-            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(
-                handle_bytes - 1);
+            ulong handle_bytes = major_left & (~0x3FUL); // 64 Bytes 对齐
+            ulong remain_bytes = major_left & (0x3FUL);
+            if (handle_bytes == 0 && remain_bytes > 0) {
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(0);
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(remain_bytes - 1);
+                handle_bytes = remain_bytes;
+            } else {
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>((handle_bytes / 64) - 1);
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
+            }
             tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
             uram_base += handle_bytes;
             dram_base += handle_bytes;
@@ -184,11 +189,16 @@ static inline void store_matrix(
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
             (minor_left < minor_tile ? minor_left : minor_tile) - 1);
         while (major_left) {
-            ulong handle_bytes = major_left >= 64 ? 64 : major_left;
-            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(
-                ((major_left + 63) / 64) - 1);
-            tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(
-                handle_bytes - 1);
+            ulong handle_bytes = major_left & (~0x3FUL); // 64 Bytes 对齐
+            ulong remain_bytes = major_left & (0x3FUL);
+            if (handle_bytes == 0 && remain_bytes > 0) {
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(0);
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(remain_bytes - 1);
+                handle_bytes = remain_bytes;
+            } else {
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>((handle_bytes / 64) - 1);
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
+            }
             tx_lsu_dma_u2d<TCSR_ID>(dram_base, uram_base);
             uram_base += handle_bytes;
             dram_base += handle_bytes;
