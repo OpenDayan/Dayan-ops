@@ -88,7 +88,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_k = k;
                                     cur_b = b;
                                     a_buf_id = cur_id;
-                                    b_buf_id = n & 0x1;
+                                    b_buf_id = (n + b * cN) & 0x1;
                                     c_buf_id = cid;
                                     cid = (cid + 0x1) % 3;
                                     advance_state = &&ZTNextLoop;
@@ -112,7 +112,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_n = n;
                                     cur_k = k;
                                     cur_b = b;
-                                    a_buf_id = m & 0x1;
+                                    a_buf_id = (m + b * cM) & 0x1;
                                     b_buf_id = cur_id;
                                     c_buf_id = cid;
                                     cur_id ^= 0x1;
