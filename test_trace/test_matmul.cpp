@@ -3,12 +3,15 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <emmintrin.h>
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <time.h>
 #include <vector>
 #include <x86intrin.h>
 
@@ -186,7 +189,7 @@ template <int E> inline FP8<E> float_to_fp8(float value) {
     if (in.f >= FP8<E>::MAX) {
         out.bits |= 0x7E;
     } else if (in.f < FP8<E>::MIN) { // => 0.
-                                     // OK: S.0000000
+        // OK: S.0000000
     } else {
         in.f *= exp_f2<FP8<E>::E_BIAS - 127>();
         // - trunc
@@ -254,20 +257,133 @@ uint8_t float_to_e4m3q(float h) {
     return out;
 }
 
+static uint8_t float_to_e4m3q_nemu(float h) {
+    uint8_t out;
+    fp32_int32 in = {h};
+    int32_t exponent = ((in.bits >> 23) & 0xFF) - 127;
+    uint32_t mantissa = in.bits & 0x007FFFFF;
+
+    out = (in.bits >> 24) & 0x80;
+
+    in.bits &= 0x7fffffff;
+
+    if ((exponent > 8) || ((exponent == 8) && (mantissa >= 0x600000))) {
+        out |= 0x7E;
+    } else if (exponent < -7) { // => 0.
+        // out |= 0x1;
+    } else {
+        in.bits = (in.bits & 0x807fffff) | (((exponent + 7) & 0xff) << 23);
+        uint32_t eps = (0x3fffff >> 3) + ((in.bits >> (23 - 3)) & 0x1);
+        in.bits += eps;
+        out |= (in.bits >> (23 - 3)) & 0x7F;
+    }
+    return out;
+}
+
+uint8_t fp32_to_fp8_e4m3(float f) {
+    uint32_t x = 0;
+    memcpy(&x, &f, sizeof(float));
+    uint8_t sign = (x >> 31) & 0x1;
+    int32_t exponent = ((x >> 23) & 0xFF) - 127;
+    uint32_t mantissa = x & 0x007FFFFF;
+
+    if ((x & 0x7F800000) == 0x7F800000) {
+        return sign ? 0xFF : 0x7F;
+    }
+    if (exponent < -127) {
+        return sign << 7;
+    }
+
+    int32_t e4m3_exponent = exponent + 7;
+    uint8_t e4m3_mantissa = (mantissa >> 20) & 0x7;
+
+    if (e4m3_exponent <= 0) {
+        return sign << 7;
+    }
+
+    if (e4m3_exponent >= 15) {
+        return (sign << 7) | 0x7F;
+    }
+
+    uint32_t round_bit = (mantissa >> 19) & 0x1;
+    uint32_t sticky_bits = (mantissa & 0x0007FFFF) ? 1 : 0;
+
+    uint8_t result = (sign << 7) | (e4m3_exponent << 3) | e4m3_mantissa;
+
+    if (round_bit && (sticky_bits || (e4m3_mantissa & 1))) {
+        result += 1;
+    }
+
+    if ((result & 0x7F) == 0x7F) {
+        result = (sign << 7) | 0x7F;
+    }
+
+    return result;
+}
+float fp8_e4m3_to_fp32(uint8_t x) {
+    int sign = (x & 0x80) ? -1 : 1;
+    int exponent = (x >> 3) & 0x0F;
+    float mantissa = (x & 0x07) / 8.0f;
+    if (exponent == 0) {
+        if (mantissa == 0.0f) {
+            return 0.0f * sign;
+        }
+        return sign * mantissa * 0.015625f;
+    }
+
+    mantissa += 1.0f;
+    float exp_value = 1.0f;
+    int exp = exponent - 7;
+
+    if (exp > 0) {
+        for (int i = 0; i < exp; i++) {
+            exp_value *= 2.0f;
+        }
+    } else {
+        for (int i = 0; i < -exp; i++) {
+            exp_value /= 2.0f;
+        }
+    }
+
+    return sign * mantissa * exp_value;
+}
+bool print_inter = false;
 void block_float_to_e4m3q(float *b_f32, block_e4m3_q *b_fp8) {
     float m = 0;
     for (int i = 0; i < QK; ++i) {
         m = std::max(std::abs(b_f32[i]), m);
     }
+    if (print_inter)
+        printf("maxval: %x\n", *(uint32_t *)(&m));
 
     const float D = e4m3q_max / m;
+    float recip = 1.0f / m;
+    if (print_inter)
+        printf("maxval_recip: %x\n", *(uint32_t *)(&recip));
 
     // set dequantize scale
     b_fp8->scale = m / e4m3q_max;
-
+    if (print_inter)
+        printf("scale: %x\n", *(uint32_t *)(&b_fp8->scale));
+    if (print_inter)
+        printf("D: %x\n", *(const uint32_t *)(&D));
+    if (print_inter)
+        printf("after quant: [\n");
     for (int i = 0; i < QK; ++i) {
-        b_fp8->data[i] = float_to_e4m3q(b_f32[i] * D);
+        // b_fp8->data[i] = float_to_e4m3q(b_f32[i] * D);
+        // b_fp8->data[i] = fp32_to_fp8_e4m3(b_f32[i] * D);
+        b_fp8->data[i] = float_to_e4m3q_nemu(b_f32[i] * D);
+        // b_fp8->data[i] = float_to_e4m3q(b_f32[i] * D);
+        if (print_inter) {
+            float temp = b_f32[i] * D;
+            // printf("%x,", *(uint32_t *)(&temp));
+            printf("%x,", b_fp8->data[i]);
+            if (i % 32 == 31)
+                printf("\n");
+        }
     }
+    if (print_inter)
+        printf("]\n");
 }
 
 void matmul_bf16_f32_f32(std::vector<uint16_t> &a, std::vector<float> &b, std::vector<float> &res,
@@ -362,7 +478,9 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t> &a, std::vector<float> &b, std::v
                         // in-block loop
                         for (int x = 0; x < QK; ++x) {
                             float ea = e4m3q_to_float(a_block_fp8->data[x]);
+                            // float ea = fp8_e4m3_to_fp32(a_block_fp8->data[x]);
                             float eb = e4m3q_to_float(b_block_fp8.data[x]);
+                            // float eb = fp8_e4m3_to_fp32(b_block_fp8.data[x]);
                             block_sum += ea * eb;
                         }
 
@@ -376,6 +494,17 @@ void matmul_e4m3q_f32_f32(std::vector<uint8_t> &a, std::vector<float> &b, std::v
                     res[i * h * m * n + j * m * n + p * n + l] = dot_sum;
                 }
         }
+}
+
+static inline uint64_t now_ns(void) {
+#ifdef CLOCK_MONOTONIC_RAW
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
 static struct NPURuntimeState runtime;
@@ -417,19 +546,30 @@ int host_gmma_e4m3q_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k
     // Copy data to device
     ssize_t ret = 0;
     ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, m * lda * sizeof(uint8_t)); // a
+    printf("Copy %ld bytes to a_dev\n", m * lda * sizeof(uint8_t));
     if (ret < 0)
         printf("[ERROR] Failed to write a to device at 0x%lx: err=%d\n", a_dev, ret);
-    ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, n * ldb * sizeof(uint8_t)); // b
+    ret = npu_memcpy_to_dev(&runtime.dev_state, b_dev, b, n * ldb * sizeof(float)); // b
+    printf("Copy %ld bytes to b_dev\n", n * ldb * sizeof(float));
     if (ret < 0)
         printf("[ERROR] Failed to write b to device at 0x%lx: err=%d\n", b_dev, ret);
     ret = npu_memcpy_to_dev(&runtime.dev_state, c_dev, c, n * ldc * sizeof(float)); // c
+    printf("Copy %ld bytes to c_dev\n", n * ldc * sizeof(float));
     if (ret < 0)
         printf("[ERROR] Failed to write c to device at 0x%lx: err=%d\n", c_dev, ret);
     int kernel_ret;
+
+    uint64_t t0 = now_ns();
     npu_runtime_kernel_start(&runtime, gmma_e4m3q_fp32_AT_QK256_desc, &kernel_ret, 9, a_dev, b_dev,
                              c_dev, (uint64_t)m, (uint64_t)n, (uint64_t)k, (uint64_t)lda,
                              (uint64_t)ldb, (uint64_t)ldc);
+    uint64_t t1 = now_ns();
+
+    double ms = (t1 - t0) / 1e6;
+    printf("[PROFILE] kernel elapsed: %.3f ms (%llu ns)\n", ms, (unsigned long long)(t1 - t0));
     npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, n * ldc * sizeof(float)); // c
+
+    printf("[INFO] Kernel consumed %d cycles\n", kernel_ret);
     return kernel_ret;
 }
 
@@ -456,9 +596,9 @@ void kernel_matmul_e4m3q(std::vector<uint8_t> &a, std::vector<float> &b, std::ve
     assert(psrc1.ne[0] == psrc0.ne[0]);
 
     // Call Kernel
-    host_gmma_e4m3q_fp32_AT_QK256(
-        a.data(), b.data(), res.data(), m, n, k, psrc1.ne[0] * (QK + sizeof(float)) / QK,
-        psrc0.ne[0] * (QK + sizeof(float)) / QK, pdst.nb[1] / sizeof(float));
+    host_gmma_e4m3q_fp32_AT_QK256(a.data(), b.data(), res.data(), m, n, k,
+                                  psrc0.ne[0] * (QK + sizeof(float)) / QK, psrc1.ne[0],
+                                  pdst.nb[1] / sizeof(float));
 }
 
 size_t tensor_nbytes_bf16(const TensorParams &tensor) {
@@ -467,12 +607,12 @@ size_t tensor_nbytes_bf16(const TensorParams &tensor) {
             return 0;
         }
     }
-    size_t nbytes;
-    nbytes = sizeof(uint16_t);
+    size_t max_nbytes = 0;
     for (int i = 0; i < 4; ++i) {
-        nbytes += (tensor.ne[i] - 1) * (tensor.nb[i]);
+        max_nbytes =
+            max_nbytes > (tensor.ne[i] * tensor.nb[i]) ? max_nbytes : (tensor.ne[i] * tensor.nb[i]);
     }
-    return nbytes;
+    return max_nbytes;
 }
 
 size_t tensor_nbytes_fp32(const TensorParams &tensor) {
@@ -481,18 +621,19 @@ size_t tensor_nbytes_fp32(const TensorParams &tensor) {
             return 0;
         }
     }
-    size_t nbytes;
-    nbytes = sizeof(float);
+    size_t max_nbytes = 0;
     for (int i = 0; i < 4; ++i) {
-        nbytes += (tensor.ne[i] - 1) * (tensor.nb[i]);
+        max_nbytes =
+            max_nbytes > (tensor.ne[i] * tensor.nb[i]) ? max_nbytes : (tensor.ne[i] * tensor.nb[i]);
     }
-    return nbytes;
+    return max_nbytes;
 }
 int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k, int lda, int ldb,
                                  int ldc, int g, int h, int stride_g, int stride_h, size_t nbytes_a,
-                                 size_t nbytes_b, size_t nbytes_c) {
+                                 size_t nbytes_b, size_t nbytes_c, int a_is_transposed) {
     printf("\nm:%d, n:%d, k:%d, g:%d, h:%d\n", m, n, k, g, h);
     printf("lda:%d, ldb:%d, ldc:%d, stride_g:%d, stride_h:%d\n", lda, ldb, ldc, stride_g, stride_h);
+    printf("nbytes_a:%ld, nbytes_b:%ld, nbytes_c:%ld\n", nbytes_a, nbytes_b, nbytes_c);
     for (int t = 0; t < 10; ++t) {
         printf("[%d] ", ((uint16_t *)a)[t]);
     }
@@ -538,11 +679,13 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
     if (ret < 0)
         printf("[ERROR] Failed to write c to device at 0x%lx: err=%d\n", c_dev, ret);
     int kernel_ret;
-    npu_runtime_kernel_start(&runtime, gmma_bf16_fp32_AT_QK256_desc, &kernel_ret, 13, a_dev, b_dev,
+    npu_runtime_kernel_start(&runtime, gmma_bf16_fp32_AT_QK256_desc, &kernel_ret, 14, a_dev, b_dev,
                              c_dev, (uint64_t)m, (uint64_t)n, (uint64_t)k, (uint64_t)lda,
                              (uint64_t)ldb, (uint64_t)ldc, (uint64_t)g, (uint64_t)h,
-                             (uint64_t)stride_g, (uint64_t)stride_h);
+                             (uint64_t)stride_g, (uint64_t)stride_h, (uint64_t)a_is_transposed);
     npu_memcpy_from_dev(&runtime.dev_state, c, c_dev, nbytes_c); // c
+
+    printf("[INFO] Kernel consumed %d cycles\n", kernel_ret);
     return kernel_ret;
 }
 
@@ -565,12 +708,14 @@ void kernel_matmul_bf16_f32_f32(std::vector<uint16_t> &a, std::vector<float> &b,
     int k = psrc1.ne[0];
     assert(psrc1.ne[0] == psrc0.ne[0]);
 
-    // Call Kernel
+    int a_is_transposed = (psrc0.nb[0] > psrc0.nb[1]);
+    // Call Kernelr
     host_gmma_bf16_fp32_AT_QK256(
-        a.data(), b.data(), res.data(), m, n, k, psrc0.nb[1] / sizeof(uint16_t),
+        a.data(), b.data(), res.data(), m, n, k,
+        (a_is_transposed ? psrc0.nb[0] : psrc0.nb[1]) / sizeof(uint16_t),
         psrc1.nb[1] / sizeof(float), pdst.nb[1] / sizeof(float), psrc0.ne[2], psrc1.ne[2],
         psrc0.nb[2] / sizeof(uint16_t), psrc1.nb[2] / sizeof(float), tensor_nbytes_bf16(psrc0),
-        tensor_nbytes_fp32(psrc1), tensor_nbytes_fp32(pdst));
+        tensor_nbytes_fp32(psrc1), tensor_nbytes_fp32(pdst), a_is_transposed);
 }
 
 int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_trace,
@@ -616,7 +761,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // --------------------------------------
             //
             // FIXME: CPU reference
-            // matmul_e4m3q_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            matmul_e4m3q_f32_f32(data_a, data_b, data_ref, psrc0, psrc1, pdst);
 
         } else {
             std::cerr << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
@@ -624,32 +769,54 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
         }
 
         // std::cout << "\nCompare with ref..." << std::endl;
-        const float epsilon = 0.05;
+        const float epsilon = 1e-4;
         bool all_match = true;
 
         int bs = pdst.ne[3];
         int h = pdst.ne[2];
         int n = pdst.ne[1];
         int m = pdst.ne[0];
+        int error_num = 0;
         for (int i = 0; i < bs; ++i) {
             for (int j = 0; j < h; ++j) {
                 for (int k = 0; k < n; ++k) {
                     for (int p = 0; p < m; ++p) {
-                        float result = result_data[i * h * n * m + j * n * m + k * m + p];
-                        float ref = data_ref[i * h * n * m + j * n * m + k * m + p];
-                        if (std::abs((result - ref) / ref) > epsilon) {
-                            std::cerr << std::fixed << std::setprecision(8);
+                        // float result = result_data[i*h*n*m + j*n*m + k*m + p];
+                        // float ref = data_ref[i*h*n*m + j*n*m + k*m + p];
+                        // if (std::abs((result - ref) / ref) > epsilon) {
+                        //     std::cerr << std::fixed << std::setprecision(8);
+                        //     std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
+                        //     std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" <<
+                        //     p << "]:    "
+                        //             << result << std::endl;
+                        //     std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                        //     << "]:    "
+                        //             << ref << std::endl;
+                        //     std::cerr << "  - result - ref:        " << std::abs(result - ref) <<
+                        //     std::endl; std::cerr << "  - reletive err:        " <<
+                        //     std::abs((result - ref) / ref) << std::endl; all_match = false; goto
+                        //     Done;
+                        // }
+                        float result =
+                            *((int *)(&result_data[i * h * n * m + j * n * m + k * m + p]));
+                        float ref = *((int *)(&data_ref[i * h * n * m + j * n * m + k * m + p]));
+                        if ((std::abs((result - ref) / ref) > epsilon) || std::isnan(result) ||
+                            std::isnan(ref)) {
                             std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
                             std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p
-                                      << "]:    " << result << std::endl;
+                                      << "]:    " << std::hex << result << std::dec << std::endl;
                             std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
-                                      << "]:    " << ref << std::endl;
+                                      << "]:    " << std::hex << ref << std::dec << std::endl;
                             std::cerr << "  - result - ref:        " << std::abs(result - ref)
                                       << std::endl;
                             std::cerr
                                 << "  - reletive err:        " << std::abs((result - ref) / ref)
                                 << std::endl;
                             all_match = false;
+                            error_num += 1;
+                            if (error_num >= 10) {
+                                goto Done;
+                            }
                             // goto Done;
                         }
                     }

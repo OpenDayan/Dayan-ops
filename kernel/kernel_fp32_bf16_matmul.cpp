@@ -30,89 +30,102 @@ const int LSU_CST = 3;
 template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
   public:
     // 任务尺寸
-    const int M, N, K;
+    // 注意：B 表示 Batch
+    const int M, N, K, B;
     // 切片个数
     const int cM, cN, cK;
     // 基地址
     const uint64_t aBase, bBase, cBase;
     const uint64_t aStride, bStride, cStride;
+    const uint64_t aBatchStride, bBatchStride, cBatchStride;
     NPUURAM *a_buf;
     NPUURAM *b_buf;
     NPUURAM *c_buf;
-    MatmulPubState(int M, int N, int K, uint64_t aBase, uint64_t bBase, uint64_t cBase,
-                   uint64_t aStride, uint64_t bStride, uint64_t cStride, NPUURAM *a_buf,
-                   NPUURAM *b_buf, NPUURAM *c_buf)
-        : M(M), N(N), K(K), aBase(aBase), bBase(bBase), cBase(cBase), aStride(aStride),
-          bStride(bStride), cStride(cStride), a_buf(a_buf), b_buf(b_buf), c_buf(c_buf),
-          cM((M + tileM - 1) / tileM), cN((N + tileN - 1) / tileN), cK((K + tileK - 1) / tileK){};
+    MatmulPubState(int M, int N, int K, int B, uint64_t aBase, uint64_t bBase, uint64_t cBase,
+                   uint64_t aStride, uint64_t bStride, uint64_t cStride,
+                   uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride,
+                   NPUURAM *a_buf, NPUURAM *b_buf, NPUURAM *c_buf)
+        : M(M), N(N), K(K), B(B),
+        aBase(aBase), bBase(bBase), cBase(cBase),
+        aStride(aStride), bStride(bStride), cStride(cStride),
+        aBatchStride(aBatchStride), bBatchStride(bBatchStride), cBatchStride(cBatchStride),
+        a_buf(a_buf), b_buf(b_buf), c_buf(c_buf),
+        cM((M + tileM - 1) / tileM), cN((N + tileN - 1) / tileN), cK((K + tileK - 1) / tileK){};
     MatmulPubState(const MatmulPubState &other)
-        : M(other.M), N(other.N), K(other.K), aBase(other.aBase), bBase(other.bBase),
-          cBase(other.cBase), aStride(other.aStride), bStride(other.bStride),
-          cStride(other.cStride), a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf),
-          cM(other.cM), cN(other.cN), cK(other.cK){};
+        : M(other.M), N(other.N), K(other.K), B(other.B),
+        aBase(other.aBase), bBase(other.bBase), cBase(other.cBase),
+        aStride(other.aStride), bStride(other.bStride), cStride(other.cStride),
+        aBatchStride(other.aBatchStride), bBatchStride(other.bBatchStride), cBatchStride(other.cBatchStride),
+        a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf),
+        cM(other.cM), cN(other.cN), cK(other.cK){};
 
   private:
     // 内部状态
     void *advance_state = 0;
     // 循环变量
-    int block_row, block_col, m, n, k, rst_id, cur_id, cid;
+    int block_row, block_col, m, n, k, b, rst_id, cur_id, cid;
 
   public:
     // 返回值表示当前任务是否已结束
-    inline bool advance(int &cur_m, int &cur_n, int &cur_k, int &a_buf_id, int &b_buf_id,
-                        int &c_buf_id) {
+    inline bool advance(
+        int &cur_m, int &cur_n, int &cur_k, int &cur_b,
+        int &a_buf_id, int &b_buf_id, int &c_buf_id) {
         if (advance_state)
             goto *advance_state;
         cur_id = 0;
         cid = 0;
-        for (k = 0; k < cK; k++) {
-            if (ZT) {
-                // 列 -> 行 遍历顺序
-                for (block_col = 0; block_col < cN; block_col += 2) {
-                    rst_id = cur_id;
-                    for (block_row = 0; block_row < cM; block_row += 2) {
-                        for (m = block_row; (m < cM) && (m < block_row + 2); m++) {
-                            for (n = block_col; (n < cN) && (n < block_col + 2); n++) {
-                                cur_m = m;
-                                cur_n = n;
-                                cur_k = k;
-                                a_buf_id = cur_id;
-                                b_buf_id = n & 0x1;
-                                c_buf_id = cid;
-                                cid = (cid + 0x1) % 3;
-                                advance_state = &&ZTNextLoop;
-                                return false;
-                            ZTNextLoop:;
-                            }
-                            cur_id ^= 1;
-                        }
-                        cur_id = rst_id;
-                    }
-                    cur_id ^= 1;
-                }
-            } else {
-                // 行 -> 列 遍历顺序
-                for (block_row = 0; block_row < cM; block_row += 2) {
-                    rst_id = cur_id;
+        for (b = 0; b < B; b++) {
+            for (k = 0; k < cK; k++) {
+                if (ZT) {
+                    // 列 -> 行 遍历顺序
                     for (block_col = 0; block_col < cN; block_col += 2) {
-                        for (m = block_row; (m < cM) && (m < block_row + 2); m++) {
-                            for (n = block_col; (n < cN) && (n < block_col + 2); n++) {
-                                cur_m = m;
-                                cur_n = n;
-                                cur_k = k;
-                                a_buf_id = m & 0x1;
-                                b_buf_id = cur_id;
-                                c_buf_id = cid;
-                                cur_id ^= 0x1;
-                                cid = (cid + 0x1) % 3;
-                                advance_state = &&ZNextLoop;
-                                return false;
-                            ZNextLoop:;
+                        rst_id = cur_id;
+                        for (block_row = 0; block_row < cM; block_row += 2) {
+                            for (m = block_row; (m < cM) && (m < block_row + 2); m++) {
+                                for (n = block_col; (n < cN) && (n < block_col + 2); n++) {
+                                    cur_m = m;
+                                    cur_n = n;
+                                    cur_k = k;
+                                    cur_b = b;
+                                    a_buf_id = cur_id;
+                                    b_buf_id = n & 0x1;
+                                    c_buf_id = cid;
+                                    cid = (cid + 0x1) % 3;
+                                    advance_state = &&ZTNextLoop;
+                                    return false;
+                                ZTNextLoop:;
+                                }
+                                cur_id ^= 1;
                             }
                             cur_id = rst_id;
                         }
+                        cur_id ^= 1;
                     }
-                    cur_id ^= 0x1;
+                } else {
+                    // 行 -> 列 遍历顺序
+                    for (block_row = 0; block_row < cM; block_row += 2) {
+                        rst_id = cur_id;
+                        for (block_col = 0; block_col < cN; block_col += 2) {
+                            for (m = block_row; (m < cM) && (m < block_row + 2); m++) {
+                                for (n = block_col; (n < cN) && (n < block_col + 2); n++) {
+                                    cur_m = m;
+                                    cur_n = n;
+                                    cur_k = k;
+                                    cur_b = b;
+                                    a_buf_id = m & 0x1;
+                                    b_buf_id = cur_id;
+                                    c_buf_id = cid;
+                                    cur_id ^= 0x1;
+                                    cid = (cid + 0x1) % 3;
+                                    advance_state = &&ZNextLoop;
+                                    return false;
+                                ZNextLoop:;
+                                }
+                                cur_id = rst_id;
+                            }
+                        }
+                        cur_id ^= 0x1;
+                    }
                 }
             }
         }
@@ -197,7 +210,7 @@ static inline void set_legacy_matrix(int M, int K) {
 }
 
 // Producer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32, bool B_TRANSPOSE = true>
 class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
@@ -220,7 +233,7 @@ class MatmulProducerTask : public NPUTask {
         return;
     }
     // 局部变量
-    int m, n, k; // 当前处理中的 m n k
+    int m, n, k, batch; // 当前处理中的 m n k batch
     NPUURAM *a, *b, *c;
     int a_buf_id, b_buf_id, c_buf_id;
 
@@ -231,7 +244,7 @@ class MatmulProducerTask : public NPUTask {
         config_tcsr();
         while (1) {
             // 获取任务
-            if (s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id))
+            if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
             // 获取并加载 URAM Buffer
             c = &(s->c_buf[c_buf_id]);
@@ -278,7 +291,7 @@ class MatmulProducerTask : public NPUTask {
                     load_matrix<GROUPBASE + LSU_B>(
                         leftK * sizeof(uint16_t), leftN,
                         tileK * sizeof(uint16_t), tileN,
-                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride);
+                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride + batch * s->bBatchStride);
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
@@ -290,14 +303,14 @@ class MatmulProducerTask : public NPUTask {
                         load_matrix<GROUPBASE + LSU_A>(
                             leftK * sizeof(float), leftM,
                             tileK * sizeof(float), tileM,
-                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride + batch * s->aBatchStride);
                     } else {
                         long leftK = s->K - tileK * k;
                         long leftM = s->M - tileM * m;
                         load_matrix<GROUPBASE + LSU_A>(
                             leftK * sizeof(uint16_t), leftM,
                             tileK * sizeof(uint16_t), tileM,
-                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride);
+                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride + batch * s->aBatchStride);
                     }
                 }
             } else {
@@ -311,14 +324,14 @@ class MatmulProducerTask : public NPUTask {
                         load_matrix<GROUPBASE + LSU_A>(
                             leftK * sizeof(float), leftM,
                             tileK * sizeof(float), tileM,
-                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride);
+                            a->uram, s->aBase + k * tileK * sizeof(float) + m * tileM * s->aStride + batch * s->aBatchStride);
                     } else {
                         long leftK = s->K - tileK * k;
                         long leftM = s->M - tileM * m;
                         load_matrix<GROUPBASE + LSU_A>(
                             leftK * sizeof(uint16_t), leftM,
                             tileK * sizeof(uint16_t), tileM,
-                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride);
+                            a->uram, s->aBase + k * tileK * sizeof(uint16_t) + m * tileM * s->aStride + batch * s->aBatchStride);
                     }
                 }
                 if ((m % 2) == 0) {
@@ -330,7 +343,7 @@ class MatmulProducerTask : public NPUTask {
                     load_matrix<GROUPBASE + LSU_B>(
                         leftK * sizeof(uint16_t), leftN,
                         tileK * sizeof(uint16_t), tileN,
-                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride);
+                        b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride + batch * s->bBatchStride);
                 }
             }
             // tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
@@ -340,7 +353,7 @@ class MatmulProducerTask : public NPUTask {
             load_matrix<GROUPBASE + LSU_CLD>(
                 leftN * sizeof(float), leftM,
                 tileN * sizeof(float), tileM,
-                c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride);
+                c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride + batch * s->cBatchStride);
 
             // __tx_lsu_sb_bar();
             // __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
@@ -404,7 +417,7 @@ class MatmulConsumerTask : public NPUTask {
     }
     // 局部变量
     NPUURAM *a, *b, *c;
-    int m, n, k; // 当前处理中的 m n k
+    int m, n, k, batch; // 当前处理中的 m n k batch
     int a_buf_id, b_buf_id, c_buf_id;
 
   public:
@@ -414,7 +427,7 @@ class MatmulConsumerTask : public NPUTask {
         config_tcsr();
         while (1) {
             // 获取一个任务, 注意，m n k 指切片下标
-            if (s->advance(m, n, k, a_buf_id, b_buf_id, c_buf_id))
+            if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
             // 获取并加载 URAM Buffer
             a = &(s->a_buf[a_buf_id]);
@@ -445,8 +458,8 @@ class MatmulConsumerTask : public NPUTask {
                 tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(real_n - 1);
                 tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
             }
-            printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
-                   m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
+            // printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
+                //    m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
 
             // 最后一行 / 最后一列 / 第一行 / 第一列时都需要做边界检查
@@ -463,7 +476,7 @@ class MatmulConsumerTask : public NPUTask {
                 store_matrix<GROUPBASE + LSU_CST>(
                     leftN * sizeof(float), leftM,
                     tileN * sizeof(float), tileM,
-                    c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride);
+                    c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride + batch * s->cBatchStride);
             }
             // Optimize: Early deallocate of C Buffer, since dma instruction is execute inorder.
             c->consume(sched);
@@ -481,9 +494,12 @@ class MatmulConsumerTask : public NPUTask {
 } // namespace
 
 template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32>
-static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
-                                        uint64_t bBase, uint64_t cBase, uint64_t aStride,
-                                        uint64_t bStride, uint64_t cStride) {
+static inline void matmul_bf16_template(
+    uint64_t M, uint64_t N, uint64_t K, uint64_t B,
+    uint64_t aBase, uint64_t bBase, uint64_t cBase,
+    uint64_t aStride, uint64_t bStride, uint64_t cStride,
+    uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride
+) {
     const ulong a_elem_size = A_IS_FP32 ? sizeof(float) : sizeof(uint16_t);
     NPUURAM buf[7] = {
         NPUURAM(0x0ul),
@@ -495,7 +511,11 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
-        M, N, K, aBase, bBase, cBase, aStride, bStride, cStride, &buf[0], &buf[2], &buf[4]);
+        M, N, K, B,
+        aBase, bBase, cBase,
+        aStride, bStride, cStride,
+        aBatchStride, bBatchStride, cBatchStride,
+        &buf[0], &buf[2], &buf[4]);
     auto pub_consumer = MatmulPubState<tileM, tileN, tileK, ZT>(pub_producer);
 
     // 配置 Swizzle 为 M5 B3 S5
@@ -524,17 +544,27 @@ static inline void matmul_bf16_template(uint64_t M, uint64_t N, uint64_t K, uint
     sched.scheduler();
 }
 
-static inline long matmul_fp32_bf16_fp32_a_bt_c(uint64_t M, uint64_t N, uint64_t K, uint64_t aBase,
-                                   uint64_t bBase, uint64_t cBase, uint64_t aStride,
-                                   uint64_t bStride, uint64_t cStride) {
+static inline long matmul_fp32_bf16_fp32_a_bt_c(
+    uint64_t M, uint64_t N, uint64_t K, uint64_t B,
+    uint64_t aBase, uint64_t bBase, uint64_t cBase,
+    uint64_t aStride, uint64_t bStride, uint64_t cStride,
+    uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride) {
     if (M <= N) {
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, false, true>(M, N, K, aBase, bBase, cBase, aStride,
-                                                         bStride, cStride);
+        matmul_bf16_template<tileM, tileN, tileK, false, true>(
+            M, N, K, B,
+            aBase, bBase, cBase,
+            aStride, bStride, cStride,
+            aBatchStride, bBatchStride, cBatchStride
+        );
     } else { // M >= N
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, true, true>(M, N, K, aBase, bBase, cBase, aStride,
-                                                        bStride, cStride);
+        matmul_bf16_template<tileM, tileN, tileK, true, true>(
+            M, N, K, B,
+            aBase, bBase, cBase,
+            aStride, bStride, cStride,
+            aBatchStride, bBatchStride, cBatchStride
+        );
     }
 
     return 0;
@@ -546,23 +576,17 @@ __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, u
     // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
     // 如果 ratio * ldb == stride_h，说明 B 布局为 [Head][N][K] ，且紧密排布，可视为 [Ratio*N][K] 直接参与矩阵乘。
     ulong ratio = h / g;
-    int ret;
-    for(int cur_g = 0; cur_g < g; cur_g++) 
-    {
-        if(ratio * ldb == stride_h) {
-            // 可直接内联 h 和 n
-            printf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
-            ret = matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n * ratio, (uint64_t)m, (uint64_t)k,
-                                                (uint64_t)b + cur_g * ratio * stride_h * sizeof(float),
-                                                (uint64_t)a + cur_g * stride_g * sizeof(uint16_t),
-                                                (uint64_t)c + cur_g * ratio * n * ldc * sizeof(float),
-                                                ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float));
-            if(ret) return ret;
-        } else {
-            // 暂时不支持离散的情况，这种模式下严重欠优化。
-            printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d)\n", h, ldb, stride_h);
-            return -1;
-        }
+    if(ratio * ldb == stride_h) {
+        // 可直接内联 h 和 n
+        // printf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
+        return matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n * ratio, (uint64_t)m, (uint64_t)k, (uint64_t)g,
+                                            (uint64_t)b, (uint64_t)a, (uint64_t)c,
+                                            ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float),
+                                            ratio * stride_h * sizeof(float), stride_g * sizeof(uint16_t), ratio * n * ldc * sizeof(float)
+                                        );
+    } else {
+        // 暂时不支持离散的情况，这种模式下严重欠优化。
+        printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d)\n", h, ldb, stride_h);
+        return -1;
     }
-    return 0;
 }
