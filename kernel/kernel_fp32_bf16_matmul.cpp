@@ -88,8 +88,10 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_k = k;
                                     cur_b = b;
                                     a_buf_id = cur_id;
-                                    // b_buf_id = (n + b * cN) & 0x1;
-                                    b_buf_id = n & 0x1;
+                                    // 【改进点】：结合 n 的坐标和 batch 的偏移
+                                    // 原逻辑: b_buf_id = n & 0x1;
+                                    // 新逻辑: 保证跨 Batch 的单调性
+                                    b_buf_id = (n & 0x1) ^ ((cN & 1) ? (b & 1) : 0);
                                     c_buf_id = cid;
                                     cid = (cid + 0x1) % 3;
                                     advance_state = &&ZTNextLoop;
@@ -113,8 +115,10 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_n = n;
                                     cur_k = k;
                                     cur_b = b;
-                                    // a_buf_id = (m + b * cM) & 0x1;
-                                    a_buf_id = m & 0x1;
+                                    // 【改进点】：结合 m 的坐标和 batch 的偏移
+                                    // 原逻辑: a_buf_id = m & 0x1;
+                                    // 新逻辑:
+                                    a_buf_id = ((m & 0x1) ^ 1) ^ ((cM & 1) ? (b & 1) : 0);
                                     b_buf_id = cur_id;
                                     c_buf_id = cid;
                                     cur_id ^= 0x1;
@@ -258,6 +262,8 @@ class MatmulProducerTask : public NPUTask {
             // 获取任务
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
+            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             c = &(s->c_buf[c_buf_id]);
             do {
@@ -292,6 +298,8 @@ class MatmulProducerTask : public NPUTask {
                     } while (a->allocate(sched, 1, s->cN));
                 }
             }
+            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: GETBUF\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
             if (ZT) {
                 if (m == 0) {
@@ -445,6 +453,8 @@ class MatmulConsumerTask : public NPUTask {
             // 获取一个任务, 注意，m n k 指切片下标
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
+            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUME\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             a = &(s->a_buf[a_buf_id]);
             b = &(s->b_buf[b_buf_id]);
@@ -452,6 +462,8 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
+            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: READY\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
 
             if(A_IS_FP32) {
                 // 可选的转数部分
@@ -462,6 +474,8 @@ class MatmulConsumerTask : public NPUTask {
                 __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                 NPULEGACYBar(0);
             }
+            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: COMPUTE\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
 
             if(1) {
                 long leftM = s->M - tileM * m;
@@ -526,6 +540,13 @@ static inline void matmul_bf16_template(
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2),
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
+    printf("A0[%lx - %lx)\n", buf[0].uram, buf[0].uram + tileM * tileK * a_elem_size);
+    printf("A1[%lx - %lx)\n", buf[1].uram, buf[1].uram + tileM * tileK * a_elem_size);
+    printf("B0[%lx - %lx)\n", buf[2].uram, buf[2].uram + tileN * tileK * 2);
+    printf("B1[%lx - %lx)\n", buf[3].uram, buf[3].uram + tileN * tileK * 2);
+    printf("C0[%lx - %lx)\n", buf[4].uram, buf[4].uram + tileM * tileN * 4);
+    printf("C1[%lx - %lx)\n", buf[5].uram, buf[5].uram + tileM * tileN * 4);
+    printf("C2[%lx - %lx)\n", buf[6].uram, buf[6].uram + tileM * tileN * 4);
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, B,

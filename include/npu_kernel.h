@@ -9,6 +9,12 @@
 #define __device__ __attribute__((section(".text.npu_kernel")))
 #endif
 
+__attribute__((always_inline)) static inline uint64_t get_mcycle(void) {
+    uint64_t cycles;
+    asm volatile("csrr %0, mcycle" : "=r"(cycles));
+    return cycles;
+}
+
 __attribute__((always_inline)) static inline uint32_t float_as_u32(float i) {
     union {
         float f;
