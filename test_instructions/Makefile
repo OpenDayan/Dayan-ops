@@ -17,6 +17,16 @@ TARGETS := $(patsubst %.cpp, $(BUILD_DIR)/%, $(TEST_SOURCES))
 CFLAGS := -g -Wall -O3 -std=gnu99 -I$(RUNTIME_DIR)/include -I../testdata_gen -I../include
 CXXFLAGS := -g -Wall -O3 -std=c++17 -I$(RUNTIME_DIR)/include -I../testdata_gen -I../include
 
+ifdef USE_FPGA
+	CFLAGS += -DUSE_FPGA
+	CXXFLAGS += -DUSE_FPGA
+endif
+
+ifdef DEV_PREFIX
+	CFLAGS += -DDEV_PREFIX=\"$(DEV_PREFIX)\"
+	CXXFLAGS += -DDEV_PREFIX=\"$(DEV_PREFIX)\"
+endif
+
 .PHONY: all clean $(KERNEL_PACK)
 
 all: $(TARGETS)
