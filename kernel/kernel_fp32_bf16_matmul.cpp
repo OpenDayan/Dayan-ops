@@ -10,6 +10,10 @@
 #include <stdio.h>
 #include <string.h>
 
+// 控制调试信息打印
+// #define debugf(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
+#define debugf(fmt, ...) do {} while (0)
+
 // Note0：所有 kernel 内部使用的非递归函数建议修饰为 static inline
 // 递归函数建议修饰为 static
 // 建议仅标记为 __device__ 的函数对外部可见，以避免命名冲突的可能
@@ -183,7 +187,7 @@ static inline void store_matrix(
     ulong major_left, ulong minor_left, ulong major_tile, ulong minor_tile, ulong uram_base,
     ulong dram_base) {
     if(major_left % 64 != 0) {
-        printf("Warning: store_matrix major_left not aligned to 64 Bytes: %lu\n", major_left);
+        debugf("Warning: store_matrix major_left not aligned to 64 Bytes: %lu\n", major_left);
     }
     if (major_left >= major_tile) {
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(major_tile / 64 - 1);
@@ -262,7 +266,7 @@ class MatmulProducerTask : public NPUTask {
             // 获取任务
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
-            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             c = &(s->c_buf[c_buf_id]);
@@ -298,7 +302,7 @@ class MatmulProducerTask : public NPUTask {
                     } while (a->allocate(sched, 1, s->cN));
                 }
             }
-            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: GETBUF\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: GETBUF\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
             if (ZT) {
@@ -389,10 +393,36 @@ class MatmulProducerTask : public NPUTask {
                     b->produce(sched);
                 }
                 if ((n % 2) == 0) {
+                    if(A_IS_FP32) {
+                        // 可选的转数部分
+                        long leftK = s->K - tileK * k;
+                        long leftM = s->M - tileM * m;
+                        __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
+                        __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
+                        __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERT\n",
+                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                        NPULEGACYBar(0);
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERTFINISH\n",
+                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                    }
                     a->produce(sched);
                 }
             } else {
                 if (n == 0) {
+                    if(A_IS_FP32) {
+                        // 可选的转数部分
+                        long leftK = s->K - tileK * k;
+                        long leftM = s->M - tileM * m;
+                        __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
+                        __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
+                        __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERT\n",
+                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                        NPULEGACYBar(0);
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERTFINISH\n",
+                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                    }
                     a->produce(sched);
                 }
                 if ((m % 2) == 0) {
@@ -453,7 +483,7 @@ class MatmulConsumerTask : public NPUTask {
             // 获取一个任务, 注意，m n k 指切片下标
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
-            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUME\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUME\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             a = &(s->a_buf[a_buf_id]);
@@ -462,19 +492,7 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
-            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: READY\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
-
-            if(A_IS_FP32) {
-                // 可选的转数部分
-                long leftK = s->K - tileK * k;
-                long leftM = s->M - tileM * m;
-                __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
-                __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
-                __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                NPULEGACYBar(0);
-            }
-            printf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: COMPUTE\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: COMPUTE\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
 
             if(1) {
@@ -488,7 +506,7 @@ class MatmulConsumerTask : public NPUTask {
                 tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_N>(real_n - 1);
                 tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_K>(real_k - 1);
             }
-            // printf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
+            // debugf("Calc (%d, %d) -> (%d, %d) = 0x%lx\n", m * tileM, n * tileN,
             //    m * tileM + tileM - 1, n * tileN + tileN - 1, c->uram);
             if(k == 0) tx_mat_mm<GROUPBASE + 0>(c->uram, a->uram, b->uram);
             else tx_mat_mma<GROUPBASE + 0>(c->uram, a->uram, b->uram);
@@ -510,9 +528,9 @@ class MatmulConsumerTask : public NPUTask {
                     c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride + batch * s->cBatchStride);
             }
             // Optimize: Early deallocate of C Buffer, since dma instruction is execute inorder.
-            // c->consume(sched);
-            NPUDMABar(0);
             c->consume(sched);
+            NPUDMABar(0);
+            // c->consume(sched);
             NPUYield(0);
         }
         NPUFinish(-1);
@@ -540,13 +558,13 @@ static inline void matmul_bf16_template(
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2),
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 1),
         NPUURAM(tileM * tileK * a_elem_size * 2 + tileN * tileK * 2 * 2 + tileM * tileN * 4 * 2)};
-    printf("A0[%lx - %lx)\n", buf[0].uram, buf[0].uram + tileM * tileK * a_elem_size);
-    printf("A1[%lx - %lx)\n", buf[1].uram, buf[1].uram + tileM * tileK * a_elem_size);
-    printf("B0[%lx - %lx)\n", buf[2].uram, buf[2].uram + tileN * tileK * 2);
-    printf("B1[%lx - %lx)\n", buf[3].uram, buf[3].uram + tileN * tileK * 2);
-    printf("C0[%lx - %lx)\n", buf[4].uram, buf[4].uram + tileM * tileN * 4);
-    printf("C1[%lx - %lx)\n", buf[5].uram, buf[5].uram + tileM * tileN * 4);
-    printf("C2[%lx - %lx)\n", buf[6].uram, buf[6].uram + tileM * tileN * 4);
+    debugf("A0[%lx - %lx)\n", buf[0].uram, buf[0].uram + tileM * tileK * a_elem_size);
+    debugf("A1[%lx - %lx)\n", buf[1].uram, buf[1].uram + tileM * tileK * a_elem_size);
+    debugf("B0[%lx - %lx)\n", buf[2].uram, buf[2].uram + tileN * tileK * 2);
+    debugf("B1[%lx - %lx)\n", buf[3].uram, buf[3].uram + tileN * tileK * 2);
+    debugf("C0[%lx - %lx)\n", buf[4].uram, buf[4].uram + tileM * tileN * 4);
+    debugf("C1[%lx - %lx)\n", buf[5].uram, buf[5].uram + tileM * tileN * 4);
+    debugf("C2[%lx - %lx)\n", buf[6].uram, buf[6].uram + tileM * tileN * 4);
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, B,
@@ -557,8 +575,8 @@ static inline void matmul_bf16_template(
     auto pub_consumer = MatmulPubState<tileM, tileN, tileK, ZT>(pub_producer);
 
     // 配置 Swizzle 为 M5 B3 S5
-    const long swizzle_pack = MAT_BATCH_SWIZZLE(5, 3, 5);
-    // const long swizzle_pack = 0;
+    // const long swizzle_pack = MAT_BATCH_SWIZZLE(5, 3, 5);
+    const long swizzle_pack = 0;
 
     // 创建四个 Task
     auto task_producer0 =
@@ -614,9 +632,9 @@ __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, u
     // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
     // 如果 ratio * ldb == stride_h，说明 B 布局为 [Head][N][K] ，且紧密排布，可视为 [Ratio*N][K] 直接参与矩阵乘。
     ulong ratio = h / g;
-    if(ratio * ldb == stride_h) {
+    if(ratio * ldb == stride_h || ratio == 1) {
         // 可直接内联 h 和 n
-        // printf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
+        // debugf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
         return matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n * ratio, (uint64_t)m, (uint64_t)k, (uint64_t)g,
                                             (uint64_t)b, (uint64_t)a, (uint64_t)c,
                                             ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float),
@@ -624,7 +642,7 @@ __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, u
                                         );
     } else {
         // 暂时不支持离散的情况，这种模式下严重欠优化。
-        printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d)\n", h, ldb, stride_h);
+        printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d), g(%d), stride_g(%d)\n", h, ldb, stride_h, g, stride_g);
         return -1;
     }
 }

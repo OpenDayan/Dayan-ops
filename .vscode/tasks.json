@@ -41,7 +41,8 @@
         "test_instructions/build/test_bf16_matmul",
         "test_trace/build/test_silu test_trace/example_trace/prefill0-5/silu/ 0",
         "test_trace/build/test_rms_norm test_trace/example_trace/prefill0-5/rms_norm/ 0",
-        "test_trace/build/test_matmul /public/trace1026/prefill0-5/matmul 3"
+        "test_trace/build/test_matmul /public/trace1026/prefill0-5/matmul 3",
+        "test_trace/build/test_matmul /public/trace0104/prefill0-5 0"
       ],
       "type": "pickString"
     }

@@ -814,9 +814,9 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
                                 << std::endl;
                             all_match = false;
                             error_num += 1;
-                            if (error_num >= 10) {
-                                goto Done;
-                            }
+                            // if (error_num >= 10) {
+                            //     goto Done;
+                            // }
                             // goto Done;
                         }
                     }
