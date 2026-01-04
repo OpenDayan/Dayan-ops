@@ -640,7 +640,7 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
     static struct NPUKernelDesc *gmma_bf16_fp32_AT_QK256_desc = NULL;
     if (gmma_bf16_fp32_AT_QK256_desc == NULL) {
         ssize_t err = 0;
-        printf("[INFO] Initializing Runtime..\n");
+        printf("\n[INFO] Initializing Runtime..\n");
         err = npu_runtime_init(&runtime);
         if (err != NPU_SUCCESS) {
             printf("[ERROR] Failed to initialize Runtime: err=%d\n", err);
@@ -664,9 +664,13 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
         printf("[INFO] Loaded gmma_bf16_fp32_AT_QK256 kernel desc successfully.\n");
     }
     // static address allocation
-    uint64_t a_dev = 0x81000000;
-    uint64_t b_dev = 0x83000000;
-    uint64_t c_dev = 0x85000000;
+    uint64_t a_dev;
+    uint64_t b_dev;
+    uint64_t c_dev;
+    npu_runtime_malloc(&runtime, &a_dev, nbytes_a);
+    npu_runtime_malloc(&runtime, &b_dev, nbytes_b);
+    npu_runtime_malloc(&runtime, &c_dev, nbytes_c);
+    printf("[INFO] Allocated Device Memory A[%lx], B[%lx], C[%lx]\n", a_dev, b_dev, c_dev);
     // Copy data to device
     ssize_t ret = 0;
     ret = npu_memcpy_to_dev(&runtime.dev_state, a_dev, a, nbytes_a); // a
@@ -742,7 +746,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             // --------------------------------------
             //
             // FIXME: CPU reference
-            // matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
+            matmul_bf16_f32_f32(data_a, data_b, result_data, psrc0, psrc1, pdst);
 
         } else if (psrc0.type == "fp8_e4m3_q") {
             // TODO: pass
@@ -764,7 +768,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             matmul_e4m3q_f32_f32(data_a, data_b, data_ref, psrc0, psrc1, pdst);
 
         } else {
-            std::cerr << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
+            std::cout << "[ERROR] psrc0.dtype=" << psrc0.type << " is not supported\n" << std::endl;
             return 1;
         }
 
@@ -784,16 +788,16 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
                         // float result = result_data[i*h*n*m + j*n*m + k*m + p];
                         // float ref = data_ref[i*h*n*m + j*n*m + k*m + p];
                         // if (std::abs((result - ref) / ref) > epsilon) {
-                        //     std::cerr << std::fixed << std::setprecision(8);
-                        //     std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                        //     std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" <<
+                        //     std::cout << std::fixed << std::setprecision(8);
+                        //     std::cout << "\n !!! Compare FAILED !!!" << std::endl;
+                        //     std::cout << "  - result[" << i << "][" << j << "][" << k << "][" <<
                         //     p << "]:    "
                         //             << result << std::endl;
-                        //     std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                        //     std::cout << "  - ref[" << i << "][" << j << "][" << k << "][" << p
                         //     << "]:    "
                         //             << ref << std::endl;
-                        //     std::cerr << "  - result - ref:        " << std::abs(result - ref) <<
-                        //     std::endl; std::cerr << "  - reletive err:        " <<
+                        //     std::cout << "  - result - ref:        " << std::abs(result - ref) <<
+                        //     std::endl; std::cout << "  - reletive err:        " <<
                         //     std::abs((result - ref) / ref) << std::endl; all_match = false; goto
                         //     Done;
                         // }
@@ -802,14 +806,14 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
                         float ref = *((float *)(&data_ref[i * h * n * m + j * n * m + k * m + p]));
                         if ((std::abs((result - ref) / ref) > epsilon) || std::isnan(result) ||
                             std::isnan(ref)) {
-                            std::cerr << "\n !!! Compare FAILED !!!" << std::endl;
-                            std::cerr << "  - result[" << i << "][" << j << "][" << k << "][" << p
+                            std::cout << "\n !!! Compare FAILED !!!" << std::endl;
+                            std::cout << "  - result[" << i << "][" << j << "][" << k << "][" << p
                                       << "]:    " << std::hex << result << std::dec << std::endl;
-                            std::cerr << "  - ref[" << i << "][" << j << "][" << k << "][" << p
+                            std::cout << "  - ref[" << i << "][" << j << "][" << k << "][" << p
                                       << "]:    " << std::hex << ref << std::dec << std::endl;
-                            std::cerr << "  - result - ref:        " << std::abs(result - ref)
+                            std::cout << "  - result - ref:        " << std::abs(result - ref)
                                       << std::endl;
-                            std::cerr
+                            std::cout
                                 << "  - reletive err:        " << std::abs((result - ref) / ref)
                                 << std::endl;
                             all_match = false;
@@ -831,7 +835,7 @@ int test_matmul(std::string src0_trace, std::string src1_trace, std::string dst_
             return 1;
 
     } catch (const std::exception &e) {
-        std::cerr << "FATAL ERROR: " << e.what() << std::endl;
+        std::cout << "FATAL ERROR: " << e.what() << std::endl;
         return 1;
     }
 
@@ -855,16 +859,16 @@ int main(int argc, char *argv[]) {
     std::string src1_trace = trace_dir + "/" + std::to_string(trace_id) + "-src1.trace";
     parser.parse(a, &pdst, &psrc0, &psrc1, NULL, NULL, NULL, NULL);
     if (!pdst.is_contiguous) {
-        std::cerr << "[ERROR] matmul tests only support contiguous result tensor now!" << std::endl;
+        std::cout << "[ERROR] matmul tests only support contiguous result tensor now!" << std::endl;
         return 1;
     }
     if ((psrc0.type != "bf16") && (psrc0.type != "fp8_e4m3_q")) {
-        std::cerr << "[ERROR] matmul tests only support BF16/E4M3Q type in src0 tensor!"
+        std::cout << "[ERROR] matmul tests only support BF16/E4M3Q type in src0 tensor!"
                   << std::endl;
         return 1;
     }
     if ((psrc1.type != "f32") || (pdst.type != "f32")) {
-        std::cerr << "[ERROR] matmul tests only support F32 type in src1/dst tensor!" << std::endl;
+        std::cout << "[ERROR] matmul tests only support F32 type in src1/dst tensor!" << std::endl;
         return 1;
     }
     std::cout << "Testing Matmul with trace." << trace_id << " ------------------ ";
