@@ -151,12 +151,12 @@ static inline void load_matrix(
     // Major: 主序维 (K)
     // Minor: 非主序维 (M / N)
     ulong major_left, ulong minor_left, ulong major_tile, ulong minor_tile, ulong uram_base,
-    ulong dram_base, bool zero_in = false) {
+    ulong dram_base) {
     if (major_left >= major_tile) {
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(major_tile / 64 - 1);
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
             (minor_left < minor_tile ? minor_left : minor_tile) - 1);
-        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(zero_in ? 0 : 63);
+        tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
         tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
     } else {
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>(
@@ -166,11 +166,11 @@ static inline void load_matrix(
             ulong remain_bytes = major_left & (0x3FUL);
             if (handle_bytes == 0 && remain_bytes > 0) {
                 tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(0);
-                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(zero_in ? 0 : (remain_bytes - 1));
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(remain_bytes - 1);
                 handle_bytes = remain_bytes;
             } else {
                 tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>((handle_bytes / 64) - 1);
-                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(zero_in ? 0 : 63);
+                tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_REQUESTPADDING>(63);
             }
             tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
             uram_base += handle_bytes;
@@ -178,6 +178,25 @@ static inline void load_matrix(
             major_left = major_left - handle_bytes;
         }
     }
+}
+
+template <ulong TCSR_ID, ulong TRANSPOSE_LOG2ELEMSIZE = 1>
+static inline void load_matrix_transposed(
+    // K: 内积维度
+    // MN: 非内积维 (M / N)
+    ulong k_left, ulong mn_left, ulong k_tile, ulong mn_tile, ulong uram_base,
+    ulong dram_base) {
+    const long sub_block_size = 64 / (1 << TRANSPOSE_LOG2ELEMSIZE);
+    // 获取真实加载的 mn/k 维度（dim0/dim1）的尺寸
+    ulong mn_size = mn_left < mn_tile ? mn_left : mn_tile;
+    ulong k_size = k_left < k_tile ? k_left : k_tile;
+    if((mn_size % sub_block_size) != 0 || (k_size % sub_block_size) != 0) {
+        printf("Not expected alignment!\n");
+    }
+    // 此时已保证 mn_size == x * sub_block_size, k_size == x * sub_block_size
+    tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(((mn_size * (1 << TRANSPOSE_LOG2ELEMSIZE)) / 64) - 1);
+    tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM1>((k_size / sub_block_size) - 1);
+    tx_lsu_dma_d2u<TCSR_ID>(uram_base, dram_base);
 }
 
 template <ulong TCSR_ID>
@@ -230,7 +249,7 @@ static inline void set_legacy_matrix(int M, int K) {
 }
 
 // Producer Task 类
-template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32, bool B_TRANSPOSE = true>
+template <long GROUPBASE, long tileM, long tileN, long tileK, bool ZT, long swizzle, bool A_IS_FP32, bool B_TRANSPOSE>
 class MatmulProducerTask : public NPUTask {
   private:
     long aCkSum, bCkSum, cCkSum; // tcsr 配置 cksum
@@ -242,11 +261,12 @@ class MatmulProducerTask : public NPUTask {
         // A Configuration
         set_lsu_matrix<GROUPBASE + LSU_A>(aCkSum, tileM, tileK * 4, s->aStride, tileK * 4);
         // B Configuration
-        set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
+        if(B_TRANSPOSE) set_lsu_matrix<GROUPBASE + LSU_B>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
+        else set_lsu_matrix<GROUPBASE + LSU_B, true, 1>(bCkSum, tileN, tileK * 2, s->bStride, tileK * 2);
         // C Configuration
         set_lsu_matrix<GROUPBASE + LSU_CLD>(cCkSum, tileM, tileN * 4, s->cStride, tileN * 4);
         // 设置 A 的加载 Swizzle 为 0，以配合后续转数操作
-        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(0);
+        tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(A_IS_FP32 ? 0 : swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         // set_legacy_matrix<LEGACY_A>(tileM, tileK);
@@ -312,10 +332,14 @@ class MatmulProducerTask : public NPUTask {
                     //                                            n * tileN * s->bStride);
                     long leftK = s->K - tileK * k;
                     long leftN = s->N - tileN * n;
-                    load_matrix<GROUPBASE + LSU_B>(
+                    if(B_TRANSPOSE) load_matrix<GROUPBASE + LSU_B>(
                         leftK * sizeof(uint16_t), leftN,
                         tileK * sizeof(uint16_t), tileN,
                         b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride + batch * s->bBatchStride);
+                    else load_matrix_transposed<GROUPBASE + LSU_B, 1 /* LOG2(Sizeof(BFloat16)) == 1 */>(
+                        leftK, leftN,
+                        tileK, tileN,
+                        b->uram, s->bBase + k * tileK * s->bStride + n * tileN * sizeof(uint16_t) + batch * s->bBatchStride);
                 }
                 if ((n % 2) == 0) {
                     // 更新 m 和 k
@@ -364,10 +388,14 @@ class MatmulProducerTask : public NPUTask {
                     //                                            n * tileN * s->bStride);
                     long leftK = s->K - tileK * k;
                     long leftN = s->N - tileN * n;
-                    load_matrix<GROUPBASE + LSU_B>(
+                    if(B_TRANSPOSE) load_matrix<GROUPBASE + LSU_B>(
                         leftK * sizeof(uint16_t), leftN,
                         tileK * sizeof(uint16_t), tileN,
                         b->uram, s->bBase + k * tileK * sizeof(uint16_t) + n * tileN * s->bStride + batch * s->bBatchStride);
+                    else load_matrix_transposed<GROUPBASE + LSU_B, 1 /* LOG2(Sizeof(BFloat16)) == 1 */>(
+                        leftK, leftN,
+                        tileK, tileN,
+                        b->uram, s->bBase + k * tileK * s->bStride + n * tileN * sizeof(uint16_t) + batch * s->bBatchStride);
                 }
             }
             // tx_lsu_dma_d2u<GROUPBASE + 2>(c->uram,
@@ -457,14 +485,14 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASTRIDE>(tileK * 2); // Stride A
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSTRIDE>(tileK * 2); // Stride B
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSTRIDE>(tileN * 4); // Stride C
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(0);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
+        // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
+        // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(0);
+        // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_DATATYPE>(0);
         // 暂时关闭 A 上的 Swizzle，以适配向量的转数格式
         // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(swizzle);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
+        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(A_IS_FP32 ? 0 : swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(swizzle);
         set_legacy_matrix<LEGACY_A>(tileM, tileK);
@@ -542,7 +570,7 @@ class MatmulConsumerTask : public NPUTask {
 };
 } // namespace
 
-template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32>
+template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32, bool BT>
 static inline void matmul_bf16_template(
     uint64_t M, uint64_t N, uint64_t K, uint64_t B,
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
@@ -580,9 +608,9 @@ static inline void matmul_bf16_template(
 
     // 创建四个 Task
     auto task_producer0 =
-        MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_producer);
+        MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
     auto task_producer1 =
-        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_producer);
+        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
     auto task_consumer0 =
         MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
     auto task_consumer1 =
@@ -600,14 +628,15 @@ static inline void matmul_bf16_template(
     sched.scheduler();
 }
 
-static inline long matmul_fp32_bf16_fp32_a_bt_c(
+template<bool BT>
+static inline long matmul_fp32_bf16_fp32(
     uint64_t M, uint64_t N, uint64_t K, uint64_t B,
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
     uint64_t aStride, uint64_t bStride, uint64_t cStride,
     uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride) {
     if (M <= N) {
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, false, true>(
+        matmul_bf16_template<tileM, tileN, tileK, false, true, BT>(
             M, N, K, B,
             aBase, bBase, cBase,
             aStride, bStride, cStride,
@@ -615,31 +644,41 @@ static inline long matmul_fp32_bf16_fp32_a_bt_c(
         );
     } else { // M >= N
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, true, true>(
+        matmul_bf16_template<tileM, tileN, tileK, true, true, BT>(
             M, N, K, B,
             aBase, bBase, cBase,
             aStride, bStride, cStride,
             aBatchStride, bBatchStride, cBatchStride
         );
     }
-
     return 0;
 }
 
 // 名称后缀 QK256 是为了兼容之前的算子名称。如要修改算子名称需要同时修改 llama.cpp 和 test_trace/test_matmul.cpp
 __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, uint64_t n, uint64_t k, uint64_t lda,
-                                         uint64_t ldb, uint64_t ldc, uint64_t g, uint64_t h, uint64_t stride_g, uint64_t stride_h) {
+                                        uint64_t ldb, uint64_t ldc, uint64_t g, uint64_t h, uint64_t stride_g, uint64_t stride_h,
+                                        bool transposed) {
     // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
     // 如果 ratio * ldb == stride_h，说明 B 布局为 [Head][N][K] ，且紧密排布，可视为 [Ratio*N][K] 直接参与矩阵乘。
     ulong ratio = h / g;
     if(ratio * ldb == stride_h || ratio == 1) {
         // 可直接内联 h 和 n
         // debugf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
-        return matmul_fp32_bf16_fp32_a_bt_c((uint64_t)n * ratio, (uint64_t)m, (uint64_t)k, (uint64_t)g,
-                                            (uint64_t)b, (uint64_t)a, (uint64_t)c,
-                                            ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float),
-                                            ratio * stride_h * sizeof(float), stride_g * sizeof(uint16_t), ratio * n * ldc * sizeof(float)
-                                        );
+        if(transposed) {
+            return matmul_fp32_bf16_fp32<false>(
+                (uint64_t)n * ratio, (uint64_t)m, (uint64_t)k, (uint64_t)g,
+                (uint64_t)b, (uint64_t)a, (uint64_t)c,
+                ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float),
+                ratio * stride_h * sizeof(float), stride_g * sizeof(uint16_t), ratio * n * ldc * sizeof(float)
+            );
+        } else {
+            return matmul_fp32_bf16_fp32<true>(
+                (uint64_t)n * ratio, (uint64_t)m, (uint64_t)k, (uint64_t)g,
+                (uint64_t)b, (uint64_t)a, (uint64_t)c,
+                ldb * sizeof(float), lda * sizeof(uint16_t), ldc * sizeof(float),
+                ratio * stride_h * sizeof(float), stride_g * sizeof(uint16_t), ratio * n * ldc * sizeof(float)
+            );
+        }
     } else {
         // 暂时不支持离散的情况，这种模式下严重欠优化。
         printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d), g(%d), stride_g(%d)\n", h, ldb, stride_h, g, stride_g);
