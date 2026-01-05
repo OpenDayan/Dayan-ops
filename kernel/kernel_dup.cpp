@@ -18,7 +18,6 @@ const long lsuTCSR1 = 1;
 extern int _uram[256 * 1024];
 
 #define aTile 1024
-
 static inline void configTCSR_Tile_cont_2d(int m, int n) {
     __tx_tcsr_write<aUramTCSR * 8 + TCSR_DIM0>(m);
     __tx_tcsr_write<aUramTCSR * 8 + TCSR_STRIDE0>(1);
@@ -76,7 +75,7 @@ static inline void configLSUTCSRd2u(int m, int n, int n_stride_bytes) {
     long m_bytes = m * sizeof(elemty);
     if(n && ((m_bytes % 64) != 0)) {
         // TODO: 不支持非对齐传输
-        printf("D2U transfer size must be aligned to 64B, but got n_stride_bytes=%ld\n", n_stride_bytes);
+        printf("LSU transfer size must be aligned to 64B, but got m_bytes=%ld\n", m_bytes);
     }
 
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
@@ -105,7 +104,7 @@ static inline void configLSUTCSRu2d(int m, int n, int n_stride_bytes) {
     m_bytes = m_bytes < 64 ? 64 : m_bytes;
     if(n && ((m_bytes % 64) != 0)) {
         // TODO: 不支持非对齐传输
-        printf("U2D transfer size must be aligned to 64B, but got n_stride_bytes=%ld\n", n_stride_bytes);
+        printf("LSU transfer size must be aligned to 64B, but got m_bytes=%ld\n", m_bytes);
     }
 
     tx_lsu_tcsr_write<GROUPBASE * LSU_GROUPSZ + LSU_BLOCK>(0);
@@ -229,35 +228,22 @@ static inline long dup_f32_bf16_rows(void *a, void *res, int a_bs, int a_h, int 
     // each row of res
     configTCSR_Tile_cont_2d(a_m, a_n);
 
-    // configLSUTCSRd2u<lsuTCSR0, float>(a_m, a_n, a_nb1);
-    // configLSUTCSRu2d<lsuTCSR1, uint16_t>(res_m, res_n, res_nb1);
-    printf("DIM: %d %d %d %d\n", a_bs, a_h, a_n, a_m);
-    printf("A Stride: %d %d %d %d\n", a_nb3, a_nb2, a_nb1, a_nb0);
-    printf("R Stride: %d %d %d %d\n", res_nb3, res_nb2, res_nb1, res_nb0);
+    configLSUTCSRd2u<lsuTCSR0, float>(a_m, a_n, a_nb1);
+    configLSUTCSRu2d<lsuTCSR1, uint16_t>(res_m, res_n, res_nb1);
 
     for (int bs = 0; bs < a_bs; ++bs) {
         for (int i = 0; i < a_h; ++i) {
-            // tx_lsu_dma_d2u<lsuTCSR0>((long)uram0, (long)(a + i * a_nb2 + bs * a_nb3));
-            // __tx_lsu_sb_bar();
-            for (int j = 0 ; j < a_n; ++j) {
-                for(int k = 0 ; k < a_m; ++ k) {
-                    uint32_t raw_float = *(uint32_t*)((long)a + k * a_nb0 + j * a_nb1 + i * a_nb2 + bs * a_nb3);
-                    ((uint32_t*)uram0)[k + j * a_m] = raw_float;
-                }
-            }
+            tx_lsu_dma_d2u<lsuTCSR0>((long)uram0, (long)(a + i * a_nb2 + bs * a_nb3));
+            __tx_lsu_sb_bar();
+
             __tx_convert_fp32_bf16_round<aUramTCSR, cUramTCSR>((void *)uram0, (void *)uram1);
-            // __tx_sb_bar();
-            // tx_lsu_dma_u2d<lsuTCSR1>((long)(res + i * res_nb2 + bs * res_nb3), (long)uram1);
-            // __tx_lsu_sb_bar();
-            for (int j = 0 ; j < a_n; ++j) {
-                for(int k = 0 ; k < a_m; ++ k) {
-                    *(uint16_t*)((long)res + k * res_nb0 + j * res_nb1 + i * res_nb2 + bs * res_nb3) =
-                    ((uint16_t*)uram1)[k + j * a_m];
-                }
-            }
+            __tx_sb_bar();
+
+            tx_lsu_dma_u2d<lsuTCSR1>((long)(res + i * res_nb2 + bs * res_nb3), (long)uram1);
+            __tx_lsu_sb_bar();
         }
     }
-    __asm__ __volatile__(".insn 0xfc000073" ::: "memory"); // CFLUSH.D.L1
+
     return 0;
 }
 
