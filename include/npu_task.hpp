@@ -108,16 +108,17 @@ class NPUScheduler {
                 break;
             }
             NPUTask *taskPtr;
-            if (!free_list.list_empty()) {
-                // 获取 free_list 中的 Task 指针
-                taskPtr = free_list.list_remove_head();
-            } else {
+            {
                 // 获取 Scoreboard 中的 Task 指针
                 long sbInfo;
                 tx_sb_get_any(sbInfo);
                 taskPtr = (NPUTask *)sbInfo;
             }
-            if (taskPtr == NULL)
+            if (!taskPtr && !free_list.list_empty()) {
+                // 获取 free_list 中的 Task 指针
+                taskPtr = free_list.list_remove_head();
+            }
+            if (!taskPtr)
                 continue;
             taskCounter += taskPtr->_execute(&err);
         }

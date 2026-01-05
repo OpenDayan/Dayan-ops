@@ -1,5 +1,12 @@
 // BF16 矩阵乘法算子核
 
+/*
+* TODO: 优化点
+* 1. 优化 Tile Size 等小参
+* 2. 目前仅支持 B-K-M-N / B-K-N-M 两种宏遍历顺序，对 K 较大但 MN 较小的情况不能有效复用 C
+* 3. 对于多 Batch 的支持，目前较为局限。
+*/
+
 #include "npu_instruction.hpp"
 #include "npu_instruction_old.hpp"
 #include "npu_kernel.h"
@@ -11,8 +18,8 @@
 #include <string.h>
 
 // 控制调试信息打印
-// #define debugf(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
-#define debugf(fmt, ...) do {} while (0)
+#define debugf(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
+// #define debugf(fmt, ...) do {} while (0)
 
 // Note0：所有 kernel 内部使用的非递归函数建议修饰为 static inline
 // 递归函数建议修饰为 static
@@ -45,22 +52,23 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
     NPUURAM *a_buf;
     NPUURAM *b_buf;
     NPUURAM *c_buf;
+    const int max_cbuf;
     MatmulPubState(int M, int N, int K, int B, uint64_t aBase, uint64_t bBase, uint64_t cBase,
                    uint64_t aStride, uint64_t bStride, uint64_t cStride,
                    uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride,
-                   NPUURAM *a_buf, NPUURAM *b_buf, NPUURAM *c_buf)
+                   NPUURAM *a_buf, NPUURAM *b_buf, NPUURAM *c_buf, int max_cbuf)
         : M(M), N(N), K(K), B(B),
         aBase(aBase), bBase(bBase), cBase(cBase),
         aStride(aStride), bStride(bStride), cStride(cStride),
         aBatchStride(aBatchStride), bBatchStride(bBatchStride), cBatchStride(cBatchStride),
-        a_buf(a_buf), b_buf(b_buf), c_buf(c_buf),
+        a_buf(a_buf), b_buf(b_buf), c_buf(c_buf), max_cbuf(max_cbuf),
         cM((M + tileM - 1) / tileM), cN((N + tileN - 1) / tileN), cK((K + tileK - 1) / tileK){};
     MatmulPubState(const MatmulPubState &other)
         : M(other.M), N(other.N), K(other.K), B(other.B),
         aBase(other.aBase), bBase(other.bBase), cBase(other.cBase),
         aStride(other.aStride), bStride(other.bStride), cStride(other.cStride),
         aBatchStride(other.aBatchStride), bBatchStride(other.bBatchStride), cBatchStride(other.cBatchStride),
-        a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf),
+        a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf), max_cbuf(other.max_cbuf),
         cM(other.cM), cN(other.cN), cK(other.cK){};
 
   private:
@@ -93,11 +101,10 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_b = b;
                                     a_buf_id = cur_id;
                                     // 【改进点】：结合 n 的坐标和 batch 的偏移
-                                    // 原逻辑: b_buf_id = n & 0x1;
-                                    // 新逻辑: 保证跨 Batch 的单调性
+                                    // b_buf_id = n & 0x1;
                                     b_buf_id = (n & 0x1) ^ ((cN & 1) ? (b & 1) : 0);
                                     c_buf_id = cid;
-                                    cid = (cid + 0x1) % 3;
+                                    cid = (cid + 0x1) % max_cbuf;
                                     advance_state = &&ZTNextLoop;
                                     return false;
                                 ZTNextLoop:;
@@ -120,13 +127,12 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
                                     cur_k = k;
                                     cur_b = b;
                                     // 【改进点】：结合 m 的坐标和 batch 的偏移
-                                    // 原逻辑: a_buf_id = m & 0x1;
-                                    // 新逻辑:
+                                    // a_buf_id = m & 0x1;
                                     a_buf_id = ((m & 0x1) ^ 1) ^ ((cM & 1) ? (b & 1) : 0);
                                     b_buf_id = cur_id;
                                     c_buf_id = cid;
                                     cur_id ^= 0x1;
-                                    cid = (cid + 0x1) % 3;
+                                    cid = (cid + 0x1) % max_cbuf;
                                     advance_state = &&ZNextLoop;
                                     return false;
                                 ZNextLoop:;
@@ -206,7 +212,7 @@ static inline void store_matrix(
     ulong major_left, ulong minor_left, ulong major_tile, ulong minor_tile, ulong uram_base,
     ulong dram_base) {
     if(major_left % 64 != 0) {
-        debugf("Warning: store_matrix major_left not aligned to 64 Bytes: %lu\n", major_left);
+        printf("Warning: store_matrix major_left not aligned to 64 Bytes: %lu\n", major_left);
     }
     if (major_left >= major_tile) {
         tx_lsu_tcsr_write<TCSR_ID * LSU_GROUPSZ + LSU_DIM0>(major_tile / 64 - 1);
@@ -286,7 +292,7 @@ class MatmulProducerTask : public NPUTask {
             // 获取任务
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
-            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET TASK!\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             c = &(s->c_buf[c_buf_id]);
@@ -322,7 +328,7 @@ class MatmulProducerTask : public NPUTask {
                     } while (a->allocate(sched, 1, s->cN));
                 }
             }
-            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: GETBUF\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET FREE URAM BUFFER\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
             if (ZT) {
@@ -428,10 +434,10 @@ class MatmulProducerTask : public NPUTask {
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
                         __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERT\n",
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER START CONVERT\n",
                             get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                         NPULEGACYBar(0);
-                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERTFINISH\n",
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER FINISH CONVERT\n",
                             get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                     }
                     a->produce(sched);
@@ -445,10 +451,10 @@ class MatmulProducerTask : public NPUTask {
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM0>(leftK < tileK ? leftK : tileK);
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
                         __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
-                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERT\n",
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER START CONVERT\n",
                             get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                         NPULEGACYBar(0);
-                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONVERTFINISH\n",
+                        debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER FINISH CONVERT\n",
                             get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                     }
                     a->produce(sched);
@@ -511,7 +517,7 @@ class MatmulConsumerTask : public NPUTask {
             // 获取一个任务, 注意，m n k 指切片下标
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
-            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUME\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER GET TASK\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             a = &(s->a_buf[a_buf_id]);
@@ -520,7 +526,7 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(c);
             NPUWaitReady(b);
             NPUWaitReady(a);
-            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: COMPUTE\n",
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER GET READY URAM BUFFER\n",
                 get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
 
             if(1) {
@@ -544,6 +550,8 @@ class MatmulConsumerTask : public NPUTask {
             // 释放 a b
             a->consume(sched);
             b->consume(sched);
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER RELEASE URAM BUFFER AND START TO WRITEBACK\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 写回 C
             // tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride,
             //                               c->uram);
@@ -556,8 +564,10 @@ class MatmulConsumerTask : public NPUTask {
                     c->uram, s->cBase + n * tileN * sizeof(float) + m * tileM * s->cStride + batch * s->cBatchStride);
             }
             // Optimize: Early deallocate of C Buffer, since dma instruction is execute inorder.
-            c->consume(sched);
             NPUDMABar(0);
+            c->consume(sched);
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER FINISH WRITEBACK\n",
+                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // c->consume(sched);
             NPUYield(0);
         }
@@ -593,13 +603,15 @@ static inline void matmul_bf16_template(
     debugf("C0[%lx - %lx)\n", buf[4].uram, buf[4].uram + tileM * tileN * 4);
     debugf("C1[%lx - %lx)\n", buf[5].uram, buf[5].uram + tileM * tileN * 4);
     debugf("C2[%lx - %lx)\n", buf[6].uram, buf[6].uram + tileM * tileN * 4);
+    // 计算 M N Tile 的个数，C Buf 不能超过 M N Tile 个数之积
+    const uint64_t maxCBuf = ((M + tileM - 1) / tileM) * ((N + tileN - 1) / tileN);
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, B,
         aBase, bBase, cBase,
         aStride, bStride, cStride,
         aBatchStride, bBatchStride, cBatchStride,
-        &buf[0], &buf[2], &buf[4]);
+        &buf[0], &buf[2], &buf[4], maxCBuf > 3 ? 3 : maxCBuf);
     auto pub_consumer = MatmulPubState<tileM, tileN, tileK, ZT>(pub_producer);
 
     // 配置 Swizzle 为 M5 B3 S5
