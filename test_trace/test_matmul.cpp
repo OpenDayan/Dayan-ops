@@ -662,6 +662,10 @@ int host_gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, int m, int n, int k,
             exit(-1);
         }
         printf("[INFO] Loaded gmma_bf16_fp32_AT_QK256 kernel desc successfully.\n");
+
+        // 预先申请 2GB 的内存，以将真实矩阵存储挤占到高 2GB 空间检查是否会出现问题。
+        // uint64_t useless_dev;
+        // npu_runtime_malloc(&runtime, &useless_dev, 3UL * 1024UL * 1024UL * 1024UL);
     }
     // static address allocation
     uint64_t a_dev;

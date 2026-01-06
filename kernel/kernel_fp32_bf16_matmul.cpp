@@ -275,7 +275,7 @@ class MatmulProducerTask : public NPUTask {
         tx_lsu_tcsr_write<(GROUPBASE + LSU_A) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(A_IS_FP32 ? 0 : swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_B) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
         tx_lsu_tcsr_write<(GROUPBASE + LSU_CLD) * LSU_GROUPSZ + LSU_URAMWRITESWIZZLEMBS>(swizzle);
-        // set_legacy_matrix<LEGACY_A>(tileM, tileK);
+        set_legacy_matrix<LEGACY_A>(tileM, tileK);
         return;
     }
     // 局部变量
@@ -293,7 +293,7 @@ class MatmulProducerTask : public NPUTask {
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET TASK!\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             c = &(s->c_buf[c_buf_id]);
             do {
@@ -329,7 +329,7 @@ class MatmulProducerTask : public NPUTask {
                 }
             }
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET FREE URAM BUFFER\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
             if (ZT) {
                 if (m == 0) {
@@ -435,10 +435,10 @@ class MatmulProducerTask : public NPUTask {
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
                         __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                         debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER START CONVERT\n",
-                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                            get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                         NPULEGACYBar(0);
                         debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER FINISH CONVERT\n",
-                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                            get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                     }
                     a->produce(sched);
                 }
@@ -452,10 +452,10 @@ class MatmulProducerTask : public NPUTask {
                         __tx_tcsr_write<LEGACY_A * 8 + TCSR_DIM1>(leftM < tileM ? leftM : tileM);
                         __tx_convert_fp32_bf16_round<LEGACY_A, LEGACY_A>((void *)a->uram, (void *)a->uram);
                         debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER START CONVERT\n",
-                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                            get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                         NPULEGACYBar(0);
                         debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER FINISH CONVERT\n",
-                            get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                            get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
                     }
                     a->produce(sched);
                 }
@@ -466,6 +466,7 @@ class MatmulProducerTask : public NPUTask {
             c->produce(sched);
             NPUYield(0); // 让出执行时间，执行其它纤程
         }
+        debugf("[%lu]: PRODUCER EXIT\n", get_mcycle());
         NPUFinish(-1);
     }
     // 每一个实现均需要暴露一个静态的 wrapper 函数
@@ -501,7 +502,7 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(A_IS_FP32 ? 0 : swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(swizzle);
-        set_legacy_matrix<LEGACY_A>(tileM, tileK);
+        // set_legacy_matrix<LEGACY_A>(tileM, tileK);
     }
     // 局部变量
     NPUURAM *a, *b, *c;
@@ -518,7 +519,7 @@ class MatmulConsumerTask : public NPUTask {
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
                 break;
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER GET TASK\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 获取并加载 URAM Buffer
             a = &(s->a_buf[a_buf_id]);
             b = &(s->b_buf[b_buf_id]);
@@ -527,7 +528,7 @@ class MatmulConsumerTask : public NPUTask {
             NPUWaitReady(b);
             NPUWaitReady(a);
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER GET READY URAM BUFFER\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
 
             if(1) {
                 long leftM = s->M - tileM * m;
@@ -551,7 +552,7 @@ class MatmulConsumerTask : public NPUTask {
             a->consume(sched);
             b->consume(sched);
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER RELEASE URAM BUFFER AND START TO WRITEBACK\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 写回 C
             // tx_lsu_dma_u2d<GROUPBASE + 3>(s->cBase + n * tileN * 4 + m * tileM * s->cStride,
             //                               c->uram);
@@ -567,10 +568,11 @@ class MatmulConsumerTask : public NPUTask {
             NPUDMABar(0);
             c->consume(sched);
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: CONSUMER FINISH WRITEBACK\n",
-                get_mcycle, m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // c->consume(sched);
             NPUYield(0);
         }
+        debugf("[%lu]: CONSUMER EXIT\n", get_mcycle());
         NPUFinish(-1);
     }
     // 每一个实现均需要暴露一个静态的 wrapper 函数
@@ -646,6 +648,11 @@ static inline long matmul_fp32_bf16_fp32(
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
     uint64_t aStride, uint64_t bStride, uint64_t cStride,
     uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride) {
+    debugf("matmul_fp32_bf16_fp32: M(%d), N(%d), K(%d), B(%d), A(0x%08lx), B(0x%08lx), C(0x%08lx), aStride(%d), bStride(%d), cStride(%d), aBatchStride(%d), bBatchStride(%d), cBatchStride(%d)\n",
+        (uint32_t)M, (uint32_t)N, (uint32_t)K, (uint32_t)B,
+        (uint64_t)aBase, (uint64_t)bBase, (uint64_t)cBase,
+        (uint32_t)aStride, (uint32_t)bStride, (uint32_t)cStride,
+        (uint32_t)aBatchStride, (uint32_t)bBatchStride, (uint32_t)cBatchStride);
     if (M <= N) {
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
         matmul_bf16_template<tileM, tileN, tileK, false, true, BT>(
@@ -672,8 +679,12 @@ __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, u
                                         bool transposed) {
     // 在 llama.cpp 中算子接口中的 A 和 B 与算子内部的 A 和 B 相反
     // 如果 ratio * ldb == stride_h，说明 B 布局为 [Head][N][K] ，且紧密排布，可视为 [Ratio*N][K] 直接参与矩阵乘。
+    debugf("A(0x%08lx), B(0x%08lx), C(0x%08lx), m(%d), n(%d), k(%d), lda(%d), ldb(%d), ldc(%d), g(%d), h(%d), stride_g(%d), stride_h(%d), transposed(%d)\n",
+        (uint64_t)a, (uint64_t)b, (uint64_t)c, (uint32_t)m, (uint32_t)n, (uint32_t)k,
+        (uint32_t)lda, (uint32_t)ldb, (uint32_t)ldc,
+        (uint32_t)g, (uint32_t)h, (uint32_t)stride_g, (uint32_t)stride_h, (uint32_t)transposed);
     ulong ratio = h / g;
-    if(ratio * ldb == stride_h || ratio == 1) {
+    if(n * ldb == stride_h || ratio == 1) {
         // 可直接内联 h 和 n
         // debugf("m(%d), n(%d), ldc(%d)\n", m, n, ldc);
         if(transposed) {
@@ -693,7 +704,7 @@ __device__ long gmma_bf16_fp32_AT_QK256(void *a, void *b, void *c, uint64_t m, u
         }
     } else {
         // 暂时不支持离散的情况，这种模式下严重欠优化。
-        printf("ERROR[gmma_bf16_fp32_AT_QK256]: h(%d) * ldb(%d) =/= stride_h(%d), g(%d), stride_g(%d)\n", h, ldb, stride_h, g, stride_g);
+        printf("ERROR[gmma_bf16_fp32_AT_QK256]: n(%d) * ldb(%d) =/= stride_h(%d), g(%d), stride_g(%d)\n", n, ldb, stride_h, g, stride_g);
         return -1;
     }
 }
