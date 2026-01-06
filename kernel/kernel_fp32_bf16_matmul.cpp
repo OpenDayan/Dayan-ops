@@ -5,6 +5,7 @@
 * 1. 优化 Tile Size 等小参
 * 2. 目前仅支持 B-K-M-N / B-K-N-M 两种宏遍历顺序，对 K 较大但 MN 较小的情况不能有效复用 C
 * 3. 对于多 Batch 的支持，目前较为局限。
+* 4. 目前由于存在竞态问题，暂时关闭了双 Producer 支持。需实现锁机制，并加回 Producer。
 */
 
 #include "npu_instruction.hpp"
