@@ -58,7 +58,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
     MatmulPubState(int M, int N, int K, int B, uint64_t aBase, uint64_t bBase, uint64_t cBase,
                    uint64_t aStride, uint64_t bStride, uint64_t cStride,
                    uint64_t aBatchStride, uint64_t bBatchStride, uint64_t cBatchStride,
-                   NPUURAM *a_buf, NPUURAM *b_buf, NPUURAM *c_buf, int max_cbuf)
+                   NPUURAM *a_buf, NPUURAM *b_buf, NPUURAM *c_buf, NPUResource* order_lock, int max_cbuf)
         : M(M), N(N), K(K), B(B),
         aBase(aBase), bBase(bBase), cBase(cBase),
         aStride(aStride), bStride(bStride), cStride(cStride),
@@ -298,7 +298,7 @@ class MatmulProducerTask : public NPUTask {
             // 获取任务
             if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id)) {
                 // 释放顺序锁
-                s->order_lock->consume(1);
+                s->order_lock->consume(sched);
                 break;
             }
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET TASK!\n",
@@ -340,7 +340,7 @@ class MatmulProducerTask : public NPUTask {
                 NPUWaitFree(c);
             } while (c->allocate(sched, 1, 1));
             // 释放顺序锁
-            s->order_lock->consume(1);
+            s->order_lock->consume(sched);
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET FREE URAM BUFFER\n",
                 get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
@@ -640,18 +640,18 @@ static inline void matmul_bf16_template(
     // 创建四个 Task
     auto task_producer0 =
         MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
-    // auto task_producer1 =
-    //     MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
+    auto task_producer1 =
+        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
     auto task_consumer0 =
         MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
     auto task_consumer1 =
         MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
-    // NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
-    //                      (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
-    NPUTask *tasks[3] = {(NPUTask *)&task_producer0,
+    NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
                          (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
+    // NPUTask *tasks[3] = {(NPUTask *)&task_producer0,
+                        //  (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
     // 创建一个调度器
-    auto sched = NPUScheduler(3, tasks);
+    auto sched = NPUScheduler(4, tasks);
 
     for (auto t : tasks) {
         t->sched = &sched;
