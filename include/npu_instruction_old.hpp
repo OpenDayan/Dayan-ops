@@ -262,7 +262,9 @@ __attribute__((always_inline)) static inline void __custom_64b_instruction1r(lon
 }
 template <long encoding>
 __attribute__((always_inline)) static inline void __custom_64b_instruction_bar() {
-    asm volatile(".insn 8, %0 | 0x3F | (5 << 7) | (5 << 27)\n"
+    asm volatile(
+        ".align 3\n"
+        ".insn 8, %0 | 0x3F | (5 << 7) | (5 << 27)\n"
                  "andi t0,t0,0\n" ::"i"(encoding));
 }
 template <long encoding>
