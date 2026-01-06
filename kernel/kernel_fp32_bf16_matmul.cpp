@@ -18,8 +18,8 @@
 #include <string.h>
 
 // 控制调试信息打印
-#define debugf(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
-// #define debugf(fmt, ...) do {} while (0)
+// #define debugf(fmt, ...) printf("[DEBUG] " fmt, ##__VA_ARGS__)
+#define debugf(fmt, ...) do {} while (0)
 
 // Note0：所有 kernel 内部使用的非递归函数建议修饰为 static inline
 // 递归函数建议修饰为 static
@@ -294,18 +294,8 @@ class MatmulProducerTask : public NPUTask {
                 break;
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET TASK!\n",
                 get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
-            // 获取并加载 URAM Buffer
-            c = &(s->c_buf[c_buf_id]);
-            do {
-                NPUWaitFree(c);
-            } while (c->allocate(sched, 1, 1));
             if (ZT) {
-                if ((n % 2) == 0) {
-                    a = &(s->a_buf[a_buf_id]);
-                    do {
-                        NPUWaitFree(a);
-                    } while (a->allocate(sched, 1, (s->cN - n) > 2 ? 2 : (s->cN - n)));
-                }
+                // 复用 B，B 优先级最高
                 if (m == 0) {
                     // 负责加载 B Buffer
                     b = &(s->b_buf[b_buf_id]);
@@ -313,13 +303,14 @@ class MatmulProducerTask : public NPUTask {
                         NPUWaitFree(b);
                     } while (b->allocate(sched, 1, s->cM));
                 }
-            } else {
-                if ((m % 2) == 0) {
-                    b = &(s->b_buf[b_buf_id]);
+                if ((n % 2) == 0) {
+                    a = &(s->a_buf[a_buf_id]);
                     do {
-                        NPUWaitFree(b);
-                    } while (b->allocate(sched, 1, (s->cM - m) > 2 ? 2 : (s->cM - m)));
+                        NPUWaitFree(a);
+                    } while (a->allocate(sched, 1, (s->cN - n) > 2 ? 2 : (s->cN - n)));
                 }
+            } else {
+                // 复用 A，A 优先级最高
                 if (n == 0) {
                     // 负责加载 A Buffer
                     a = &(s->a_buf[a_buf_id]);
@@ -327,7 +318,18 @@ class MatmulProducerTask : public NPUTask {
                         NPUWaitFree(a);
                     } while (a->allocate(sched, 1, s->cN));
                 }
+                if ((m % 2) == 0) {
+                    b = &(s->b_buf[b_buf_id]);
+                    do {
+                        NPUWaitFree(b);
+                    } while (b->allocate(sched, 1, (s->cM - m) > 2 ? 2 : (s->cM - m)));
+                }
             }
+            // 获取并加载 URAM Buffer
+            c = &(s->c_buf[c_buf_id]);
+            do {
+                NPUWaitFree(c);
+            } while (c->allocate(sched, 1, 1));
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET FREE URAM BUFFER\n",
                 get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
@@ -464,6 +466,8 @@ class MatmulProducerTask : public NPUTask {
                 }
             }
             c->produce(sched);
+            debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER FINISH LOAD\n",
+                get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             NPUYield(0); // 让出执行时间，执行其它纤程
         }
         debugf("[%lu]: PRODUCER EXIT\n", get_mcycle());
@@ -623,16 +627,18 @@ static inline void matmul_bf16_template(
     // 创建四个 Task
     auto task_producer0 =
         MatmulProducerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
-    auto task_producer1 =
-        MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
+    // auto task_producer1 =
+    //     MatmulProducerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32, BT>(&pub_producer);
     auto task_consumer0 =
         MatmulConsumerTask<0, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
     auto task_consumer1 =
         MatmulConsumerTask<4, tileM, tileN, tileK, ZT, swizzle_pack, A_IS_FP32>(&pub_consumer);
-    NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
+    // NPUTask *tasks[4] = {(NPUTask *)&task_producer0, (NPUTask *)&task_producer1,
+    //                      (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
+    NPUTask *tasks[3] = {(NPUTask *)&task_producer0,
                          (NPUTask *)&task_consumer0, (NPUTask *)&task_consumer1};
     // 创建一个调度器
-    auto sched = NPUScheduler(4, tasks);
+    auto sched = NPUScheduler(3, tasks);
 
     for (auto t : tasks) {
         t->sched = &sched;
