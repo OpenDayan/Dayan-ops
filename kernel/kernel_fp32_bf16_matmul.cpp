@@ -53,6 +53,7 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
     NPUURAM *a_buf;
     NPUURAM *b_buf;
     NPUURAM *c_buf;
+    NPUResource *order_lock; // 保证 Producer Task 按照顺序为 A、B、C 上锁
     const int max_cbuf;
     MatmulPubState(int M, int N, int K, int B, uint64_t aBase, uint64_t bBase, uint64_t cBase,
                    uint64_t aStride, uint64_t bStride, uint64_t cStride,
@@ -62,14 +63,14 @@ template <long tileM, long tileN, long tileK, bool ZT> class MatmulPubState {
         aBase(aBase), bBase(bBase), cBase(cBase),
         aStride(aStride), bStride(bStride), cStride(cStride),
         aBatchStride(aBatchStride), bBatchStride(bBatchStride), cBatchStride(cBatchStride),
-        a_buf(a_buf), b_buf(b_buf), c_buf(c_buf), max_cbuf(max_cbuf),
+        a_buf(a_buf), b_buf(b_buf), c_buf(c_buf), order_lock(order_lock), max_cbuf(max_cbuf),
         cM((M + tileM - 1) / tileM), cN((N + tileN - 1) / tileN), cK((K + tileK - 1) / tileK){};
     MatmulPubState(const MatmulPubState &other)
         : M(other.M), N(other.N), K(other.K), B(other.B),
         aBase(other.aBase), bBase(other.bBase), cBase(other.cBase),
         aStride(other.aStride), bStride(other.bStride), cStride(other.cStride),
         aBatchStride(other.aBatchStride), bBatchStride(other.bBatchStride), cBatchStride(other.cBatchStride),
-        a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf), max_cbuf(other.max_cbuf),
+        a_buf(other.a_buf), b_buf(other.b_buf), c_buf(other.c_buf), order_lock(other.order_lock), max_cbuf(other.max_cbuf),
         cM(other.cM), cN(other.cN), cK(other.cK){};
 
   private:
@@ -290,9 +291,16 @@ class MatmulProducerTask : public NPUTask {
         NPUBegin;
         config_tcsr();
         while (1) {
+            // 获取顺序锁
+            do {
+                NPUWaitFree(s->order_lock);
+            } while(s->order_lock->allocate(sched, 0, 1));
             // 获取任务
-            if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id))
+            if (s->advance(m, n, k, batch, a_buf_id, b_buf_id, c_buf_id)) {
+                // 释放顺序锁
+                s->order_lock->consume(1);
                 break;
+            }
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET TASK!\n",
                 get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             if (ZT) {
@@ -331,6 +339,8 @@ class MatmulProducerTask : public NPUTask {
             do {
                 NPUWaitFree(c);
             } while (c->allocate(sched, 1, 1));
+            // 释放顺序锁
+            s->order_lock->consume(1);
             debugf("[%lu]: m(%d), n(%d), k(%d), b(%d), A[%d], B[%d], C[%d]: PRODUCER GET FREE URAM BUFFER\n",
                 get_mcycle(), m, n, k, batch, a_buf_id, b_buf_id, c_buf_id);
             // 注意，局部变量在下一个 bar 到来时就失效
@@ -612,13 +622,15 @@ static inline void matmul_bf16_template(
     debugf("C2[%lx - %lx)\n", buf[6].uram, buf[6].uram + tileM * tileN * 4);
     // 计算 M N Tile 的个数，C Buf 不能超过 M N Tile 个数之积
     const uint64_t maxCBuf = ((M + tileM - 1) / tileM) * ((N + tileN - 1) / tileN);
+    // 创建公共锁
+    NPUResource glock;
     // 创建两个 PubState，分别表示 Producer 以及 Consumer
     auto pub_producer = MatmulPubState<tileM, tileN, tileK, ZT>(
         M, N, K, B,
         aBase, bBase, cBase,
         aStride, bStride, cStride,
         aBatchStride, bBatchStride, cBatchStride,
-        &buf[0], &buf[2], &buf[4], maxCBuf > 3 ? 3 : maxCBuf);
+        &buf[0], &buf[2], &buf[4], &glock, maxCBuf > 3 ? 3 : maxCBuf);
     auto pub_consumer = MatmulPubState<tileM, tileN, tileK, ZT>(pub_producer);
 
     // 配置 Swizzle 为 M5 B3 S5
