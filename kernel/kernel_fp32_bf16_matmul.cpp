@@ -597,7 +597,7 @@ class MatmulConsumerTask : public NPUTask {
 };
 } // namespace
 
-template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32, bool BT>
+template <long tileM, long tileN, long tileK, bool ZT, bool A_IS_FP32, bool BT, long swizzle_pack>
 static inline void matmul_bf16_template(
     uint64_t M, uint64_t N, uint64_t K, uint64_t B,
     uint64_t aBase, uint64_t bBase, uint64_t cBase,
@@ -635,7 +635,7 @@ static inline void matmul_bf16_template(
 
     // 配置 Swizzle 为 M5 B3 S5
     // const long swizzle_pack = MAT_BATCH_SWIZZLE(5, 3, 5);
-    const long swizzle_pack = 0;
+    // const long swizzle_pack = 0;
 
     // 创建四个 Task
     auto task_producer0 =
@@ -674,7 +674,7 @@ static inline long matmul_fp32_bf16_fp32(
         (uint32_t)aBatchStride, (uint32_t)bBatchStride, (uint32_t)cBatchStride);
     if (M <= N) {
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, false, true, BT>(
+        matmul_bf16_template<tileM, tileN, tileK, false, true, BT, MAT_BATCH_SWIZZLE(5, 3, 8)>(
             M, N, K, B,
             aBase, bBase, cBase,
             aStride, bStride, cStride,
@@ -682,7 +682,7 @@ static inline long matmul_fp32_bf16_fp32(
         );
     } else { // M >= N
         const uint64_t tileM = 64, tileN = 128, tileK = 512;
-        matmul_bf16_template<tileM, tileN, tileK, true, true, BT>(
+        matmul_bf16_template<tileM, tileN, tileK, true, true, BT, MAT_BATCH_SWIZZLE(5, 3, 8)>(
             M, N, K, B,
             aBase, bBase, cBase,
             aStride, bStride, cStride,
