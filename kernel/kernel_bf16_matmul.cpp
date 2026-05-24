@@ -265,7 +265,7 @@ class MatmulConsumerTask : public NPUTask {
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_CSWIZZLEMBS>(0);
-        tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
+        // tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_PERSISTENTMODE>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_DATATYPE>(0);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_ASWIZZLEMBS>(swizzle);
         tx_mat_tcsr_write<GROUPBASE * MAT_GROUPSZ + MAT_BSWIZZLEMBS>(swizzle);
