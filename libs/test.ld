@@ -21,7 +21,7 @@ ENTRY(_start)
 SECTIONS
 {
 
-  . = 0x10000000;
+  . = 0x800000;
   _uram = .;
 
   /* text: test code section */
