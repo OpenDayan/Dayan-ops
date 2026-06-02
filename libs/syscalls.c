@@ -2,6 +2,7 @@
 
 #include "trap.h"
 #include "util.h"
+#include "npu_cache.h"
 #include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -18,6 +19,8 @@ extern volatile uint64_t tohost;
 extern volatile uint64_t fromhost;
 
 volatile uint64_t __perf_counter[4] __attribute__((aligned(64)));
+extern char _start[];
+extern char _end[];
 
 struct GeneralEntryArgs {
     uint64_t kernel_entry;
@@ -77,7 +80,7 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code) {
     clear_csr(mie, 8); // disable software interrupt
     __perf_counter[1]++;
     entry_args.ret = code;
-    __asm__ __volatile__(".insn 0xfc000073" ::: "memory"); // CFLUSH.D.L1
+    cache_flush_range(_start, (size_t)(_end - _start));
     volatile int *ptr_bootaddr = (volatile int *)0x1000;
     void (*bootrom)();
     bootrom = (void *)0x10000;

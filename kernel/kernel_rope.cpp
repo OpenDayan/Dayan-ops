@@ -1,5 +1,6 @@
 #include "npu_instruction.hpp"
 #include "npu_instruction_old.hpp"
+#include "npu_cache.h"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_vec_csr.hpp"
@@ -84,7 +85,7 @@ static inline void rope_yarn(uint64_t cos_cache_uram, uint64_t sin_cache_uram, f
         theta_interp_cache[i] = freq_scale * theta_extrap;
         theta *= theta_scale;
     }
-    __asm__ __volatile__(".insn 0xfc000073" ::: "memory"); // CFLUSH.D.L1
+    cache_flush_range(theta_interp_cache, (m / 2) * sizeof(theta_interp_cache[0]));
     tx_lsu_dma_d2u<lsuTCSR>((long)rama, (long)theta_interp_cache);
     __tx_lsu_sb_bar();
 
