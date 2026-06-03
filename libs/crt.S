@@ -1,6 +1,7 @@
 # See LICENSE for license details.
 
 #include "encoding.h"
+#include "npu_cache.h"
 
 #if __riscv_xlen == 64
 # define LREG ld
@@ -16,7 +17,7 @@
   .globl _start
 _start:
   fence.i
-  .insn 0xfc200073
+  NPU_CACHE_FLUSH_RANGE(_start, _end, t0, t1)
   // Set mtvec to _trap_handler
   la a0, _trap_handler
   csrw mtvec, a0

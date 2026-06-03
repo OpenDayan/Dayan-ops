@@ -1,10 +1,29 @@
 #ifndef _NPU_CACHE_H_
 #define _NPU_CACHE_H_
 
+#define NPU_CACHE_LINE_SIZE 64
+
+#ifdef __ASSEMBLER__
+
+#define NPU_CBO_FLUSH(_addr_reg) .insn i 0x0f, 2, x0, _addr_reg, 0x002
+
+#define NPU_CACHE_FLUSH_RANGE(_start, _end, _line_reg, _end_reg)                                   \
+    la _line_reg, _start;                                                                          \
+    la _end_reg, _end;                                                                             \
+    addi _end_reg, _end_reg, NPU_CACHE_LINE_SIZE - 1;                                              \
+    andi _line_reg, _line_reg, -NPU_CACHE_LINE_SIZE;                                               \
+    andi _end_reg, _end_reg, -NPU_CACHE_LINE_SIZE;                                                 \
+    fence rw, rw;                                                                                  \
+    1 : bgeu _line_reg, _end_reg, 2f;                                                              \
+    NPU_CBO_FLUSH(_line_reg);                                                                      \
+    addi _line_reg, _line_reg, NPU_CACHE_LINE_SIZE;                                                \
+    j 1b;                                                                                          \
+    2 : fence rw, rw
+
+#else
+
 #include <stddef.h>
 #include <stdint.h>
-
-#define NPU_CACHE_LINE_SIZE 64UL
 
 static inline void cache_flush_line(const void *addr) {
     uintptr_t line = (uintptr_t)addr & ~(NPU_CACHE_LINE_SIZE - 1);
@@ -25,5 +44,7 @@ static inline void cache_flush_range(const void *addr, size_t size) {
     }
     __asm__ __volatile__("fence rw, rw" : : : "memory");
 }
+
+#endif // __ASSEMBLER__
 
 #endif // _NPU_CACHE_H_
