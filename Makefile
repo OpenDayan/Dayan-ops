@@ -35,6 +35,7 @@ LINK_SCRIPT := libs/test.ld
 
 # 输出文件
 ELF_FILE := $(OUTPUT_DIR)/$(PROJECT_NAME).elf
+MAP_FILE := $(OUTPUT_DIR)/$(PROJECT_NAME).map
 PACKED_FILE := $(OUTPUT_DIR)/$(PROJECT_NAME).packed.c
 
 # 默认目标
@@ -52,7 +53,7 @@ $(SUB_DIRS): $(BUILD_DIR)
 
 $(ELF_FILE): $(SUB_DIRS) $(OUTPUT_DIR)
 	@echo "Linking $@..."
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ \
+	$(CC) $(CFLAGS) $(LDFLAGS) -Wl,-Map=$(MAP_FILE) -o $@ \
 		$(BUILD_DIR)/*.o \
 		-T $(LINK_SCRIPT)
 

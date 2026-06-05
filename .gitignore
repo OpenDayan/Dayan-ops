@@ -13,3 +13,4 @@ bin
 example_trace
 .qemu_log
 .vscode.prerun.name
+compile_commands.json

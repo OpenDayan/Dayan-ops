@@ -37,6 +37,14 @@ SECTIONS
   .text : { *(.text) }
 
   /* data segment */
+  .data.sync : {
+    . = ALIGN(64);
+    _sync_start = .;
+    *(.data.sync)
+    . = ALIGN(64);
+    _sync_end = .;
+  }
+
   .data : { *(.data) }
 
   .sdata : {

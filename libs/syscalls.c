@@ -18,9 +18,11 @@ uint64_t trap_stack[512];
 extern volatile uint64_t tohost;
 extern volatile uint64_t fromhost;
 
-volatile uint64_t __perf_counter[4] __attribute__((aligned(64)));
+volatile uint64_t __perf_counter[4] __attribute__((aligned(64))) __attribute__((section(".data.sync")));
 extern char _start[];
 extern char _end[];
+extern char _sync_start[];
+extern char _sync_end[];
 
 struct GeneralEntryArgs {
     uint64_t kernel_entry;
@@ -32,7 +34,7 @@ struct GeneralEntryArgs {
     uint64_t args[30];
 };
 
-volatile struct GeneralEntryArgs entry_args;
+volatile struct GeneralEntryArgs entry_args __attribute__((section(".data.sync")));
 
 static uintptr_t syscall(uintptr_t which, uint64_t arg0, uint64_t arg1, uint64_t arg2) {
     // volatile uint64_t magic_mem[8] __attribute__((aligned(64)));
@@ -80,7 +82,7 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code) {
     clear_csr(mie, 8); // disable software interrupt
     __perf_counter[1]++;
     entry_args.ret = code;
-    cache_flush_range(_start, (size_t)(_end - _start));
+    cache_flush_range((void *)_sync_start, _sync_end - _sync_start);
     volatile uint64_t *ptr_bootaddr = (volatile uint64_t *)0x1000;
     void (*bootrom)();
     bootrom = (void *)0x10000;

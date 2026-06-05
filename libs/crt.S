@@ -17,7 +17,7 @@
   .globl _start
 _start:
   fence.i
-  NPU_CACHE_FLUSH_RANGE(_start, _end, t0, t1)
+  NPU_CACHE_INVAL_RANGE(_sync_start, _sync_end, t0, t1)
   // Set mtvec to _trap_handler
   la a0, _trap_handler
   csrw mtvec, a0
@@ -25,7 +25,7 @@ _start:
   // Set bootaddr to 0x10000 for reset incomming  
   li a0, 0x1000  // program reset vector
   li a1, 0x0     // busy flag
-  sw a1, 0(a0)   // set boot address to bootrom
+  sd a1, 0(a0)   // set boot address to bootrom
 
   // Enable mie interrupts
   li a0, 8               // MIE or MSIP bit
