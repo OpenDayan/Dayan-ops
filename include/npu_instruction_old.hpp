@@ -730,12 +730,14 @@ __attribute__((always_inline)) static inline void __tx_sb_produce(long rd) {
     NPUInstBuilder::__custom_64b_instruction1r<((long)0b11111111 << 56ul) | ((long)0b0000 << 52ul)>(
         rd);
 }
-__attribute__((always_inline)) static inline void __tx_sb_bar() {
-    NPUInstBuilder::__custom_64b_instruction_bar<((long)0b11111111 << 56ul) |
-                                                 ((long)0b0001 << 52ul)>();
-}
 
 #include "gen_npu_instruction.h"
+static inline void __tx_sb_bar(void) {
+    long some_val;
+    tx_vec_sb_bar(some_val);
+    tx_vec_sb_bar(some_val);
+}
+
 static inline void __tx_lsu_sb_bar(void) {
     long some_val;
     tx_lsu_sb_bar(some_val);
