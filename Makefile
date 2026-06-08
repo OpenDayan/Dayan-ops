@@ -16,16 +16,16 @@ OBJDUMP := $(CROSS_COMPILE)objdump
 PYTHON := python3
 
 # 编译选项
-CFLAGS := -g -mcmodel=medany -std=gnu99 -O3 -ffast-math \
+CFLAGS := -g -mcmodel=medany -std=gnu99 -O3 -ffast-math -mcmodel=medany -mabi=lp64 \
           -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
-          -fno-pic -march=rv64g -Wa,-march=rv64g
+          -fno-pic -march=rv64ima_zicsr_zifencei -Wa,-march=rv64ima_zicsr_zifencei
 
-CXXFLAGS := -g -mcmodel=medany -std=c++17 -O3 -ffast-math \
+CXXFLAGS := -g -mcmodel=medany -std=c++17 -O3 -ffast-math -mcmodel=medany -mabi=lp64 \
             -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns \
-            -fno-pic -march=rv64g -Wa,-march=rv64g
+            -fno-pic -march=rv64ima_zicsr_zifencei -Wa,-march=rv64ima_zicsr_zifencei
 
 CPPFLAGS := -I./include
-LDFLAGS := -static -nostdlib
+LDFLAGS := -static -nostartfiles -mcmodel=medany
 
 # 导出变量到子 Makefile
 export CC CXX LD OBJDUMP CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
