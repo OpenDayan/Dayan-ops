@@ -83,6 +83,7 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code) {
     __perf_counter[1]++;
     entry_args.ret = code;
     cache_flush_range((void *)_sync_start, _sync_end - _sync_start);
+    cache_flush_range((void *)entry_args.putchar_buf, entry_args.putchar_wptr);
     volatile uint64_t *ptr_bootaddr = (volatile uint64_t *)0x1000;
     void (*bootrom)();
     bootrom = (void *)0x10000;
