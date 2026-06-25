@@ -1,3 +1,4 @@
+#include "npu_cache.h"
 #include "npu_instruction.hpp"
 #include "npu_instruction_old.hpp"
 #include "npu_kernel.h"
@@ -53,6 +54,11 @@ static inline long set_rows_impl(void *src0, void *src1, void *dst, int nc, int 
         return -1;
     }
 
+    // src1(行索引)由 CPU 直接读取,读取前 invalidate 以避免命中 DMA/host 写入前的过期缓存行
+    cache_inval_range(src1, (size_t)(nr > 0 ? nr - 1 : 0) * nb10 +
+                                  (size_t)(ne11 > 0 ? ne11 - 1 : 0) * nb11 +
+                                  (size_t)(ne12 > 0 ? ne12 - 1 : 0) * nb12 + sizeof(idx_t));
+
     configLSUTCSR_set_rows<setRowsLsuTCSR, elem_t>(nc, 1);
 
     for (int i03 = 0; i03 < ne03; ++i03) {
@@ -63,7 +69,7 @@ static inline long set_rows_impl(void *src0, void *src1, void *dst, int nc, int 
             for (int i = 0; i < nr; ++i) {
                 const idx_t i1 = *(idx_t *)((char *)src1 + i * nb10 + i11 * nb11 + i12 * nb12);
                 if (i1 < 0 || i1 >= ne1) {
-                    printf("[ERROR] invalid row_idx value: %ld\n", (long)i1);
+                    printf("[ERROR] set_rows_impl invalid row_idx value: %ld\n", (long)i1);
                     return -2;
                 }
 
@@ -88,6 +94,15 @@ static inline long set_rows_f32_to_bf16_impl(void *src0, void *src1, void *dst, 
         return -1;
     }
 
+    // src0(数据)与 src1(行索引)均由 CPU 直接读取,读取前 invalidate 以避免命中过期缓存行
+    cache_inval_range(src0, (size_t)(nr > 0 ? nr - 1 : 0) * nb01 +
+                                  (size_t)(ne02 > 0 ? ne02 - 1 : 0) * nb02 +
+                                  (size_t)(ne03 > 0 ? ne03 - 1 : 0) * nb03 +
+                                  (size_t)nc * sizeof(float));
+    cache_inval_range(src1, (size_t)(nr > 0 ? nr - 1 : 0) * nb10 +
+                                  (size_t)(ne11 > 0 ? ne11 - 1 : 0) * nb11 +
+                                  (size_t)(ne12 > 0 ? ne12 - 1 : 0) * nb12 + sizeof(idx_t));
+
     for (int i03 = 0; i03 < ne03; ++i03) {
         for (int i02 = 0; i02 < ne02; ++i02) {
             const int i12 = i03 % ne12;
@@ -96,7 +111,7 @@ static inline long set_rows_f32_to_bf16_impl(void *src0, void *src1, void *dst, 
             for (int i = 0; i < nr; ++i) {
                 const idx_t i1 = *(idx_t *)((char *)src1 + i * nb10 + i11 * nb11 + i12 * nb12);
                 if (i1 < 0 || i1 >= ne1) {
-                    printf("[ERROR] invalid row_idx value: %ld\n", (long)i1);
+                    printf("[ERROR] set_rows_f32_to_bf16_impl invalid row_idx value: %ld\n", (long)i1);
                     return -2;
                 }
 
@@ -108,6 +123,7 @@ static inline long set_rows_f32_to_bf16_impl(void *src0, void *src1, void *dst, 
                 for (int j = 0; j < nc; ++j) {
                     dst_row[j] = fp32_to_bf16_round(src_row[j]);
                 }
+                cache_flush_range(dst_row, sizeof(dst_row[0]) * nc);
             }
         }
     }

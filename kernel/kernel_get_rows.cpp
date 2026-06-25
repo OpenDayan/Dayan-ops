@@ -1,5 +1,6 @@
 #include "npu_instruction.hpp"
 #include "npu_instruction_old.hpp"
+#include "npu_cache.h"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
 #include "npu_vec_csr.hpp"
@@ -50,12 +51,15 @@ __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c, int h1, int n1, 
     // dst shape: (h1, n1, m1, m0)
     configLSUTCSR<lsuTCSR, float>(m0, 1);
 
+    // b(行索引)由 CPU 直接读取,读取前 invalidate 以避免命中 DMA/host 写入前的过期缓存行
+    cache_inval_range(b, (size_t)m1 * sizeof(int));
+
     // 实际trace中只有b只有一个数字，优化掉外面两层循环, m1 = 1
     for (int p = 0; p < m1; ++p) {
         int *b_int = (int *)b;
         int row_idx = b_int[p];
         if (row_idx < 0 || row_idx > n0) {
-            printf("[ERROR] invalid row_idx value: %d", row_idx);
+            printf("[ERROR] get_rows_f32_i32_f32 invalid row_idx value: %d", row_idx);
             return 0;
         }
         tx_lsu_dma_d2d<lsuTCSR>((long)c + p * m0 * sizeof(float),

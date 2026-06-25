@@ -1,3 +1,4 @@
+#include "npu_cache.h"
 #include "npu_instruction.hpp"
 #include "npu_kernel.h"
 #include "npu_lsu_csr.hpp"
@@ -102,9 +103,11 @@ __device__ long test_npu_task_basic_dma(void) {
     static int *inBuf = (int *)0x90000000;
     static int *outBuf = (int *)0x91000000;
     memset(outBuf, 0, 1024 * 1024);
+    cache_flush_range(outBuf, 1024 * 1024);
     for (int i = 0; i < 1024 * 1024 / 4; i++) {
         inBuf[i] = i;
     }
+    cache_flush_range(inBuf, 1024 * 1024);
     MyTestNPUTask<128 * 1024, 0> task0((char *)inBuf, (char *)outBuf, (char *)0x0, 1024 * 1024 / 2);
     MyTestNPUTask<128 * 1024, 1> task1(((char *)inBuf) + 1024 * 512, ((char *)outBuf) + 1024 * 512,
                                        (char *)(128 * 1024), 1024 * 1024 / 2);
