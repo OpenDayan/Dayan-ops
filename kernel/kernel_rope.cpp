@@ -125,8 +125,9 @@ __device__ long rope_f32_i32_f32(float *a, int *b, float *res, int bs, int h, in
 
     configLSUTCSR<lsuTCSR, float>(vec_len, 1);
 
-    // a 的尾部(n_dims 之后)与 b 的位置索引均由 CPU 直接读取,这些缓冲由 DMA/host 写入,
-    // 读取前需 invalidate,避免命中 L1 中过期的缓存行
+    // The tail of a (beyond n_dims) and the position index b are both read directly by the CPU;
+    // these buffers are written by DMA/host, so invalidate before reading to avoid stale L1 cache
+    // lines.
     cache_inval_range(a, (size_t)bs * h * n * m * sizeof(float));
     cache_inval_range(b, (size_t)h * sizeof(*b));
 

@@ -54,7 +54,8 @@ static inline long set_rows_impl(void *src0, void *src1, void *dst, int nc, int 
         return -1;
     }
 
-    // src1(行索引)由 CPU 直接读取,读取前 invalidate 以避免命中 DMA/host 写入前的过期缓存行
+    // src1 (row index) is read directly by the CPU; invalidate before reading to avoid stale cache
+    // lines left by prior DMA/host writes.
     cache_inval_range(src1, (size_t)(nr > 0 ? nr - 1 : 0) * nb10 +
                                   (size_t)(ne11 > 0 ? ne11 - 1 : 0) * nb11 +
                                   (size_t)(ne12 > 0 ? ne12 - 1 : 0) * nb12 + sizeof(idx_t));
@@ -94,7 +95,8 @@ static inline long set_rows_f32_to_bf16_impl(void *src0, void *src1, void *dst, 
         return -1;
     }
 
-    // src0(数据)与 src1(行索引)均由 CPU 直接读取,读取前 invalidate 以避免命中过期缓存行
+    // src0 (data) and src1 (row index) are both read directly by the CPU; invalidate before reading
+    // to avoid stale cache lines.
     cache_inval_range(src0, (size_t)(nr > 0 ? nr - 1 : 0) * nb01 +
                                   (size_t)(ne02 > 0 ? ne02 - 1 : 0) * nb02 +
                                   (size_t)(ne03 > 0 ? ne03 - 1 : 0) * nb03 +

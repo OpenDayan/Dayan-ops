@@ -51,7 +51,8 @@ __device__ long get_rows_f32_i32_f32(void *a, void *b, void *c, int h1, int n1, 
     // dst shape: (h1, n1, m1, m0)
     configLSUTCSR<lsuTCSR, float>(m0, 1);
 
-    // b(行索引)由 CPU 直接读取,读取前 invalidate 以避免命中 DMA/host 写入前的过期缓存行
+    // b (row index) is read directly by the CPU; invalidate before reading to avoid stale cache
+    // lines left by prior DMA/host writes.
     cache_inval_range(b, (size_t)m1 * sizeof(int));
 
     // 实际trace中只有b只有一个数字，优化掉外面两层循环, m1 = 1
